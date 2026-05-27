@@ -1,11 +1,13 @@
 -r base.txt
-
-pytest
-pytest-django
-pytest-asyncio
-factory-boy
-faker
-ruff
-mypy
+pytest>=8.1.1
+pytest-django>=4.8.0
+pytest-asyncio>=0.23.5
+testcontainers[postgres,redis]>=3.7.1
+mutmut>=2.4.4
+factory-boy>=3.3.0
+faker>=24.4.0
+ruff>=0.3.2
+mypy>=1.9.0
 django-stubs
-ipython
+ipython>=8.22.2
+pre-commit>=3.6.2
