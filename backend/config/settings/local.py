@@ -1,8 +1,21 @@
 import os
 from urllib.parse import urlparse
-from .base import *  # Напрямую импортирует безопасный env_bool и глобальные переменные
+import redis
 
-# [ИСПРАВЛЕНО]: Принудительно форсируем DEBUG для локального контура разработки
+# Автономный безопасный парсер логических ENV-переменных
+def env_bool(name: str, default: bool = False) -> bool:
+    """Гарантирует strict-типизацию строковых флагов из .env в булево значение."""
+    return os.getenv(name, str(default)).lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+from .base import *  # Накатываем остальные базовые инварианты Django
+
+# [ИСПРАВЛЕНО]: Теперь NameError физически невозможен
 DEBUG = env_bool("DEBUG", True)
 
 # ==========================================
