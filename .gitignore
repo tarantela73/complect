@@ -75,6 +75,8 @@ local_settings.py
 *.key
 *.crt
 *.p12
+/infra/secrets/*
+!/infra/secrets/.gitkeep
 
 # =========================================================
 # NODE / FRONTEND
