@@ -25,7 +25,6 @@ services:
     environment:
       POSTGRES_DB: complect_db
       POSTGRES_USER: complect_admin
-      # [ИСПРАВЛЕНО] Пароль инжектируется через файл секретов, никакого хардкода
       POSTGRES_PASSWORD_FILE: /run/secrets/db_root_password
     command: >
       postgres
@@ -33,6 +32,7 @@ services:
       -c max_wal_senders=10
       -c max_replication_slots=10
       -c hot_standby=on
+      -c hba_file=/var/lib/postgresql/data/pg_hba.conf
     ports:
       - "5432:5432"
     volumes:
@@ -42,7 +42,7 @@ services:
     networks:
       - erp_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U complect_admin -d complect_db"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U complect_admin -d complect_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,11 +51,7 @@ services:
     image: postgis/postgis:16-3.4
     container_name: complect_postgres_replica
     environment:
-      # Для утилит pg_basebackup пробрасываем путь к паролю в переменные рантайма
       PGPASSWORD_FILE: /run/secrets/db_root_password
-    command: >
-      postgres
-      -c hot_standby=on
     ports:
       - "5433:5432"
     volumes:
@@ -68,14 +64,14 @@ services:
       bash -c "
       if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
         echo 'Инициализация реплики: копирование базы мастера...';
-        export PGPASSWORD=\$$(cat /run/secrets/db_root_password);
-        until pg_isready -h postgres_primary -p 5432 -U complect_admin; do
+        export PGPASSWORD=\$\$(cat /run/secrets/db_root_password);
+        until pg_isready -h postgres_primary -p 5432 -U complect_admin -d complect_db; do
           echo 'Ожидание primary мастера...';
           sleep 1;
         done;
         rm -rf /var/lib/postgresql/data/*;
-        pg_basebackup -h postgres_primary -D /var/lib/postgresql/data -U complect_admin -v -P -R -X stream;
-        echo 'Базовый бэкап завершен, запускаю реплику в режиме Hot Standby';
+        pg_basebackup -h postgres_primary -p 5432 -D /var/lib/postgresql/data -U complect_admin -v -P -R -X stream;
+        echo 'Базовый бэкап завершен, запускаю реплику';
       fi;
       exec docker-entrypoint.sh postgres -c hot_standby=on
       "
@@ -102,14 +98,13 @@ services:
 
   # --- STORAGE LAYER CONTEXT (MinIO S3 API) ---
   minio:
-    image: minio/minio:RELEASE.2024-03-07T00-43-48Z
+    image: minio/minio:latest
     container_name: complect_minio_dev
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: complect_root_user
-      # [ИСПРАВЛЕНО] Пароль MinIO через Secrets File
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_root_password
     command: server /data --console-address ":9001"
     volumes:
@@ -126,15 +121,15 @@ services:
 
   # --- S3 AUTO-BOOTSTRAP (Init Container) ---
   s3_bootstrap:
-    image: minio/mc:RELEASE.2024-03-07T00-15-22Z
+    image: minio/mc:latest
     container_name: complect_s3_bootstrap
     secrets:
       - s3_root_password
     networks:
       - erp_network
     entrypoint: >
-      bash -c "export MC_PASS=\$$(cat /run/secrets/s3_root_password) &&
-               mc alias set myminio http://minio:9000 complect_root_user \$$MC_PASS &&
+      bash -c "export MC_PASS=\$\$(cat /run/secrets/s3_root_password) &&
+               mc alias set myminio http://minio:9000 complect_root_user \$\$MC_PASS &&
                mc mb --ignore-existing myminio/complect-quarantine &&
                mc mb --ignore-existing myminio/complect-production &&
                echo 'S3 BUCKETS CONTOURS INITIALIZED SUCCESSFUL'"
@@ -144,7 +139,7 @@ services:
 
   # --- ANTIVIRUS CONTEXT (ClamAV Daemon TCP) ---
   clamav:
-    image: clamav/clamav:1.3
+    image: clamav/clamav:latest
     container_name: complect_clamav_dev
     ports:
       - "3310:3310"
@@ -158,7 +153,7 @@ services:
 
   # --- API GATEWAY LAYER (Kong Proxy) ---
   api_gateway:
-    image: kong:3.6-alpine
+    image: kong:latest
     container_name: complect_gateway_dev
     environment:
       KONG_DATABASE: "off"
@@ -186,20 +181,38 @@ services:
     secrets:
       - db_root_password
     environment:
-      - ENVIRONMENT=local
-      - DJANGO_SETTINGS_MODULE=config.settings.local
-      - REDIS_URL=redis://redis:6379/0
-      - CLAMAV_HOST=clamav
-      - CLAMAV_PORT=3310
+      ENVIRONMENT: local
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DEBUG: "true"
+      TIME_ZONE: Europe/Moscow
+      LANGUAGE_CODE: ru-ru
+      POSTGRES_REPLICA_ENABLED: "true"
+      POSTGRES_REPLICA_MAX_LAG: "1.0"
+      REDIS_DEFAULT_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      REDIS_CELERY_URL: redis://redis:6379/2
+      REDIS_STREAMS_URL: redis://redis:6379/3
+      REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
+      CHANNEL_LAYER_URL: redis://redis:6379/5
+      CELERY_RESULT_BACKEND: redis://redis:6379/6
+      REDIS_AUDIT_URL: redis://redis:6379/7
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      CLAMAV_TIMEOUT: 120
+      MAX_UPLOAD_SIZE_MB: 50
+      DATA_UPLOAD_MAX_MEMORY_SIZE: 52428800
+      FILE_UPLOAD_MAX_MEMORY_SIZE: 52428800
+      EXPECTED_GATEWAY_TOKEN: complect_internal_secure_mesh_token_2026
     ports:
       - "8010:8010"
     networks:
       - erp_network
     command: >
-      bash -c "export DB_PASS=\$$(cat /run/secrets/db_root_password) &&
-               export DATABASE_URL=postgres://complect_admin:\$$DB_PASS@postgres_primary:5432/complect_db &&
+      bash -c "export DB_PASS=\$\$(cat /run/secrets/db_root_password) &&
+               export DATABASE_URL=postgresql://complect_admin:\$\$DB_PASS@postgres_primary:5432/complect_db &&
+               export DATABASE_REPLICA_URL=postgresql://complect_admin:\$\$DB_PASS@postgres_replica:5432/complect_db &&
                pip install uv &&
-               uv pip install --system -e . &&
+               uv pip install --system -r requirements/dev.txt &&
                python manage.py migrate --noinput &&
                uv run granian --interface asgi --host 0.0.0.0 --port 8010 config.asgi:application"
     depends_on:
@@ -218,15 +231,32 @@ services:
     secrets:
       - db_root_password
     environment:
-      - ENVIRONMENT=local
-      - DJANGO_SETTINGS_MODULE=config.settings.local
-      - REDIS_URL=redis://redis:6379/0
+      ENVIRONMENT: local
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DEBUG: "true"
+      TIME_ZONE: Europe/Moscow
+      LANGUAGE_CODE: ru-ru
+      POSTGRES_REPLICA_ENABLED: "true"
+      POSTGRES_REPLICA_MAX_LAG: "1.0"
+      REDIS_DEFAULT_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      REDIS_CELERY_URL: redis://redis:6379/2
+      REDIS_STREAMS_URL: redis://redis:6379/3
+      REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
+      CHANNEL_LAYER_URL: redis://redis:6379/5
+      CELERY_RESULT_BACKEND: redis://redis:6379/6
+      REDIS_AUDIT_URL: redis://redis:6379/7
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
     networks:
       - erp_network
     command: >
-      bash -c "export DB_PASS=\$$(cat /run/secrets/db_root_password) &&
-               export DATABASE_URL=postgres://complect_admin:\$$DB_PASS@postgres_primary:5432/complect_db &&
-               pip install uv && uv pip install --system -e . && celery -A config worker --loglevel=info"
+      bash -c "export DB_PASS=\$\$(cat /run/secrets/db_root_password) &&
+               export DATABASE_URL=postgresql://complect_admin:\$\$DB_PASS@postgres_primary:5432/complect_db &&
+               export DATABASE_REPLICA_URL=postgresql://complect_admin:\$\$DB_PASS@postgres_replica:5432/complect_db &&
+               pip install uv && 
+               uv pip install --system -r requirements/dev.txt && 
+               celery -A config worker --loglevel=info"
     depends_on:
       redis:
         condition: service_healthy
@@ -239,12 +269,19 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - ENVIRONMENT=local
-      - DJANGO_SETTINGS_MODULE=config.settings.local
-      - REDIS_URL=redis://redis:6379/0
+      ENVIRONMENT: local
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DEBUG: "true"
+      TIME_ZONE: Europe/Moscow
+      LANGUAGE_CODE: ru-ru
+      REDIS_DEFAULT_URL: redis://redis:6379/0
+      REDIS_CELERY_URL: redis://redis:6379/2
     networks:
       - erp_network
-    command: bash -c "pip install uv && uv pip install --system -e . && celery -A config beat --loglevel=info"
+    command: >
+      bash -c "pip install uv && 
+               uv pip install --system -r requirements/dev.txt && 
+               celery -A config beat --loglevel=info"
     depends_on:
       redis:
         condition: service_healthy
@@ -287,20 +324,23 @@ services:
     networks:
       - erp_network
 
-  # --- FRONTEND CLIENT COMPONENTS ---
+    # --- FRONTEND CLIENT COMPONENTS ---
   frontend:
     image: node:20-alpine
     container_name: complect_frontend_dev
     working_dir: /app
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - /app/node_modules 
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
     networks:
       - erp_network
-    command: bash -c "npm install && npm run dev"
+    command: bash -c "npm install && npm run dev" 
+
+
+
 
 
