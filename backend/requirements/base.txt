@@ -1,0 +1,15 @@
+Django>=5.2.*
+django-ninja
+psycopg[binary]
+redis
+celery
+channels
+channels-redis
+structlog
+uvicorn
+gunicorn
+boto3
+python-dotenv
+clamd
+prometheus-client
+django-prometheus

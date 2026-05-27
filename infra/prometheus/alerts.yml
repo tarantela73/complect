@@ -1,0 +1,38 @@
+groups:
+  - name: complect_sre_slo_alerts
+    rules:
+      # 1. Мониторинг выгорания Бюджета Ошибок REST API (SLO < 99.9%)
+      - alert: RestApiErrorBudgetBurnRateHigh
+        expr: |
+          sum(rate(nginx_ingress_controller_requests{status=~"5.."}[5m])) 
+          / 
+          sum(rate(nginx_ingress_controller_requests[5m])) > 0.001
+        for: 2m
+        labels:
+          severity: critical
+          tier: api
+        annotations:
+          summary: "Выгорание бюджета ошибок REST API превысило 0.1% порог!"
+          description: "Текущий p95/5xx тренд уничтожает скользящий Error Budget. Деплой фич под угрозой блокировки."
+
+      # 2. Мониторинг задержки репликации PostgreSQL (Replica Lag Budget > 1s)
+      - alert: PostgresReplicationLagCritical
+        expr: pg_replication_lag_seconds > 1.0
+        for: 30s
+        labels:
+          severity: page
+          tier: db
+        annotations:
+          summary: "Критический лаг асинхронной репликации PostgreSQL Master-Replica"
+          description: "Задержка синхронизации Санкт-Петербург -> Москва превысила 1 секунду. Триггерится перевод селекторов на Primary."
+
+      # 3. Мониторинг провисания Celery-очередей (Queue Latency > 5s)
+      - alert: CeleryQueueLatencyViolation
+        expr: celery_queue_age_seconds{queue=~"finance|antivirus"} > 5.0
+        for: 1m
+        labels:
+          severity: warning
+          tier: async
+        annotations:
+          summary: "Задержка планирования задач Celery выше нормы"
+          description: "Задачи в очереди {{ $labels.queue }} провисают более 5 секунд до старта воркера. Риск зависания FSM файлов."

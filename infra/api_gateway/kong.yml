@@ -1,0 +1,43 @@
+_format_version: "3.0"
+services:
+  - name: complect-backend
+    url: http://backend:8010
+    routes:
+      - name: backend-api
+        paths:
+          - /api
+        strip_path: false
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-ID
+      generator: uuid
+      echo_back: true
+
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Request-ID:$(uuid)"
+          # В боевом контуре Kong вычисляет HMAC-SHA256(X-Tenant-ID + X-User-ID + Secret)
+          # Для дев-платформы шлюз передает фиксированный токен целостности периметра
+          - "X-Gateway-Token:complect_internal_secure_mesh_token_2026"
+
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Content-Type
+        - Authorization
+        - Idempotency-Key
+        - X-Correlation-ID
+      credentials: true
+

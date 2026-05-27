@@ -1,0 +1,306 @@
+version: '3.8'
+
+networks:
+  erp_network:
+    name: erp_network
+    driver: bridge
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:
+  redisdata:
+  s3data:
+
+secrets:
+  db_root_password:
+    file: ./infra/secrets/dev_db_password.txt
+  s3_root_password:
+    file: ./infra/secrets/dev_s3_password.txt
+
+services:
+  # --- DATABASE CONTEXT (PostgreSQL 16 + PostGIS кластер репликации) ---
+  postgres_primary:
+    image: postgis/postgis:16-3.4
+    container_name: complect_postgres_primary
+    environment:
+      POSTGRES_DB: complect_db
+      POSTGRES_USER: complect_admin
+      # [ИСПРАВЛЕНО] Пароль инжектируется через файл секретов, никакого хардкода
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_root_password
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby=on
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+    secrets:
+      - db_root_password
+    networks:
+      - erp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U complect_admin -d complect_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_replica:
+    image: postgis/postgis:16-3.4
+    container_name: complect_postgres_replica
+    environment:
+      # Для утилит pg_basebackup пробрасываем путь к паролю в переменные рантайма
+      PGPASSWORD_FILE: /run/secrets/db_root_password
+    command: >
+      postgres
+      -c hot_standby=on
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+    secrets:
+      - db_root_password
+    networks:
+      - erp_network
+    entrypoint: >
+      bash -c "
+      if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo 'Инициализация реплики: копирование базы мастера...';
+        export PGPASSWORD=\$$(cat /run/secrets/db_root_password);
+        until pg_isready -h postgres_primary -p 5432 -U complect_admin; do
+          echo 'Ожидание primary мастера...';
+          sleep 1;
+        done;
+        rm -rf /var/lib/postgresql/data/*;
+        pg_basebackup -h postgres_primary -D /var/lib/postgresql/data -U complect_admin -v -P -R -X stream;
+        echo 'Базовый бэкап завершен, запускаю реплику в режиме Hot Standby';
+      fi;
+      exec docker-entrypoint.sh postgres -c hot_standby=on
+      "
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+
+  # --- REALTIME & CACHE LAYER (Redis Alpine) ---
+  redis:
+    image: redis:7.2-alpine
+    container_name: complect_redis_dev
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - erp_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- STORAGE LAYER CONTEXT (MinIO S3 API) ---
+  minio:
+    image: minio/minio:RELEASE.2024-03-07T00-43-48Z
+    container_name: complect_minio_dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: complect_root_user
+      # [ИСПРАВЛЕНО] Пароль MinIO через Secrets File
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_root_password
+    command: server /data --console-address ":9001"
+    volumes:
+      - s3data:/data
+    secrets:
+      - s3_root_password
+    networks:
+      - erp_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- S3 AUTO-BOOTSTRAP (Init Container) ---
+  s3_bootstrap:
+    image: minio/mc:RELEASE.2024-03-07T00-15-22Z
+    container_name: complect_s3_bootstrap
+    secrets:
+      - s3_root_password
+    networks:
+      - erp_network
+    entrypoint: >
+      bash -c "export MC_PASS=\$$(cat /run/secrets/s3_root_password) &&
+               mc alias set myminio http://minio:9000 complect_root_user \$$MC_PASS &&
+               mc mb --ignore-existing myminio/complect-quarantine &&
+               mc mb --ignore-existing myminio/complect-production &&
+               echo 'S3 BUCKETS CONTOURS INITIALIZED SUCCESSFUL'"
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  # --- ANTIVIRUS CONTEXT (ClamAV Daemon TCP) ---
+  clamav:
+    image: clamav/clamav:1.3
+    container_name: complect_clamav_dev
+    ports:
+      - "3310:3310"
+    networks:
+      - erp_network
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 2 localhost 3310 | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- API GATEWAY LAYER (Kong Proxy) ---
+  api_gateway:
+    image: kong:3.6-alpine
+    container_name: complect_gateway_dev
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./infra/api_gateway/kong.yml:/etc/kong/kong.yml:ro
+    networks:
+      - erp_network
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- BACKEND MONOLITH (Django ASGI Engine) ---
+  backend:
+    image: python:3.12-slim
+    container_name: complect_backend_dev
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    secrets:
+      - db_root_password
+    environment:
+      - ENVIRONMENT=local
+      - DJANGO_SETTINGS_MODULE=config.settings.local
+      - REDIS_URL=redis://redis:6379/0
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+    ports:
+      - "8010:8010"
+    networks:
+      - erp_network
+    command: >
+      bash -c "export DB_PASS=\$$(cat /run/secrets/db_root_password) &&
+               export DATABASE_URL=postgres://complect_admin:\$$DB_PASS@postgres_primary:5432/complect_db &&
+               pip install uv &&
+               uv pip install --system -e . &&
+               python manage.py migrate --noinput &&
+               uv run granian --interface asgi --host 0.0.0.0 --port 8010 config.asgi:application"
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- ASYNC CELERY WORKER CONTOUR ---
+  celery_worker:
+    image: python:3.12-slim
+    container_name: complect_celery_worker
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    secrets:
+      - db_root_password
+    environment:
+      - ENVIRONMENT=local
+      - DJANGO_SETTINGS_MODULE=config.settings.local
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - erp_network
+    command: >
+      bash -c "export DB_PASS=\$$(cat /run/secrets/db_root_password) &&
+               export DATABASE_URL=postgres://complect_admin:\$$DB_PASS@postgres_primary:5432/complect_db &&
+               pip install uv && uv pip install --system -e . && celery -A config worker --loglevel=info"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- ASYNC CELERY BEAT CONTOUR ---
+  celery_beat:
+    image: python:3.12-slim
+    container_name: complect_celery_beat
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      - ENVIRONMENT=local
+      - DJANGO_SETTINGS_MODULE=config.settings.local
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - erp_network
+    command: bash -c "pip install uv && uv pip install --system -e . && celery -A config beat --loglevel=info"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- OBSERVABILITY BOOTSTRAP SYSTEM ---
+  otel_collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    container_name: complect_otel_collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infra/opentelemetry/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+    networks:
+      - erp_network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: complect_jaeger
+    ports:
+      - "16686:16686"
+    networks:
+      - erp_network
+
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: complect_prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - erp_network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: complect_grafana
+    ports:
+      - "3001:3001"
+    networks:
+      - erp_network
+
+  # --- FRONTEND CLIENT COMPONENTS ---
+  frontend:
+    image: node:20-alpine
+    container_name: complect_frontend_dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    networks:
+      - erp_network
+    command: bash -c "npm install && npm run dev"
+
+

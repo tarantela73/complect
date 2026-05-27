@@ -1,0 +1,87 @@
+import json
+import structlog
+from django.conf import settings
+from config.celery import app as celery_app
+from apps.common.tenancy.context import get_sre_context
+
+logger = structlog.get_logger(__name__)
+
+
+class AdminDlqManagementService:
+    STREAM_NAME = "infrastructure:dlq:stream"
+    REPLAY_GUARD_PREFIX = "dlq:replay:guard:"
+
+    @classmethod
+    def inspect_dead_letters(cls, count: int = 50, start_id: str = "-") -> list[dict]:
+
+        redis_client = settings.REDIS_CLIENT
+
+        raw_records = redis_client.xrange(cls.STREAM_NAME, min=start_id, max="+", count=count)
+
+        return [
+            {
+                "sequence_id": seq_id.decode("utf-8"),
+                "task_id": fields[b"task_id"].decode("utf-8"),
+                "task_name": fields[b"task_name"].decode("utf-8"),
+                "args": json.loads(fields[b"args"].decode("utf-8")),
+                "kwargs": json.loads(fields[b"kwargs"].decode("utf-8")),
+                "exception_class": fields[b"exception_class"].decode("utf-8"),
+                "exception_message": fields[b"exception_message"].decode("utf-8"),
+                "failed_at": fields[b"failed_at"].decode("utf-8"),
+                "correlation_id": fields[b"correlation_id"].decode("utf-8"),
+            }
+            for seq_id, fields in raw_records
+        ]
+
+    @classmethod
+    def execute_task_replay(cls, sequence_id: str) -> None:
+
+        sre_ctx = get_sre_context()
+        redis_client = settings.REDIS_CLIENT
+
+        # -------------------------
+        # 1. REPLAY DEDUP GUARD
+        # -------------------------
+        guard_key = cls.REPLAY_GUARD_PREFIX + sequence_id
+
+        if redis_client.set(guard_key, "1", nx=True, ex=300) is False:
+            raise ValueError("Replay already in progress or executed")
+
+        # -------------------------
+        # 2. FETCH EXACT RECORD
+        # -------------------------
+        raw = redis_client.xrange(cls.STREAM_NAME, min=sequence_id, max=sequence_id, count=1)
+
+        if not raw:
+            raise ValueError("Task not found or already processed")
+
+        _, fields = raw[0]
+
+        task_name = fields[b"task_name"].decode("utf-8")
+        args = json.loads(fields[b"args"].decode("utf-8"))
+        kwargs = json.loads(fields[b"kwargs"].decode("utf-8"))
+        task_id = fields[b"task_id"].decode("utf-8")
+        corr_id = fields[b"correlation_id"].decode("utf-8")
+
+        logger.info(
+            "DLQ_REPLAY_START",
+            task_name=task_name,
+            sequence_id=sequence_id,
+            triggered_by=sre_ctx.get("user_id"),
+        )
+
+        # -------------------------
+        # 3. DISPATCH TO CELERY
+        # -------------------------
+        celery_app.send_task(
+            name=task_name,
+            args=args,
+            kwargs=kwargs,
+            task_id=task_id,
+            headers={"correlation_id": corr_id},
+        )
+
+        # -------------------------
+        # 4. SAFE DELETE (after dispatch)
+        # -------------------------
+        redis_client.xdel(cls.STREAM_NAME, sequence_id)
