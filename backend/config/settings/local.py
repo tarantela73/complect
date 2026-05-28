@@ -11,6 +11,9 @@ def env_bool(name: str, default: bool = False) -> bool:
         "yes",
         "on",
     )
+    
+# [ИСПРАВЛЕНО]: Явное выравнивание инварианта маршрутизации для внешних тест-раннеров
+ROOT_URLCONF = "config.urls"    
 
 
 from .base import *  # Накатываем остальные базовые инварианты Django

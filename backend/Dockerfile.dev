@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+# Установка системных зависимостей для сборки ГИС-компонентов PostGIS
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    netcat-openbsd \
+    gdal-bin \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Инсталлируем uv глобально в систему
+RUN pip install --no-cache-dir uv
+
+# Копируем и кэшируем слои зависимостей
+COPY requirements ./requirements
+RUN uv pip install --system -r requirements/dev.txt
+
+# Копируем исходный код бэкенда
+COPY . .
+
+# CMD по умолчанию переопределяется в docker-compose под запуск конкретного сервиса
