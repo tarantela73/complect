@@ -15,9 +15,7 @@ class FeatureFlag(models.Model):
     Каждая запись содержит строгий системный тип и дату создания для линтера.
     """
 
-    name = models.CharField(
-        max_length=100, primary_key=True
-    )  # Строковое имя-ключ флага
+    name = models.CharField(max_length=100, primary_key=True)  # Строковое имя-ключ флага
     flag_type = models.CharField(max_length=20, choices=FeatureFlagType.choices)
     is_enabled = models.BooleanField(default=False)
     description = models.TextField(blank=True)
@@ -27,4 +25,6 @@ class FeatureFlag(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        # [ИСПРАВЛЕНО]: Добавлен явный маркер для легитимной регистрации в Django App Registry при тестах
+        app_label = "common"
         db_table = "common_feature_flags"

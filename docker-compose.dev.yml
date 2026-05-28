@@ -177,7 +177,7 @@ services:
       redis:
         condition: service_healthy
 
-  # --- BACKEND MONOLITH (Django ASGI Engine) ---
+    # --- BACKEND MONOLITH (Django ASGI Engine) ---
   backend:
     build:
       context: ./backend
@@ -196,9 +196,12 @@ services:
       DEBUG: "true"
       TIME_ZONE: Europe/Moscow
       LANGUAGE_CODE: ru-ru
+      POSTGRES_DB: complect_db
+      POSTGRES_USER: complect_admin
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
+      SECRET_KEY: local-dev-insecure-key-change-me-32chars
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -223,8 +226,10 @@ services:
     command: >
       bash -c "
         python manage.py migrate --noinput &&
-        granian --interface asgi --host 0.0.0.0 --port 8010 config.asgi:application
+        granian --interface asgi --host 0.0.0.0 --port 8010 --workers 1 --reload config.asgi:application
       "
+
+
     depends_on:
       postgres_primary:
         condition: service_healthy
@@ -240,7 +245,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # --- ASYNC CELERY WORKER CONTOUR ---
+    # --- ASYNC CELERY WORKER CONTOUR ---
   celery_worker:
     build:
       context: ./backend
@@ -259,9 +264,12 @@ services:
       DEBUG: "true"
       TIME_ZONE: Europe/Moscow
       LANGUAGE_CODE: ru-ru
+      POSTGRES_DB: complect_db
+      POSTGRES_USER: complect_admin
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
+      SECRET_KEY: local-dev-insecure-key-change-me-32chars
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -277,7 +285,10 @@ services:
     networks:
       - erp_network
     command: celery -A config worker --loglevel=info
+
     depends_on:
+      postgres_primary:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -287,6 +298,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     container_name: complect_celery_beat
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./backend:/app
@@ -299,12 +311,14 @@ services:
       LANGUAGE_CODE: ru-ru
       REDIS_DEFAULT_URL: redis://redis:6379/0
       REDIS_CELERY_URL: redis://redis:6379/2
+      CELERY_RESULT_BACKEND: redis://redis:6379/6
     networks:
       - erp_network
     command: celery -A config beat --loglevel=info
     depends_on:
       redis:
         condition: service_healthy
+
 
   # --- OBSERVABILITY BOOTSTRAP SYSTEM ---
   otel_collector:
@@ -336,6 +350,7 @@ services:
     networks:
       - erp_network
 
+    # --- OBSERVABILITY BOOTSTRAP SYSTEM ---
   grafana:
     image: grafana/grafana:10.4.0
     container_name: complect_grafana
@@ -346,7 +361,7 @@ services:
     networks:
       - erp_network
 
-    # --- FRONTEND CLIENT COMPONENTS ---
+  # --- FRONTEND CLIENT COMPONENTS ---
   frontend:
     image: node:20-alpine
     container_name: complect_frontend_dev
@@ -357,13 +372,13 @@ services:
       - /app/node_modules
     ports:
       - "3000:3000"
-    # [ИСПРАВЛЕНО]: Строгий синтаксис списка переменных с дефисами без ломающих маппингов
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
       - NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
     networks:
       - erp_network
     command: sh -c "npm ci && npm run dev"
+
 
 
 

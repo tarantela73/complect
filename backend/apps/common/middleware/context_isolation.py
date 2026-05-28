@@ -1,27 +1,25 @@
-import structlog
-from apps.common.tenancy.context_guard import ContextGuard
-
-logger = structlog.get_logger(__name__)
+from apps.common.context.guard import ContextGuard
 
 
 class ContextIsolationMiddleware:
     """
-    [ADR 0021 / ИСПРАВЛЕНО] Нулевой уровень тотальной изоляции ASGI-монолита.
-    Очищает оперативную память потока до и после обработки, ликвидируя Phantom Auth Context.
+    [ФИНАЛЬНЫЙ PRODUCTION КАНОН v3.7.4]
+    Нулевой слой изоляции. Гарантирует абсолютную идемпотентность и leak-safe
+    состояние потока за счет принудительного сброса ContextVar до и после запроса.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Превентивное выжигание остаточного состояния потока до старта проверки
+        # 1. PRE-CLEANUP: Полностью обнуляем стейт перед обработкой (защита от утечек тест-раннера)
         ContextGuard.hard_reset()
 
         try:
-            return self.get_response(request)
-        except Exception as exc:
-            logger.error("CONTEXT_ISOLATION_PIPELINE_CRASH", error=str(exc))
-            raise exc
+            response = self.get_response(request)
+            return response
         finally:
-            # Гарантированная очистка памяти при выходе HTTP-пакета из системы
+            # 2. POST-CLEANUP: Намертво выжигаем ContextVar из потока при любом исходе запроса
+            ContextGuard.hard_reset()
+
             ContextGuard.hard_reset()

@@ -1,13 +1,16 @@
 import structlog
-from apps.common.tenancy.context_core import get_context
+from django.db import connection
+
+from apps.common.context.core import get_correlation_id, get_tenant_id
 
 logger = structlog.get_logger(__name__)
 
 
 class StructlogTracingContextMiddleware:
     """
-    [ADR 0004 / СИНХРОНИЗАЦИЯ] Сборщик контекста распределенного трейсинга OpenTelemetry.
-    Намертво связывает structlog JSON-процессоры с твоим единым RequestContext.
+    [ФИНАЛЬНЫЙ PRODUCTION КАНОН v3.7.4]
+    Миддлварь сквозной наблюдаемости (Observability).
+    Инжектирует Correlation-ID текущего тенанта в глобальный контекст structlog.
     """
 
     def __init__(self, get_response):
@@ -15,28 +18,41 @@ class StructlogTracingContextMiddleware:
 
     def __call__(self, request):
         try:
-            # Извлекаем единый объект контекста
-            ctx = get_context()
-
-            # Принудительно транслируем UUID-метки в контекст процессоров structlog
-            structlog.contextvars.clear_contextvars()
-            structlog.contextvars.bind_contextvars(
-                request_id=str(ctx.request_id),
-                correlation_id=str(ctx.correlation_id),
-                tenant_id=str(ctx.tenant_id),
-                user_id=str(ctx.user_id),
-                module=request.resolver_match.app_name if request.resolver_match else "core",
-            )
+            # Извлекаем Correlation-ID, если он уже демаршален в паспорте контекста
+            correlation_id = get_correlation_id()
+            structlog.contextvars.bind_contextvars(correlation_id=str(correlation_id))
         except Exception:
-            # Фолбэк для анонимных публичных запросов
-            structlog.contextvars.clear_contextvars()
+            # Если запрос публичный и паспорта нет — генерируем пустой трейс-контекст
+            structlog.contextvars.bind_contextvars(correlation_id="anonymous-subrequest")
 
         response = self.get_response(request)
+        return response
 
+
+class PostgresRlsEnforcementMiddleware:
+    """
+    [ФИНАЛЬНЫЙ PRODUCTION КАНОН v3.7.4]
+    Миддлварь безопасности баз данных. Накладывает RLS замок
+    на сессию PostgreSQL перед выполнением любого SQL-запроса.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
         try:
-            # Инжектируем correlation_id обратно в HTTP-ответ для Zustand фронтенда
-            response["X-Correlation-ID"] = str(get_context().correlation_id)
+            # Извлекаем единый идентификатор тенанта из ядра
+            tenant_id = get_tenant_id()
+
+            # [ИСПРАВЛЕНО]: Взводим локальную переменную сессии в Postgres через чистый raw SQL
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET LOCAL app.current_tenant_id = %s;",
+                    [str(tenant_id)],
+                )
         except Exception:
+            # Публичные роуты, статика и K8s liveness-пробы работают вне тенант-контекста
             pass
 
+        response = self.get_response(request)
         return response

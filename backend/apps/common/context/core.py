@@ -1,6 +1,8 @@
 import uuid
 from contextvars import ContextVar
+
 from django.core.exceptions import PermissionDenied
+from django.template import RequestContext
 
 
 class ContextCore:
@@ -77,6 +79,13 @@ def set_correlation_id(value: uuid.UUID) -> None:
 
 def set_force_primary_db(value: bool) -> None:
     ContextCore.force_primary.set(value)
+
+
+def set_context(ctx: "RequestContext") -> None:
+    ContextCore.tenant_id.set(ctx.tenant_id)
+    ContextCore.user_id.set(ctx.user_id)
+    ContextCore.request_id.set(ctx.request_id)
+    ContextCore.correlation_id.set(ctx.correlation_id)
 
 
 def clear_context() -> None:
