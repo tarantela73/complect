@@ -1,5 +1,13 @@
 # backend/conftest.py
 import pytest
+from django.db import connection
+
+
+@pytest.fixture(scope="session", autouse=True)
+def install_pgcrypto(django_db_blocker):
+    with django_db_blocker.unblock():
+        with connection.cursor() as cursor:
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
 
 
 def pytest_collection_modifyitems(items):
