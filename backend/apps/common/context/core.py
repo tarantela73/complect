@@ -1,26 +1,17 @@
+# backend/apps/common/context/core.py
 import uuid
 from contextvars import ContextVar
+from typing import Any
 
 from django.core.exceptions import PermissionDenied
-from django.template import RequestContext
 
 
 class ContextCore:
-    """
-    [ФИНАЛЬНЫЙ КАНОН] Изолированное персистентное хранилище метаданных потока выполнения.
-    Категорически запрещено импортировать этот класс напрямую в доменные слои (модели/сервисы).
-    """
-
     tenant_id: ContextVar[uuid.UUID | None] = ContextVar("tenant_id", default=None)
     user_id: ContextVar[uuid.UUID | None] = ContextVar("user_id", default=None)
     request_id: ContextVar[uuid.UUID | None] = ContextVar("request_id", default=None)
     correlation_id: ContextVar[uuid.UUID | None] = ContextVar("correlation_id", default=None)
     force_primary: ContextVar[bool | None] = ContextVar("force_primary", default=False)
-
-
-# ==========================================
-# SAFE ACCESSORS (Чистые Геттеры Системы)
-# ==========================================
 
 
 def get_tenant_id() -> uuid.UUID:
@@ -52,13 +43,7 @@ def get_correlation_id() -> uuid.UUID:
 
 
 def is_primary_db_enforced() -> bool:
-    # Фолбэчимся в Ложь, если флаг пустой
     return bool(ContextCore.force_primary.get())
-
-
-# ==========================================
-# HARD MUTATORS (Управление состоянием)
-# ==========================================
 
 
 def set_tenant_id(value: uuid.UUID) -> None:
@@ -81,7 +66,7 @@ def set_force_primary_db(value: bool) -> None:
     ContextCore.force_primary.set(value)
 
 
-def set_context(ctx: "RequestContext") -> None:
+def set_context(ctx: Any) -> None:
     ContextCore.tenant_id.set(ctx.tenant_id)
     ContextCore.user_id.set(ctx.user_id)
     ContextCore.request_id.set(ctx.request_id)
@@ -89,10 +74,6 @@ def set_context(ctx: "RequestContext") -> None:
 
 
 def clear_context() -> None:
-    """
-    [ИСПРАВЛЕНО] Потоковый SRE-утилизатор памяти.
-    Последовательно сбрасывает все ContextVar токены в исходный дефолтный стейт.
-    """
     ContextCore.tenant_id.set(None)
     ContextCore.user_id.set(None)
     ContextCore.request_id.set(None)

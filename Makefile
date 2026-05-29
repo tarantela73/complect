@@ -62,14 +62,39 @@ collectstatic:
 # TESTING
 # ============================================
 
+# ============================================
+# TESTING
+# ============================================
+
 test:
 	$(COMPOSE) exec backend pytest apps/common/tests/test_context_leakage.py -v
+
+test-common:
+	$(COMPOSE) exec backend pytest apps/common/tests/ -v
+
+test-contracts:
+	$(COMPOSE) exec backend pytest apps/contracts/tests/ -v
+
+test-contragents:
+	$(COMPOSE) exec backend pytest apps/contragents/tests/ -v
+
+test-integration:
+	$(COMPOSE) exec backend pytest apps/integration/tests/ -v
+
+test-realtime:
+	$(COMPOSE) exec backend pytest apps/realtime/tests/ -v
+
+test-all:
+	$(COMPOSE) exec backend pytest -v
 
 test-fast:
 	$(COMPOSE) exec backend pytest -x
 
+test-failed:
+	$(COMPOSE) exec backend pytest --lf -v
+
 coverage:
-	$(COMPOSE) exec backend pytest --cov=.
+	$(COMPOSE) exec backend pytest --cov=. --cov-report=term-missing
 
 # ============================================
 # QUALITY

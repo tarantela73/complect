@@ -1,8 +1,10 @@
 import json
+
 import structlog
 from django.conf import settings
-from config.celery import app as celery_app
+
 from apps.common.tenancy.context import get_sre_context
+from config.celery import app as celery_app
 
 logger = structlog.get_logger(__name__)
 
@@ -20,15 +22,15 @@ class AdminDlqManagementService:
 
         return [
             {
-                "sequence_id": seq_id.decode("utf-8"),
-                "task_id": fields[b"task_id"].decode("utf-8"),
-                "task_name": fields[b"task_name"].decode("utf-8"),
-                "args": json.loads(fields[b"args"].decode("utf-8")),
-                "kwargs": json.loads(fields[b"kwargs"].decode("utf-8")),
-                "exception_class": fields[b"exception_class"].decode("utf-8"),
-                "exception_message": fields[b"exception_message"].decode("utf-8"),
-                "failed_at": fields[b"failed_at"].decode("utf-8"),
-                "correlation_id": fields[b"correlation_id"].decode("utf-8"),
+                "sequence_id": seq_id,
+                "task_id": fields["task_id"],
+                "task_name": fields["task_name"],
+                "args": json.loads(fields["args"]),
+                "kwargs": json.loads(fields["kwargs"]),
+                "exception_class": fields["exception_class"],
+                "exception_message": fields["exception_message"],
+                "failed_at": fields.get("failed_at", ""),
+                "correlation_id": fields["correlation_id"],
             }
             for seq_id, fields in raw_records
         ]
@@ -56,12 +58,11 @@ class AdminDlqManagementService:
             raise ValueError("Task not found or already processed")
 
         _, fields = raw[0]
-
-        task_name = fields[b"task_name"].decode("utf-8")
-        args = json.loads(fields[b"args"].decode("utf-8"))
-        kwargs = json.loads(fields[b"kwargs"].decode("utf-8"))
-        task_id = fields[b"task_id"].decode("utf-8")
-        corr_id = fields[b"correlation_id"].decode("utf-8")
+        task_name = fields["task_name"]
+        args = json.loads(fields["args"])
+        kwargs = json.loads(fields["kwargs"])
+        task_id = fields["task_id"]
+        corr_id = fields["correlation_id"]
 
         logger.info(
             "DLQ_REPLAY_START",

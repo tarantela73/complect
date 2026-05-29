@@ -1,5 +1,6 @@
+# backend/apps/common/context/propagation/http.py
 import uuid
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 def extract_http_context(headers: Any) -> Dict[str, Optional[str]]:

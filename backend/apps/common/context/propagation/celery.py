@@ -1,4 +1,6 @@
+# backend/apps/common/context/propagation/celery.py
 from typing import Dict
+
 from apps.common.context.core import ContextCore
 
 

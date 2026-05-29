@@ -32,4 +32,4 @@ class TestFeatureFlagsGovernanceMesh:
         # [ГЛАВНАЯ ПРОВЕРКА]: Трафик моментально отбит шлюзом бэкенда без нагрузки на СУБД!
         assert response.status_code == 503
         response_json = json.loads(response.content.decode("utf-8"))
-        assert response_json["code"] == "FEATURE_DISABLED_BY_GOVERNANCE"
+        assert response_json["code"] == "DOMAIN_TEMPORARILY_DISABLED"

@@ -1,8 +1,10 @@
 import uuid
 from functools import wraps
-from typing import Callable, Any
-from django.core.exceptions import PermissionDenied
+from typing import Any, Callable
+
 import structlog
+from django.core.exceptions import PermissionDenied
+
 from apps.common.context.core import ContextCore, clear_context
 
 logger = structlog.get_logger(__name__)
@@ -68,7 +70,7 @@ class ContextGuard:
         if t_id is not None or u_id is not None:
             logger.critical("CRITICAL_CONTEXT_LEAK_DETECTED", stale_tenant_id=str(t_id), stale_user_id=str(u_id))
             # Жесткий ИБ-стоп: СУБД защищена от несанкционированного доступа
-            raise PermissionDenied("CRITICAL_SECURITY_VIOLATION: Context leak detected in runtime thread pool.")
+            raise PermissionDenied("CONTEXT_LEAK_DETECTED: Context leak detected in runtime thread pool.")
 
     @staticmethod
     def validate_consistency() -> None:
@@ -80,7 +82,7 @@ class ContextGuard:
 
         # Проверка strict-типизации UUID на уровне рантайма
         if not isinstance(t_id, uuid.UUID) or not isinstance(u_id, uuid.UUID):
-            raise PermissionDenied("CRITICAL_SECURITY_VIOLATION: Invalid types in security boundary context.")
+            raise PermissionDenied("CONTEXT_LEAK_DETECTED: Context leak detected in runtime thread pool.")
 
         # Выявление подозрительных паттернов мисраутинга шлюза Kong
         if req_id == corr_id:

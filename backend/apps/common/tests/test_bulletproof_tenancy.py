@@ -1,5 +1,5 @@
+# backend/apps/common/tests/test_bulletproof_tenancy.py
 import pytest
-import json
 from django.test import Client
 
 

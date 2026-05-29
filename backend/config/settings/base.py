@@ -44,8 +44,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "apps.common.middleware.context_isolation.ContextIsolationMiddleware",
+    "apps.common.middleware.kill_switch.SreGlobalKillSwitchMiddleware",  
     "apps.common.tenancy.middleware.AsgiTenantEnforcementMiddleware",
-    "apps.common.middleware.kill_switch.SreGlobalKillSwitchMiddleware",
     "apps.common.middleware.idempotency.IdempotencyEnforcementMiddleware",
     "apps.common.middleware.lifecycle.read_your_own_writes.ReadYourOwnWritesStickyMiddleware",
     "apps.common.middleware.lifecycle.lifecycle.StructlogTracingContextMiddleware",

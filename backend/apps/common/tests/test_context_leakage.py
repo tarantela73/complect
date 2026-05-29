@@ -27,6 +27,7 @@ class TestTransportContextIsolation:
             "HTTP_X_USER_ID": str(user_id),
             "HTTP_X_REQUEST_ID": str(uuid.uuid4()),
             "HTTP_X_CORRELATION_ID": str(uuid.uuid4()),
+            "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
         }
 
         response = client.get("/api/v1/contracts/", **headers)
@@ -50,7 +51,10 @@ class TestTransportContextIsolation:
     def test_protected_route_requires_context_headers(self):
         """[TEST 2: FAIL-CLOSED] Проверяет защиту доменного периметра (401)."""
         client = Client()
-        response = client.get("/api/v1/contracts/")
+        response = client.get(
+            "/api/v1/contracts/",
+            HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
+        )
         assert response.status_code == 401
         assert response.json()["code"] == "AUTH_GATE_DENIED"
 
@@ -60,6 +64,7 @@ class TestTransportContextIsolation:
         headers = {
             "HTTP_X_TENANT_ID": "INVALID-UUID-STRING",
             "HTTP_X_USER_ID": "NOT-A-VALID-UUID",
+            "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
         }
         response = client.get("/api/v1/contracts/", **headers)
         assert response.status_code == 400
@@ -73,6 +78,7 @@ class TestTransportContextIsolation:
             "HTTP_X_USER_ID": str(uuid.uuid4()),
             "HTTP_X_REQUEST_ID": str(uuid.uuid4()),
             "HTTP_X_CORRELATION_ID": "BROKEN-NON-UUID-VALUE",
+            "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
         }
         response = client.get("/api/v1/contracts/", **headers)
         assert response.status_code == 400
@@ -90,6 +96,7 @@ class TestTransportContextIsolation:
             HTTP_X_USER_ID=str(uuid.uuid4()),
             HTTP_X_REQUEST_ID=str(uuid.uuid4()),
             HTTP_X_CORRELATION_ID=str(uuid.uuid4()),
+            HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
         )
         assert response_a.status_code == 200
 
@@ -99,6 +106,7 @@ class TestTransportContextIsolation:
             HTTP_X_USER_ID=str(uuid.uuid4()),
             HTTP_X_REQUEST_ID=str(uuid.uuid4()),
             HTTP_X_CORRELATION_ID=str(uuid.uuid4()),
+            HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
         )
         assert response_b.status_code == 200
 
@@ -128,6 +136,7 @@ class TestTransportContextIsolation:
             "HTTP_X_USER_ID": str(uuid.uuid4()),
             "HTTP_X_REQUEST_ID": str(uuid.uuid4()),
             "HTTP_X_CORRELATION_ID": str(uuid.uuid4()),
+            "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
         }
         response = client.get("/api/v1/contracts/", **headers)
         assert response.status_code == 200

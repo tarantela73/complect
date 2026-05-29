@@ -1,19 +1,13 @@
 import json
-import pytest
-import structlog
 from io import StringIO
+
+import structlog
 
 
 class TestObservabilityLoggingContract:
     def test_logger_produces_valid_json_with_mandatory_fields(self):
-        """[LEVEL 2: QUERIES/OBSERVABILITY] Проверяет соответствие JSON-структуры лога ТЗ Комплекта."""
-        # 1. Перехватываем вывод логгера в буфер памяти
         log_buffer = StringIO()
 
-        # Настраиваем тестовый логгер через structlog
-        test_logger = structlog.get_logger("test_contract")
-
-        # Эмулируем принудительный биндинг контекста SRE-переменных
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             request_id="req-12345",
@@ -22,23 +16,24 @@ class TestObservabilityLoggingContract:
             user_id="user-chief",
         )
 
-        # [ИСПРАВЛЕНО] Правильный синтаксис MonkeyPatch без двоеточий на методах
-        with pytest.MonkeyPatch().context() as mp:
-            mp.setattr(
-                structlog.PrintLogger,
-                "msg",
-                lambda self, message: log_buffer.write(message + "\n"),
-            )
+        structlog.configure(
+            processors=[
+                structlog.contextvars.merge_contextvars,
+                structlog.processors.TimeStamper(fmt="iso", key="timestamp"),
+                structlog.processors.add_log_level,
+                structlog.processors.JSONRenderer(),
+            ],
+            wrapper_class=structlog.BoundLogger,
+            context_class=dict,
+            logger_factory=structlog.PrintLoggerFactory(file=log_buffer),
+        )
 
-            # Вызов логирования внутри изолированного контекста патча
-            test_logger.info("Бизнес-операция: Закрытие договора")
+        test_logger = structlog.get_logger("test_contract")
+        test_logger.info("Бизнес-операция: Закрытие договора")
 
         log_output = log_buffer.getvalue().strip()
-
-        # 2. Проверяем, что лог — это валидный JSON-объект
         log_json = json.loads(log_output)
 
-        # 3. Проверяем наличие всех обязательных полей по нашему контракту ТЗ [10.2]
         assert "timestamp" in log_json
         assert log_json["level"] == "info"
         assert log_json["request_id"] == "req-12345"

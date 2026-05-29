@@ -8,6 +8,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 django_asgi_app = get_asgi_application()
 
 from channels.routing import ProtocolTypeRouter, URLRouter
+
 from apps.realtime.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter(

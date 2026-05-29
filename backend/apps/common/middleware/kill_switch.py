@@ -1,5 +1,6 @@
 import structlog
 from django.http import JsonResponse
+
 from apps.common.feature_flags.repository import FeatureFlagRepository
 
 logger = structlog.get_logger(__name__)
@@ -44,7 +45,7 @@ class SreGlobalKillSwitchMiddleware:
                     return JsonResponse(
                         {
                             "code": "DOMAIN_TEMPORARILY_DISABLED",
-                            "message": f"Домен '{domain}' временно отключен SRE системой.",
+                            "message": f"Домен '{domain}' отключен автоматической системой надежности SRE.",
                         },
                         status=503,
                     )

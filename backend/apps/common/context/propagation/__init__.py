@@ -1,3 +1,4 @@
+# backend/apps/common/context/propagation/__init__.py
 import uuid
 from typing import Any, Dict
 
@@ -19,7 +20,7 @@ def apply_propagation_context(raw_headers: Dict[str, Any]) -> bool:
 
     nil_uuid = "00000000-0000-0000-0000-000000000000"
     if tenant_str == nil_uuid or user_str == nil_uuid:
-        return False
+        raise ValueError("Nil UUID forbidden")
 
     # ValueError намеренно НЕ перехватывается — пробрасывается в middleware → 400
     t_uuid = uuid.UUID(tenant_str)

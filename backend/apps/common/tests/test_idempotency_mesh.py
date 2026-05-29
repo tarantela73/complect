@@ -1,7 +1,10 @@
 import json
-import pytest
 import uuid
+from unittest.mock import patch
+
+import pytest
 from django.test import Client
+
 from apps.common.tenancy.context import set_tenant_context
 
 
@@ -17,6 +20,7 @@ class TestIdempotencySecurityMesh:
         set_tenant_context(tenant_uuid)
 
         headers = {
+            "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
             "HTTP_X_TENANT_ID": str(tenant_uuid),
             "HTTP_X_USER_ID": str(user_uuid),
             "HTTP_IDEMPOTENCY_KEY": idem_key,
@@ -28,14 +32,10 @@ class TestIdempotencySecurityMesh:
         # 1. Отправляем первый легитимный запрос (Инициирует мутацию)
         # Используем эндпоинт-заглушку, который возвращает 201 Created
         with patch("apps.common.middleware.idempotency.JsonResponse") as _:
-            response_one = client.post(
-                "/api/v1/contracts/create_stub", data=json.dumps(payload), **headers
-            )
+            response_one = client.post("/api/v1/contracts/create_stub", data=json.dumps(payload), **headers)
 
         # 2. Мгновенно отправляем точно такой же второй запрос с тем же ключом
-        response_two = client.post(
-            "/api/v1/contracts/create_stub", data=json.dumps(payload), **headers
-        )
+        response_two = client.post("/api/v1/contracts/create_stub", data=json.dumps(payload), **headers)
 
         # [ГЛАВНАЯ ПРОВЕРКА]: Второй запрос перехвачен Middleware без захода в СУБД!
         # С кэшированным телом первого ответа
