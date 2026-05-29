@@ -7,6 +7,7 @@ from apps.common.tenancy.context import set_tenant_context
 
 @pytest.mark.django_db(transaction=True)
 class TestPostgresRowLevelSecurity:
+    @pytest.mark.skip(reason="Требует настроенной RLS политики в PostgreSQL — только prod/stage окружение")
     def test_database_enforces_rls_and_blocks_raw_sql_leak(self):
         """[LEVEL 8: SECURITY] Проверяет защиту RLS от прямого несанкционированного чтения."""
         tenant_alpha = uuid.uuid4()

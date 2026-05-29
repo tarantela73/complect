@@ -1,17 +1,16 @@
 import uuid
+
 import django.utils.timezone as tz
+from django.core.exceptions import PermissionDenied
 from django.db.models import F
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contracts.models.contract import Contract
 
 
 class ContractRepository:
-    """[СИНХРОНИЗИРОВАНО С CONTEXT_CORE] Изолированный слой доступа к договорам."""
-
     @staticmethod
     def get_queryset():
-        # [ИСПРАВЛЕНО]: Строгий вызов нового акцессора ядра
         tenant_id = get_tenant_id()
         return Contract.objects.filter(tenant_id=tenant_id, is_deleted=False)
 
@@ -46,3 +45,10 @@ class ContractRepository:
         ).update(**fields_to_update)
 
         return updated_rows == 1
+
+    @staticmethod
+    def create(contract: Contract) -> Contract:
+        tenant_id = get_tenant_id()
+        contract.tenant_id = tenant_id
+        contract.save()
+        return contract
