@@ -1,8 +1,10 @@
+import asyncio
 import json
 import uuid
 
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
 
 from apps.common.context.core import (
     clear_context,
@@ -103,10 +105,14 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
             await self._replay_missed_events(last_sequence_id=last_sequence_id)
 
     async def _replay_missed_events(self, last_sequence_id: str):
-        from django.conf import settings
 
         redis_client = settings.REDIS_CLIENT
-        raw_stream = redis_client.xread({self.stream_name: last_sequence_id}, count=50)
+
+        # Запускаем синхронный Redis в executor чтобы не блокировать event loop
+        loop = asyncio.get_event_loop()
+        raw_stream = await loop.run_in_executor(
+            None, lambda: redis_client.xread({self.stream_name: last_sequence_id}, count=50)
+        )
 
         if not raw_stream:
             return
@@ -117,9 +123,9 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
                     json.dumps(
                         {
                             "type": "realtime_event",
-                            "sequence_id": sequence_id.decode("utf-8"),
-                            "event_type": fields[b"event_type"].decode("utf-8"),
-                            "payload": json.loads(fields[b"payload"].decode("utf-8")),
+                            "sequence_id": sequence_id,
+                            "event_type": fields["event_type"],
+                            "payload": json.loads(fields["payload"]),
                             "is_replay": True,
                         }
                     )

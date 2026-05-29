@@ -12,8 +12,8 @@ def extract_http_context(headers: Any) -> Dict[str, Optional[str]]:
     get_header = getattr(headers, "get", lambda k: headers.get(k))
 
     return {
-        "tenant_id": get_header("X-Tenant-ID"),
-        "user_id": get_header("X-User-ID"),
-        "request_id": get_header("X-Request-ID"),
-        "correlation_id": get_header("X-Correlation-ID"),
+        "tenant_id": get_header("x-tenant-id") or get_header("X-Tenant-ID"),
+        "user_id": get_header("x-user-id") or get_header("X-User-ID"),
+        "request_id": get_header("x-request-id") or get_header("X-Request-ID"),
+        "correlation_id": get_header("x-correlation-id") or get_header("X-Correlation-ID"),
     }

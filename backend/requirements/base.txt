@@ -23,3 +23,4 @@ cryptography>=42.0.5
 argon2-cffi>=23.1.0
 django-cors-headers>=4.3.1
 granian[reload]>=1.2.0
+daphne>=4.1.0

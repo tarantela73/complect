@@ -1,8 +1,10 @@
-import pytest
 import json
+
+import pytest
 from channels.testing import WebsocketCommunicator
-from config.asgi import application
 from django.conf import settings
+
+from config.asgi import application
 
 
 @pytest.mark.asyncio
@@ -10,7 +12,7 @@ class TestWebSocketEventReplayMesh:
     async def test_websocket_negotiates_protocol_and_replays_missed_events(self):
         """[LEVEL 5: WEBSOCKET/REPLAY] Тестирует согласование возможностей и компенсацию пропущенных кадров."""
         redis_client = settings.REDIS_CLIENT
-        stream_name = "erp:streams:tenant:global"
+        stream_name = "erp:streams:tenant:11111111-1111-4111-a111-111111111111"
 
         # Очищаем старый стрим
         redis_client.delete(stream_name)
@@ -23,10 +25,20 @@ class TestWebSocketEventReplayMesh:
                 "payload": json.dumps({"contract_id": "test-uuid"}),
             },
         )
-        seq_id_str = seq_id.decode("utf-8")
+        seq_id_str = seq_id
 
         # 2. Инициализируем тестовый асинхронный сокет-коммуникатор Channels
-        communicator = WebsocketCommunicator(application, "/ws/realtime/")
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/realtime/",
+            headers=[
+                (b"x-gateway-token", b"complect_internal_secure_mesh_token_2026"),
+                (b"x-tenant-id", b"11111111-1111-4111-a111-111111111111"),
+                (b"x-user-id", b"22222222-2222-4222-a222-222222222222"),
+                (b"x-request-id", b"33333333-3333-4333-a333-333333333333"),
+                (b"x-correlation-id", b"44444444-4444-4444-a444-444444444444"),
+            ],
+        )
         connected, _ = await communicator.connect()
         assert connected
 
