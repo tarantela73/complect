@@ -181,4 +181,7 @@ test-results/
 # =========================================================
 .mcp.json
 CLAUDE.md
+.claude
+.claude/
+.claude_session*
 

@@ -1,68 +1,71 @@
-
 # ТЕХНИЧЕСКАЯ СПЕЦИФИКАЦИЯ АРХИТЕКТУРЫ ERP «КОМПЛЕКТ»
 
 ---
----
 
-Версия документа: 2.0.0 — ENTERPRISE GOVERNED EDITION
+Версия документа: 2.1.0 — ENTERPRISE GOVERNED EDITION
 Статус: APPROVED FOR IMPLEMENTATION
 Архитектурный стиль: Modular Monolith + CQRS Read Model + BFF + Next.js Feature Architecture
-Регламент изменений: Любое архитектурное изменение оформляется через ADR в docs/adr/.
+Регламент изменений: Любое архитектурное изменение оформляется через ADR в `docs/adr/`.
+
+---
 
 ## 1. АРХИТЕКТУРНЫЙ МАНИФЕСТ
 
+### ERP «КОМПЛЕКТ» проектируется как
+
+- Высоконагруженная корпоративная ERP-платформа
+- Событийно-ориентированный модульный монолит
+- ASGI-only система реального времени
+- Платформа с полным observability-контуром
+- Система с enforced governance и SRE/SLA контролем
+
+### Основные цели
+
+- Отказоустойчивость
+- Слабая связанность доменов
+- Предсказуемая эволюция API
+- Юридическая трассируемость действий
+- Безопасность персональных данных
+- Возможность масштабирования до multi-tenant SaaS
+
 ---
-
-#### ERP «КОМПЛЕКТ» проектируется как
-
-- Высоконагруженная корпоративная ERP-платформа;
-- Событийно-ориентированный модульный монолит;
-- ASGI-only система реального времени;
-- Платформа с полным observability-контуром;
-- Система с enforced governance и SRE/SLA контролем.
-
-#### Основные цели
-
-- Отказоустойчивость;
-- Слабая связанность доменов;
-- Предсказуемая эволюция API;
-- Юридическая трассируемость действий;
-- Безопасность персональных данных;
-- Возможность масштабирования до multi-tenant SaaS.
 
 ## 2. BOUNDED CONTEXTS (DDD)
 
 ### 2.1 Identity & Process Context
 
-- Приложения: apps/users/, apps/workflows/
-- Термины: `User`, `Role`, `Permission`, `MFAChallenge`, `Session`, `WorkflowState`.
-- Ответственность: `MFA`, `RBAC`, `JWT rotation`, `Device Fingerprinting`, `BPM/FSM workflows`.
+- Приложения: `apps/users/`, `apps/workflows/`
+- Термины: `User`, `Role`, `Permission`, `MFAChallenge`, `Session`, `WorkflowState`
+- Ответственность: MFA, RBAC, JWT rotation, Device Fingerprinting, BPM/FSM workflows
 
 ### 2.2 Contracts Context
 
-- Приложения: apps/contracts/, apps/export/, apps/reports/, apps/contragents/
-- Термины: Contract, AdditionalAgreement, Act, ContractStatus, Person, Contragent.
+- Приложения: `apps/contracts/`, `apps/export/`, `apps/reports/`, `apps/contragents/`
+- Термины: `Contract`, `AdditionalAgreement`, `Act`, `ContractStatus`, `Person`, `Contragent`
 - Ответственность: Жизненный цикл договоров, workflow закрытия, PDF документы, compliance exports, валидаторы контрагентов
 
 ### 2.3 Finance Context
 
-- Приложения: apps/finance/, apps/analytics/, apps/integration/
-- Термины: Transaction, Invoice, PaidAmount, RemainingAmount
+- Приложения: `apps/finance/`, `apps/analytics/`, `apps/integration/`
+- Термины: `Transaction`, `Invoice`, `PaidAmount`, `RemainingAmount`
 - Ответственность: Ledger accounting, дебиторская задолженность, BFF analytics, интеграции с 1С
 
 ### 2.4 GIS Context
 
-- Приложения: apps/objects/, apps/search/
+- Приложения: `apps/objects/`, `apps/search/`
 - Ответственность: PostGIS, spatial indexes, GeoJSON, картографические сервисы
+- Типы полей: `PointField` (координаты), `PolygonField` (границы объектов)
+- Индексы: GIST spatial index обязателен на всех геополях
+- API: GeoJSON FeatureCollection как стандарт ответа для пространственных запросов
 
 ### 2.5 Realtime Context
 
-- Приложения: apps/realtime/, apps/chat/, apps/notifications/, apps/outbox/
+- Приложения: `apps/realtime/`, `apps/chat/`, `apps/notifications/`, `apps/outbox/`
 - Ответственность: WebSockets, Presence, Event Replay, ACK delivery guarantees
 
-## 3. СКВОЗНАЯ ТОПОЛОГИЯ СИСТЕМЫ И ПОТОКИ ДАННЫХ
-
 ---
+
+## 3. СКВОЗНАЯ ТОПОЛОГИЯ СИСТЕМЫ И ПОТОКИ ДАННЫХ
 
 ```text
 Next.js Front-end Layer (Папка: /frontend)
@@ -97,7 +100,7 @@ Next.js Front-end Layer (Папка: /frontend)
          ▼                                           ▼
     Redis Layer                              PostgreSQL 16 + PostGIS
     ├── Cache (Агрегированные BFF-модели)    ├── Реляционная СУБД (Транзакции)
-    ├── Pub/Sub (Шина Live-событий)          ├── Пространственные индексы R-Tree
+    ├── Pub/Sub (Шина Live-событий)          ├── Пространственные индексы GIST/GIN
     ├── Queue (Очередь задач Celery Only)    ├── PointField (Гео-координаты для карт)
     ├── Redis-based distributed locks        └── Optimistic Locking (Поле version)
     └── WebSocket State (Channels)                   │
@@ -113,73 +116,114 @@ Next.js Front-end Layer (Папка: /frontend)
 
 ### 4.1 CQRS
 
-- Command Side:
-  - Папка: services/
-  - Разрешено: Изменение состояния, DB transactions, Outbox write, orchestration.
-  - Запрещено: Heavy SELECTs, аналитика, бизнес-логика в models.py.
-- Query Side:
-  - Папка: queries/, selectors/
-  - Ответственность: Optimized reads, aggregation, DTO projection, pagination.
+- **Command Side** (`services/`): изменение состояния, DB transactions, Outbox write, orchestration. Heavy SELECTs запрещены.
+- **Query Side** (`queries/`, `selectors/`): optimized reads, aggregation, DTO projection, pagination. Запись запрещена.
 
 ### 4.2 ASGI ONLY
 
-- Продакшн полностью работает через: Granian, Uvicorn, Daphne.
-- WSGI в production запрещен.
+- Продакшн работает исключительно через: Granian, Uvicorn, Daphne.
+- WSGI в production **запрещён**.
 
 ### 4.3 TRANSACTION BOUNDARY LAW
 
-- События публикуются строго: DB COMMIT -> transaction.on_commit() -> Redis publish / Celery dispatch.
-- Это исключает: Phantom events, stale reads, race conditions.
+- События публикуются строго: `DB COMMIT → transaction.on_commit() → Redis publish / Celery dispatch`.
+- Запрещено публиковать события до коммита транзакции.
 
 ### 4.4 INTERNAL SDK LAYER
 
-- Кросс-импорты моделей запрещены.
-- Общение модулей идет строго через: apps/common/contracts/
+- Кросс-импорты моделей между доменами **запрещены** (ADR-0030).
+- Общение модулей идёт строго через `apps/common/contracts/` (typing.Protocol).
 
 ### 4.5 DOMAIN EVENTS CONTRACT
 
-- Все события описываются как: @dataclass(slots=True, frozen=True)
-- Обязательные поля: event_id, event_version, occurred_at, correlation_id
+- Все события: `@dataclass(slots=True, frozen=True)`
+- Обязательные поля: `event_id`, `event_version`, `occurred_at`, `correlation_id`
 
-### 4.6 DATABASE CONVENTIONS
+### 4.6 BASE ENTERPRISE MODEL
 
-- Naming: snake_case only, plural table names (Пример: contracts_additional_agreements).
-- BaseEnterpriseModel: Каждая таблица наследует поля id, created_at, updated_at, deleted_at, is_deleted, version, tenant_id.
+Каждая доменная модель **обязана** наследовать `BaseEnterpriseModel`:
 
-### 4.7 TRANSACTION ISOLATION POLICY
+```python
+class BaseEnterpriseModel(models.Model):
+    id: UUID          # Primary key
+    created_at        # auto
+    updated_at        # auto
+    deleted_at        # soft delete timestamp
+    is_deleted: bool  # soft delete flag
+    version: int      # optimistic concurrency version counter
+    tenant_id: UUID   # tenant isolation
+    is_legal_hold: bool  # legal hold flag
+```
 
-- Default: READ COMMITTED.
-- Finance Mutations: SELECT ... FOR UPDATE.
-- Critical Balance Recompute: SERIALIZABLE, advisory locks.
+- `save()` / `delete()` в методах модели **запрещены** — мутации только через `EnterpriseSreRepository`.
+- Soft delete реализуется через `is_deleted=True` + `deleted_at=now()`.
 
-### 4.8 MIGRATION POLICY
+### 4.7 OPTIMISTIC CONCURRENCY CONTROL
 
-- Strict Expand & Contract:
-- 1. Add nullable field,
-- 1. Async backfill,
-- 1. Switch code,
-- 1. Remove old field через 2 релиза.
-- Destructive migrations forbidden.
+- Все state mutations идут через `EnterpriseSreRepository.atomic_cas_update()` — никогда через raw `.save()`.
+- Finance mutations: `SELECT ... FOR UPDATE` (row-level lock).
+- Critical balance recompute: `SERIALIZABLE` + advisory locks.
 
-### 4.9 CURSOR PAGINATION STANDARD
+### 4.8 LEGAL HOLD POLICY
 
-- OFFSET pagination запрещена для: audit logs, finance, notifications, websocket events, chats.
-- Используется: WHERE id < cursor ORDER BY id DESC.
+- Флаг `is_legal_hold=True` **блокирует**: soft delete, hard delete, mutation, retention cleanup.
+- Проверка обязательна перед любой мутацией объекта.
 
-### 4.10 READ REPLICA STRATEGY
+### 4.9 DATABASE CONVENTIONS
 
-- Query Side: Читает из replica.
-- Command Side: Пишет только в primary.
+- Naming: `snake_case`, plural table names (пример: `contracts_additional_agreements`).
+- Default isolation: `READ COMMITTED`.
 
-### 4.11 READ-YOUR-OWN-WRITES POLICY
+### 4.10 MIGRATION POLICY — Expand & Contract (ADR-0027)
 
-- После mutation чтение идет из primary.
-- TTL sticky routing: 2 seconds.
+1. **Release N**: добавить nullable column.
+2. **Release N+1**: async Celery backfill (батчи 5000 через `SKIP LOCKED`), переключить write на новый столбец.
+3. **Release N+2**: `NOT NULL` constraint (`NOT VALID` → `VALIDATE CONSTRAINT`), удалить старый столбец.
 
-### 4.12 TENANT ENFORCEMENT LAW
+Запрещено:
 
-- Все QuerySet обязаны проходить через tenant-aware manager.
-- Raw ORM без tenant scope запрещен.
+- `AddField(NOT NULL, no default)`
+- `RemoveField` на активных столбцах
+- Индексы без `CONCURRENTLY`
+- Миграции без `reverse_sql` / `backwards()`
+
+### 4.11 CURSOR PAGINATION STANDARD
+
+- `OFFSET` pagination **запрещена** для: audit logs, finance, notifications, websocket events, chats.
+- Стандарт: `WHERE id < cursor ORDER BY id DESC`.
+
+### 4.12 READ REPLICA STRATEGY
+
+- Query Side: читает из replica.
+- Command Side: пишет только в primary.
+
+### 4.13 READ-YOUR-OWN-WRITES POLICY
+
+- После mutation чтение идёт из primary.
+- TTL sticky routing: 2 секунды.
+
+### 4.14 TENANT ENFORCEMENT LAW
+
+- Все QuerySet **обязаны** проходить через tenant-aware manager.
+- Raw ORM без tenant scope **запрещён**.
+- Фильтр применяется автоматически через `TenantManager.get_queryset()`.
+
+### 4.15 CELERY QUEUE TOPOLOGY
+
+| Очередь | Назначение | Priority |
+| --- | --- | --- |
+| `default` | Общие задачи | normal |
+| `outbox` | Диспетчер Transactional Outbox | high |
+| `notifications` | Email, Telegram, In-App пуши | normal |
+| `finance` | Финансовые пересчёты, выписки | high |
+| `files` | ClamAV pipeline, S3 upload | low |
+| `retention` | Очистка по retention policy | low |
+
+- Prefetch multiplier: 1 (CELERY_WORKER_PREFETCH_MULTIPLIER=1).
+- Acks late: true (задача подтверждается после выполнения).
+- Max retries: 5, после — эвакуация в DLQ.
+
+---
 
 ## 5. SECURITY & COMPLIANCE
 
@@ -191,16 +235,16 @@ Next.js Front-end Layer (Папка: /frontend)
 
 ### 5.2 DEVICE FINGERPRINTING
 
-- При изменении fingerprint: Revoke session, emit security event, notify chief.
+- При изменении fingerprint: revoke session, emit security event, notify chief.
 
 ### 5.3 IDEMPOTENCY POLICY
 
-- Mutations требуют заголовок Idempotency-Key: UUID.
+- Mutations требуют заголовок `Idempotency-Key: UUID`.
 - Redis TTL для ключей идемпотентности: 24h.
 
 ### 5.4 FILE SECURITY PIPELINE
 
-- FSM pipeline: uploaded → quarantine → virus_scanning → processing → ready → failed.
+- FSM pipeline: `uploaded → quarantine → virus_scanning → processing → ready → failed`.
 
 ### 5.5 ANTIVIRUS PIPELINE
 
@@ -208,53 +252,89 @@ Next.js Front-end Layer (Папка: /frontend)
 
 ### 5.6 LEGAL HOLD POLICY
 
-- Флаг is_legal_hold = True блокирует: soft delete, hard delete, mutation, retention cleanup.
+- Флаг `is_legal_hold=True` блокирует: soft delete, hard delete, mutation, retention cleanup.
+- Проверка обязательна до любой мутации — см. 4.8.
 
 ### 5.7 PII ENCRYPTION
 
-- Алгоритм AES-256 via pgcrypto.
-- Шифруются поля: passport, SNILS, phones.
+- Алгоритм: AES-256 via pgcrypto (`pgp_sym_encrypt` / `pgp_sym_decrypt`).
+- Шифруются поля: `passport`, `snils`, `phone`.
+- Ключ шифрования: из Docker Secret / Vault, никогда в коде или env.
 
 ### 5.8 PII ACCESS AUDIT
 
-- Каждое чтение PII логируется: who, when, why, request_id, correlation_id.
+- Каждое чтение PII логируется: `who`, `when`, `why`, `request_id`, `correlation_id`.
 
 ### 5.9 SECRETS ROTATION POLICY
 
-- Сроки плановой ротации: JWT — 90 days, DB — 30 days, S3 — 60 days.
+- JWT: 90 дней, DB: 30 дней, S3: 60 дней.
 
 ### 5.10 CLOCK SYNCHRONIZATION
 
 - UTC everywhere. NTP sync mandatory.
-- Drift policy: Warning: >2s; Critical: >5s; Block finance: >15s.
+- Drift policy: Warning >2s; Critical >5s; Block finance >15s.
+
+---
 
 ## 6. API GOVERNANCE
 
 ### 6.1 VERSIONING
 
-- Базовый префикс путей: /api/v1/
+- Базовый префикс: `/api/v1/`
 
 ### 6.2 LIFECYCLE
 
-- Мажорная версия v1 поддерживается строго до: 2028-01-01.
+- Мажорная версия v1 поддерживается до: 2028-01-01.
 
 ### 6.3 DEPRECATION HEADERS
 
-- Заголовки Deprecation: и Sunset: являются mandatory для устаревших ручек.
+- Заголовки `Deprecation:` и `Sunset:` обязательны для устаревших endpoint'ов.
 
-### 6.4 OPENAPI FREEZE POLICY
+### 6.4 OPENAPI FREEZE POLICY (ADR-0028)
 
-- Спецификация OpenAPI = контракт. Breaking changes require: ADR, new major version, migration window.
+- Спецификация OpenAPI = контракт. Breaking changes требуют: ADR, новую major версию, migration window.
 
 ### 6.5 GENERATED SDK
 
-- Путь генерации TS SDK: frontend/src/shared/api/generated/. Manual edits forbidden.
+- Путь TS SDK: `frontend/src/shared/api/generated/`. Ручные правки запрещены.
+
+### 6.6 API ERROR RESPONSE FORMAT
+
+Все ошибки возвращаются в едином формате:
+
+```json
+{
+  "error": {
+    "code": "CONTRACT_NOT_FOUND",
+    "message": "Договор не найден в контуре текущей компании.",
+    "detail": null,
+    "request_id": "uuid",
+    "correlation_id": "uuid"
+  }
+}
+```
+
+| HTTP статус | Семантика |
+| --- | --- |
+| 400 | Ошибка валидации входных данных |
+| 401 | Не аутентифицирован |
+| 403 | Нет прав (RBAC / Legal Hold / Tenant) |
+| 404 | Объект не найден в scope тенанта |
+| 409 | Конфликт версии (optimistic lock) |
+| 422 | Бизнес-правило нарушено |
+| 429 | Rate limit exceeded |
+| 503 | Kill-switch / readonly mode |
+
+- `code` — машиночитаемый enum в SCREAMING_SNAKE_CASE.
+- `detail` — опциональный объект с полями валидации (для 400/422).
+
+---
 
 ## 7. FRONTEND ARCHITECTURE
 
-### 7.1 NEXT.JS 15+
+### 7.1 STACK
 
-- Stack: Next.js 15+, React 19, Turbopack, TypeScript.
+- Next.js 15+, React 19, Turbopack, TypeScript.
 
 ### 7.2 STATE MANAGEMENT
 
@@ -263,237 +343,293 @@ Next.js Front-end Layer (Папка: /frontend)
 
 ### 7.3 FEATURE ISOLATION
 
-- Папка модулей: /features/*. Feature modules are black boxes.
+- Папка модулей: `/features/*`. Feature modules are black boxes.
 
 ### 7.4 SERVER COMPONENTS FIRST
 
-- По умолчанию используются Server Components. Директива "use client" разрешена только для interactive leaves.
+- По умолчанию Server Components. `"use client"` разрешён только для interactive leaves.
 
 ### 7.5 ERROR BOUNDARY STRATEGY
 
-- Route Error Boundaries: Файл error.tsx mandatory в каждой папке роута.
-- Query Retry: Ровно 3 ретрая перед срабатыванием fallback.
-- Suspense: Тяжелые виджеты обязаны использовать структуру ```python <Suspense fallback={<Skeleton />}>```.
+- `error.tsx` обязателен в каждой папке роута.
+- Query Retry: ровно 3 ретрая перед fallback.
+- Тяжёлые виджеты: `<Suspense fallback={<Skeleton />}>`.
 
-7.6 ACCESSIBILITY (WCAG 2.1 AA)
+### 7.6 ACCESSIBILITY (WCAG 2.1 AA)
 
-- Mandatory: Semantic tables, keyboard navigation, focus-visible, aria-live alerts, accessible dialogs.
+- Mandatory: semantic tables, keyboard navigation, focus-visible, aria-live alerts, accessible dialogs.
 
-7.7 DESIGN TOKEN POLICY
+### 7.7 DESIGN TOKEN POLICY
 
-- Запрещены hardcoded значения для colors, spacing, z-index, typography. Все настраивается через centralized design tokens.
+- Запрещены hardcoded значения для colors, spacing, z-index, typography. Только centralized design tokens.
 
-1. REALTIME & WEBSOCKETS
-8.1 PROTOCOL HANDSHAKE
+---
 
-- При подключении Client sends кадр:
-  {
-    "type": "connection_init",
-    "protocol_version": 1,
-    "capabilities": ["at_least_once", "event_replay"]
-  }
+## 8. REALTIME & WEBSOCKETS
 
-8.2 ACK POLICY
+### 8.1 PROTOCOL HANDSHAKE
 
-- Every event requires ACK. Timeout ожидания квитанции: 3s.
+```json
+{
+  "type": "connection_init",
+  "protocol_version": 1,
+  "capabilities": ["at_least_once", "event_replay"]
+}
+```
 
-8.3 EVENT REPLAY
+### 8.2 ACK POLICY
 
-- Missed events replayed from Redis queue.
+- Каждое событие требует ACK. Timeout ожидания: 3s.
 
-8.4 EVENT ORDERING POLICY
+### 8.3 EVENT REPLAY
 
-- Events contain: sequence_id. Frontend игнорирует старые (stale) события.
+- Пропущенные события replayed из Redis queue.
 
-8.5 RECONNECT POLICY
+### 8.4 EVENT ORDERING POLICY
 
-- Алгоритмы: Exponential backoff, jitter, replay sync.
+- События содержат `sequence_id`. Frontend игнорирует stale события.
 
-   1. FEATURE FLAGS GOVERNANCE
+### 8.5 RECONNECT POLICY
 
-- Допустимые типы флагов: temporary, permanent, experiment, ops, kill-switch.
+- Exponential backoff + jitter + replay sync.
 
-9.1 CLEANUP LAW
+---
 
-- Для флагов типов temporary/experiment устанавливается max age = 90 days.
+## 9. FEATURE FLAGS GOVERNANCE
 
-   1. OBSERVABILITY & SRE
-   10.1 STACK
+- Допустимые типы флагов: `temporary`, `permanent`, `experiment`, `ops`, `kill-switch`.
 
-- Инструменты: OpenTelemetry, Jaeger, Prometheus, Grafana, structlog.
+### 9.1 CLEANUP LAW
 
-10.2 LOGGING CONTRACT
+- Для типов `temporary` / `experiment`: max age = 90 дней.
 
-- Mandatory fields для каждого JSON-лога: timestamp, level, request_id, correlation_id, tenant_id, user_id, event_id, module.
+---
 
-10.3 ERROR BUDGET POLICY
+## 10. OBSERVABILITY & SRE
 
-- Скользящее 30-дневное окно доступности (SLA): REST API — 99.9%, WebSocket — 99.5%, Dashboard — 99.0%.
+### 10.1 STACK
 
-10.4 BUDGET EXHAUSTED LAW
+- OpenTelemetry, Jaeger, Prometheus, Grafana, structlog.
 
-- Если Бюджет ошибок (Error Budget) = 0%: Активируются feature freeze и reliability mode only.
+### 10.2 LOGGING CONTRACT
 
-   1. RELIABILITY & INTEGRATIONS
-   11.1 DEAD LETTER QUEUE
+Обязательные поля каждого JSON-лога:
 
-- Retry limit для Celery-задач: 5. After exhaustion задача эвакуируется в Redis-лист dead_letter_queue.
+```json
+{
+  "timestamp": "ISO8601",
+  "level": "INFO|WARNING|ERROR|CRITICAL",
+  "request_id": "uuid",
+  "correlation_id": "uuid",
+  "tenant_id": "uuid",
+  "user_id": "uuid",
+  "event_id": "uuid",
+  "module": "apps.contracts.services"
+}
+```
 
-11.2 ADMIN DLQ PANEL
+### 10.3 ERROR BUDGET POLICY (ADR-0029)
 
-- Доступные операции в интерфейсе: inspect, replay, purge.
+- SLA (скользящее 30-дневное окно): REST API — 99.9%, WebSocket — 99.5%, Dashboard — 99.0%.
 
-11.3 ANTI-CORRUPTION LAYER
+### 10.4 BUDGET EXHAUSTED LAW
 
-- Структура интеграционных модулей: adapters/, mappers/, anti_corruption/.
+- Error Budget = 0% → feature freeze + reliability mode only.
 
-11.4 INBOX PATTERN
+---
 
-- External events persisted in: integration_inbox. Дедупликация входящих сообщений по ключу external_event_id.
+## 11. RELIABILITY & INTEGRATIONS
 
-   1. SEARCH ENGINE
+### 11.1 DEAD LETTER QUEUE
 
-- Используется исключительно Postgres FTS.
-- Технические средства: GIN indexes, russian morphology (стемминг), ts_rank_cd.
-- Ранжирование по весам:
-- Weight A: INN, Numbers
-  - Weight B: Names
-  - Weight C: Address
-  - Weight D: OCR text
+- Retry limit Celery: 5. После — эвакуация в Redis-стрим `infrastructure:dlq:stream`.
 
-   1. AUDIT INTEGRITY CHAIN
+### 11.2 ADMIN DLQ PANEL
 
-- Каждая запись audit log содержит хэш: SHA256(previous_hash + payload + timestamp).
-- Обнаружение несанкционированных изменений (Tampering) немедленно триггерит kill-switch финансового контура и отправляет critical alert.
+- Доступные операции: inspect, replay, purge.
 
-   1. PERFORMANCE & CACHE
-   14.1 CACHE STAMPEDE PROTECTION
+### 11.3 ANTI-CORRUPTION LAYER
 
-- Тяжелая инвалидация и пересчет кэша защищены с помощью distributed lock и стратегии stale-while-revalidate.
+- Структура: `adapters/`, `mappers/`, `anti_corruption/`.
 
-14.2 SLO TARGETS
+### 11.4 INBOX PATTERN
 
-- Лимиты производительности: REST — p95 < 150ms, p99 < 300ms; Dashboard — p95 < 500ms; Search — p95 < 200ms.
+- External events сохраняются в `integration_inbox`.
+- Дедупликация по ключу `external_event_id`.
 
-   1. TESTING STRATEGY
-   15.1 TEST MATRIX
+---
 
-- Инструменты окружения: pytest, testcontainers-python (PostgreSQL + PostGIS, Redis). SQLite в тестах категорически forbidden.
+## 12. SEARCH ENGINE
 
-15.2 TEST SUITES
+- Только Postgres FTS. ElasticSearch/OpenSearch не используется.
+- GIN indexes, russian morphology (стемминг через `pg_catalog.russian`), `ts_rank_cd`.
+- Веса ранжирования:
+  - Weight A: ИНН, номера
+  - Weight B: названия, ФИО
+  - Weight C: адреса
+  - Weight D: OCR-текст
 
-- unit/: Проверка крайних случаев (edge cases) в Service layer.
-- queries/: Контроль количества запросов через assert_num_queries, проверка replica routing и корректности пагинации.
-- permissions/: Сквозное тестирование политик RBAC.
-- contract/: Проверка OpenAPI snapshots, DTO compatibility, выявление schema diff.
-- websocket/: Эмуляция ACK квитанций, сценариев replay, reconnect и сокет-negotiation.
-- migrations/: Валидация forward/backward compatibility миграций данных.
-- performance/: Стресс-тестирование сценариев через k6 и Locust.
-- security/: Тестирование устойчивости к MFA bypass, проверка JWT rotation, IDOR атак, privilege escalation и попыток audit tampering.
+---
 
-15.3 MUTATION TESTING
+## 13. AUDIT INTEGRITY CHAIN
 
-- Покрытие мутационными тестами для критичного Finance domain: mutmut >= 90%.
+- Каждая запись audit log: `SHA256(previous_hash + payload + timestamp)`.
+- Tampering detection → немедленный kill-switch финансового контура + critical alert.
 
-15.4 PLAYWRIGHT E2E
+---
 
-- Основные проверяемые пользовательские потоки (Flows): login, MFA, dashboard, contract close, websocket, finance, maps.
+## 14. PERFORMANCE & CACHE
 
-   1. DEFINITION OF DONE
-   Слияние веток (Merge) полностью заблокировано на уровне CI/CD автоматизации, если:
+### 14.1 CACHE STAMPEDE PROTECTION
 
-- Any test fails (упал хотя бы один тест из матрицы);
-- Code coverage drops below thresholds (упало покрытие кода);
-- Mutation score fails (метрика mutmut ниже целевой);
-- Unsafe migration detected (выявлена деструктивная миграция в обход Expand & Contract);
-- ADR missing (отсутствует файл описания архитектурных изменений);
-- Generated SDK outdated (изменились схемы бэкенда, но клиентский TS SDK в репозитории не обновлен).
+- Тяжёлая инвалидация: distributed lock + stale-while-revalidate.
 
-   1. COVERAGE THRESHOLDS
-   Целевые лимиты тестового покрытия по архитектурным слоям системы:
+### 14.2 SLO TARGETS
 
-- Services: >= 90%
-- Repositories: >= 85%
-- RBAC: >= 95%
-- API: >= 80%
-- Frontend hooks: >= 80%
+| Endpoint | p95 | p99 |
+| --- | --- | --- |
+| REST API | < 150ms | < 300ms |
+| Dashboard BFF | < 500ms | — |
+| Search | < 200ms | — |
 
-   1. MONOREPO STRUCTURE (ЭТАЛОННОЕ АРХИТЕКТУРНОЕ ДЕРЕВО)
-   Complect/ # Корень монорепозитория
-   ├── .gitignore # Скрывает .venv, node_modules, .env, .next
-   ├── ruff.toml # Глобальные правила линтинга Python
-   ├── docker-compose.dev.yml # Сборка локального окружения с Hot-Reload
-   ├── docker-compose.prod.yml # Боевая Enterprise-сборка (Docker Secrets)
-   │
-   ├── docs/ # СЛОЙ СИСТЕМНОЙ ДОКУМЕНТАЦИИ
-   │ └── adr/ # ARCHITECTURE DECISION RECORDS (ADR)
-   │ ├── 0001-modular-monolith.md
-   │ ├── 0002-cqrs-selectors.md
-   │ ├── 0003-transactional-outbox.md
-   │ └── 0004-api-error-standard.md
-   │
-   ├── infra/ # СЛОЙ ИНФРАСТРУКТУРЫ
-   │ ├── docker/ # Backend/Frontend Dockerfiles (Dev/Prod)
-   │ ├── nginx/ # nginx.conf (SSL, CSP, HSTS заголовки)
-   │ ├── api_gateway/ # Конфигурация Kong / APISIX шлюза
-   │ ├── opentelemetry/ # Конфиг OTel Collector для пересылки в Jaeger
-   │ ├── performance/ # Скрипты нагрузочного теста (k6, Locust)
-   │ ├── prometheus/ # prometheus.yml Сборщик метрик
-   │ └── grafana/ # Provisioning дашбордов Grafana
-   │
-   ├── backend/ # СЛОЙ БЭКЕНДА (Django Monolith)
-   │ ├── manage.py
-   │ ├── pyproject.toml # Зависимости Python (управление через Uv)
-   │ ├── .coveragerc # Настройка слоеных порогов покрытия
-   │ ├── config/ # Конфигурация ядра Django
-   │ │ ├── init.py # Тут Celery инициализируется при старте ASGI
-   │ │ ├── celery.py # Корневая конфигурация Селери (Очереди, Beat)
-   │ │ ├── asgi.py # ЕДИНАЯ ТОЧКА ВХОДА АСИНХРОННОГО ПРИЛОЖЕНИЯ (REST + WS)
-   │ │ ├── urls.py # Роутер URL для локальной админки
-   │ │ └── settings/ # Environment Stratification Настройки
-   │ │ ├── init.py
-   │ │ ├── base.py # Общие настройки приложений и middlewares
-   │ │ ├── local.py # Настройки разработки (DEBUG=True)
-   │ │ ├── stage.py # Настройки стейджинга (Песочница)
-   │ │ └── prod.py # Боевые настройки (DEBUG=False, S3, Secrets)
-   │ └── apps/ # ДОМЕННЫЕ ПРИЛОЖЕНИЯ БЭКЕНДА
-   │ ├── common/ # Миксины, Soft Delete, Antivirus Pipeline, Locks, Идемпотентность
-   │ │ ├── contracts/ # INTERNAL SDK (Абстрактные контракты модулей)
-   │ │ ├── logging/ # Контекст и процессоры structlog для проброса X-Correlation-ID
-   │ │ └── events/ # СЛОЙ СТРОГО ТИПИЗИРОВАННЫХ СОБЫТИЙ (@dataclass(slots=True))
-   │ ├── users/ # Identity Context: Auth, User, Роли RBAC, MFA, Сессии
-   │ ├── contragents/ # Contracts Context: Сущности Person, Contragent, Валидаторы
-   │ ├── contracts/ # Contracts Context: Договоры, ДС, Акты (Слои: services/, queries/)
-   │ ├── finance/ # Finance Context: Транзакции, Платежи, логика Баланса дебиторки
-   │ ├── objects/ # GIS Context: Логика объектов (PostGIS PointField)
-   │ ├── realtime/ # Realtime Context: ASGI WebSocket Consumers, Presence, LiveKit
-   │ └── ... # Остальные доменные модули (outbox, search, workflows, etc.)
-   │
-   └── frontend/ # СЛОЙ ФРОНТЕНДА (Next.js Application)
-   ├── package.json # Зависимости (Next, TanStack, Zustand)
-   ├── next.config.js # Настройки сборщика Turbopack (SWC)
-   ├── src/
-   │ ├── middleware.ts # Защитник /dashboard (Next.js Middleware)
-   │ ├── app/ # Файловый роутинг (Только импорт Фич!)
-   │ │ ├── page.tsx # Публичный Лендинг (Главная)
-   │ │ └── (dashboard)/ # Зона дашборда с 3-х панельным Layout
-   │ └── features/ # ФУНКЦИОНАЛЬНО-МОДУЛЬНЫЕ ФИЧИ (Черные ящики)
-   │ ├── auth/ # Вход, Zustand authStore, Слой Feature Flags
-   │ ├── contracts/ # Таблицы договоров, TanStack hooks, компоненты ДС, Service Adapters
-   │ ├── finance/ # Финансовые графики Recharts для Шефа
-   │ ├── map/ # Интерактивная карта Яндекс/2ГИС
-   │ └── realtime/ # Глобальный сокет-клиент (ACK / Reconnect Policy)
-   └── e2e/ # СЛОЙ СКВОЗНЫХ E2E ТЕСТОВ (Playwright Matrix)
-   ├── playwright.config.ts
-   └── specs/ # Спеки: login, mfa, dashboard, contract close, map
-   2. FINAL ENGINEERING LAW
-   Система проектируется строго по нерушимым принципам:
+---
 
-- Explicit over implicit (явное лучше неявного);
-- Reliability over velocity (надежность важнее скорости разработки);
-- Contracts over assumptions (жесткие контракты важнее предположений);
-- Observability first (мониторинг закладывается на этапе проектирования);
-- Async by default (асинхронность по умолчанию в тяжелых операциях);
-- Governance enforced by CI/CD (все архитектурные правила проверяются машиной);
-- Architecture evolves only through ADR (архитектура развивается исключительно документированием в журнале решений).
-================================================================================
+## 15. TESTING STRATEGY
+
+### 15.1 TEST MATRIX
+
+- pytest + testcontainers-python (PostgreSQL + PostGIS, Redis).
+- SQLite в тестах **категорически запрещён**.
+
+### 15.2 TEST SUITES
+
+| Папка | Ответственность |
+| --- | --- |
+| `unit/` | Edge cases в Service layer |
+| `queries/` | `assert_num_queries`, replica routing, pagination |
+| `permissions/` | RBAC policies end-to-end |
+| `contract/` | OpenAPI snapshots, DTO compatibility |
+| `websocket/` | ACK, replay, reconnect, negotiation |
+| `migrations/` | Forward/backward compatibility |
+| `performance/` | k6, Locust stress tests |
+| `security/` | MFA bypass, JWT rotation, IDOR, privilege escalation |
+
+### 15.3 MUTATION TESTING
+
+- Finance domain: `mutmut >= 90%`.
+
+### 15.4 PLAYWRIGHT E2E
+
+- Flows: login, MFA, dashboard, contract close, websocket, finance, maps.
+
+---
+
+## 16. DEFINITION OF DONE
+
+Merge заблокирован CI/CD если:
+
+- Упал хотя бы один тест из матрицы
+- Code coverage ниже порогов (см. раздел 17)
+- Mutation score ниже целевой
+- Обнаружена деструктивная миграция (нарушение Expand & Contract)
+- Отсутствует ADR для архитектурного изменения
+- Generated TS SDK устарел (изменились схемы бэкенда)
+
+---
+
+## 17. COVERAGE THRESHOLDS
+
+| Слой | Минимум |
+| --- | --- |
+| Services | ≥ 90% |
+| Repositories | ≥ 85% |
+| RBAC | ≥ 95% |
+| API | ≥ 80% |
+| Frontend hooks | ≥ 80% |
+
+---
+
+## 18. MONOREPO STRUCTURE (ЭТАЛОННОЕ АРХИТЕКТУРНОЕ ДЕРЕВО)
+
+```text
+Complect/                          # Корень монорепозитория
+├── .gitignore
+├── ruff.toml                      # Глобальные правила линтинга Python
+├── docker-compose.dev.yml         # Локальное окружение с Hot-Reload
+├── docker-compose.prod.yml        # Enterprise-сборка (Docker Secrets)
+│
+├── docs/
+│   └── adr/                       # ARCHITECTURE DECISION RECORDS
+│       ├── 0026-database-partitioning-strategy.md
+│       ├── 0027-zero-downtime-migration-governance.md
+│       ├── 0028-openapi-schema-freeze.md
+│       ├── 0029-sre-slo-governance.md
+│       └── 0030-bounded-context-ownership.md
+│
+├── infra/
+│   ├── nginx/                     # SSL, CSP, HSTS заголовки
+│   ├── api_gateway/               # Kong / APISIX конфигурация
+│   ├── opentelemetry/             # OTel Collector → Jaeger
+│   ├── performance/               # k6, Locust скрипты
+│   ├── prometheus/
+│   └── grafana/
+│
+├── backend/
+│   ├── manage.py
+│   ├── ruff.toml
+│   ├── config/
+│   │   ├── celery.py
+│   │   ├── asgi.py                # Единая точка входа ASGI (REST + WS)
+│   │   ├── urls.py
+│   │   └── settings/
+│   │       ├── base.py
+│   │       ├── local.py
+│   │       ├── stage.py
+│   │       └── prod.py
+│   └── apps/
+│       ├── common/                # Инфраструктура: Outbox, tenancy, events, security
+│       │   ├── contracts/         # Internal SDK (typing.Protocol контракты)
+│       │   ├── events/            # @dataclass(slots=True, frozen=True) события
+│       │   ├── logging/           # structlog, X-Correlation-ID propagation
+│       │   └── repository/        # EnterpriseSreRepository, atomic_cas_update
+│       ├── users/                 # Identity: Auth, RBAC, MFA, JWT, сессии
+│       ├── contragents/           # Person, Contragent, валидаторы ИНН/ОГРН
+│       ├── contracts/             # Договоры, ДС, Акты (services/, queries/)
+│       ├── finance/               # Транзакции, платежи, баланс дебиторки
+│       ├── objects/               # GIS: PostGIS PointField, spatial queries
+│       ├── realtime/              # ASGI WebSocket Consumers, Presence, LiveKit
+│       └── integration/           # 1С ACL, Inbox pattern, mappers
+│
+└── frontend/
+    ├── package.json
+    ├── next.config.js
+    └── src/
+        ├── middleware.ts           # Защитник /dashboard
+        ├── app/
+        │   ├── page.tsx            # Публичный лендинг
+        │   └── (dashboard)/        # Зона дашборда
+        ├── features/               # Функциональные модули (чёрные ящики)
+        │   ├── auth/
+        │   ├── contracts/
+        │   ├── finance/
+        │   ├── map/
+        │   └── realtime/
+        └── shared/
+            └── api/
+                └── generated/      # TS SDK (ручные правки запрещены)
+    └── e2e/
+        ├── playwright.config.ts
+        └── specs/
+```
+
+---
+
+## 19. FINAL ENGINEERING LAW
+
+- **Explicit over implicit** — явное лучше неявного
+- **Reliability over velocity** — надёжность важнее скорости разработки
+- **Contracts over assumptions** — жёсткие контракты важнее предположений
+- **Observability first** — мониторинг закладывается на этапе проектирования
+- **Async by default** — асинхронность по умолчанию в тяжёлых операциях
+- **Governance enforced by CI/CD** — все архитектурные правила проверяются машиной
+- **Architecture evolves only through ADR** — архитектура развивается исключительно через документирование в журнале решений

@@ -26,11 +26,18 @@ class IdempotencyEnforcementMiddleware:
         "DELETE",
     }
 
+    # Auth endpoints issue/rotate tokens — they are NOT idempotent by design
+    # (each call produces a new token), so idempotency enforcement is skipped.
+    IDEMPOTENCY_EXEMPT_PREFIXES = ("/api/v1/auth/",)
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         if request.method not in self.MUTATION_METHODS:
+            return self.get_response(request)
+
+        if request.path_info.startswith(self.IDEMPOTENCY_EXEMPT_PREFIXES):
             return self.get_response(request)
 
         idem_key = request.headers.get("Idempotency-Key")

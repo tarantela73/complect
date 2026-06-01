@@ -7,12 +7,22 @@ from apps.common.context.propagation import apply_propagation_context
 
 
 class AsgiTenantEnforcementMiddleware:
+    # No gateway token, no context headers required.
     PUBLIC_PREFIXES = (
         "/public/",
         "/static/",
         "/metrics/",
         "/health/",
         "/favicon.ico",
+    )
+
+    # Gateway token required, but no tenant/user context headers.
+    # Used by auth endpoints that establish identity from scratch.
+    CONTEXT_FREE_PREFIXES = (
+        "/api/v1/auth/",
+        "/api/v1/docs",
+        "/api/v1/openapi.json",
+        "/api/v1/openapi-json",
     )
 
     def __init__(self, get_response):
@@ -30,7 +40,7 @@ class AsgiTenantEnforcementMiddleware:
         try:
             ContextGuard.assert_clean()
 
-            # GATEWAY TRUST BOUNDARY
+            # GATEWAY TRUST BOUNDARY — enforced for all non-public paths
             expected_token = getattr(settings, "EXPECTED_GATEWAY_TOKEN", None)
             if expected_token:
                 gateway_token = request.headers.get("X-Gateway-Token")
@@ -39,6 +49,10 @@ class AsgiTenantEnforcementMiddleware:
                         {"code": "GATEWAY_TRUST_VIOLATION"},
                         status=403,
                     )
+
+            # Auth and schema endpoints: gateway-trusted but context-free
+            if path.startswith(self.CONTEXT_FREE_PREFIXES):
+                return self.get_response(request)
 
             success = apply_propagation_context(request.headers)
 
