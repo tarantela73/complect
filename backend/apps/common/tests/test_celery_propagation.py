@@ -1,8 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from apps.common.tenancy.context_core import RequestContext, set_context, get_context
-from apps.common.tenancy.context_propagation import ContextPropagation
 import uuid
+from unittest.mock import MagicMock
+
+import pytest
+
+from apps.common.tenancy.context_core import RequestContext, get_context, set_context
+from apps.common.tenancy.context_propagation import ContextPropagation
 
 
 @pytest.mark.django_db

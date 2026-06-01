@@ -1,5 +1,4 @@
 # backend/apps/common/context/propagation/http.py
-import uuid
 from typing import Any, Dict, Optional
 
 

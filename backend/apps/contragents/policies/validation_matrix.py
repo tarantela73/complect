@@ -1,5 +1,7 @@
 import re
+
 from django.core.exceptions import ValidationError
+
 from apps.contragents.models.contragent import ContragentType
 
 

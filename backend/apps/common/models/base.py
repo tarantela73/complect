@@ -1,4 +1,5 @@
 import uuid
+
 from django.db import models
 from django.db.models import Q
 
@@ -153,7 +154,7 @@ class AuditIntegrityLog(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                check=~Q(current_hash=""),
+                condition=~Q(current_hash=""),
                 name="audit_current_hash_not_empty",
             ),
         ]        

@@ -1,5 +1,6 @@
 import pytest
 from django.core.exceptions import ValidationError
+
 from apps.contragents.models.contragent import ContragentType
 from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
 

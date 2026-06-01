@@ -1,7 +1,8 @@
-import pytest
 import uuid
-from django.db import connection, utils
-from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
+
+import pytest
+from django.db import connection
+
 from apps.common.tenancy.context import set_tenant_context
 
 
@@ -18,10 +19,11 @@ class TestPostgresRowLevelSecurity:
             cursor.execute("SET LOCAL app.current_tenant_id = %s;", [str(tenant_alpha)])
             contract_id = uuid.uuid4()
             cursor.execute(
-                ""
-                "INSERT INTO contracts_contracts (id, tenant_id, contract_number, title, status, resource_type, total_amount, paid_amount, created_at, updated_at, is_deleted, version, is_legal_hold) "
-                "VALUES (%s, %s, 'N-100', 'Договор Альфа', 'DRAFT', 'GAS', 1000, 0, NOW(), NOW(), FALSE, 1, FALSE);"
-                "",
+                "INSERT INTO contracts_contracts "
+                "(id, tenant_id, contract_number, title, status, resource_type, "
+                "total_amount, paid_amount, created_at, updated_at, is_deleted, version, is_legal_hold) "
+                "VALUES (%s, %s, 'N-100', 'Договор Альфа', 'DRAFT', 'GAS', "
+                "1000, 0, NOW(), NOW(), FALSE, 1, FALSE);",
                 [str(contract_id), str(tenant_alpha)],
             )
 
@@ -33,9 +35,7 @@ class TestPostgresRowLevelSecurity:
             cursor.execute("SET LOCAL app.current_tenant_id = %s;", [str(tenant_beta)])
 
             # Попытка прочитать данные компании Alpha через "грязный" сырой SQL
-            cursor.execute(
-                "SELECT COUNT(*) FROM contracts_contracts WHERE contract_number = 'N-100';"
-            )
+            cursor.execute("SELECT COUNT(*) FROM contracts_contracts WHERE contract_number = 'N-100';")
             count = cursor.fetchone()[0]
 
             # Результат должен быть строго 0! RLS скрыл строку на уровне ядра СУБД

@@ -1,7 +1,8 @@
 import os
+
 import structlog
-from django.db import connection
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 
 logger = structlog.get_logger(__name__)
 
@@ -40,7 +41,7 @@ class PiiEncryptionVault:
             logger.critical("SECURITY VAULT OPENPGP READ FAILED", error=str(exc))
             raise PermissionDenied(
                 "CRITICAL SECURITY FAILURE: Cannot unlock PII Vault Key."
-            )
+            ) from None
 
     @classmethod
     def encrypt_field(cls, raw_text: str) -> bytes:

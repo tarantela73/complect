@@ -1,7 +1,9 @@
 import uuid
+
 import django.utils.timezone as tz
-from django.db.models import F
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
+from django.db.models import F
+
 from apps.common.tenancy.context import get_current_tenant_id
 
 
@@ -26,7 +28,7 @@ class EnterpriseSreRepository:
                 pk=pk, tenant_id=tenant_id, is_deleted=False
             ).get()
         except ObjectDoesNotExist:
-            raise PermissionDenied("Доступ запрещен или объект не найден.")
+            raise PermissionDenied("Доступ запрещен или объект не найден.") from None
 
     @staticmethod
     def atomic_cas_update(instance, **update_fields) -> None:

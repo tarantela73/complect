@@ -1,11 +1,13 @@
 import uuid
-from django.db import transaction
+
 from django.core.exceptions import ValidationError
-from apps.contracts.repositories.contract_repo import ContractRepository
-from apps.contracts.policies.closure_policy import ContractClosurePolicy
-from apps.contracts.models.contract import ContractStatus
-from apps.common.services.outbox_service import TransactionalOutboxService
+from django.db import transaction
+
 from apps.common.events.contracts import ContractClosedEvent
+from apps.common.services.outbox_service import TransactionalOutboxService
+from apps.contracts.models.contract import ContractStatus
+from apps.contracts.policies.closure_policy import ContractClosurePolicy
+from apps.contracts.repositories.contract_repo import ContractRepository
 
 
 class ContractClosureService:

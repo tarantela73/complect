@@ -1,4 +1,5 @@
 import redis
+
 from apps.common.context.core import ContextCore, get_tenant_id
 
 

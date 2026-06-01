@@ -1,9 +1,10 @@
 import django.utils.timezone as tz
-from django.db import transaction
 from django.core.exceptions import ValidationError
+from django.db import transaction
+
+from apps.integration.mappers.ones_mapper import OnesDataMapper
 from apps.integration.models.inbox import IntegrationInboxRecord
 from apps.integration.schemas.ones_dto import RawOnesPaymentInputSchema
-from apps.integration.mappers.ones_mapper import OnesDataMapper
 
 
 class OnesAntiCorruptionLayerFacade:
@@ -36,7 +37,7 @@ class OnesAntiCorruptionLayerFacade:
             )
 
             # Шаг 3: Перевод концепций внешнего мира на чистый язык ERP через Mapper
-            internal_dto = OnesDataMapper.map_external_payment_to_internal(raw_dto)
+            OnesDataMapper.map_external_payment_to_internal(raw_dto)
 
             # Шаг 4: Безопасный вызов домена Финансов через абстрактный Internal SDK
             # В реальном коде здесь вызывается: FinanceDomainGateway.post_transaction(internal_dto)

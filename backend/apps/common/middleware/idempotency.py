@@ -1,9 +1,11 @@
 import hashlib
 import json
 import uuid
+
 import structlog
 from django.conf import settings
 from django.http import JsonResponse
+
 from apps.common.context.core import get_tenant_id
 from apps.common.infra.redis import get_idempotency_redis
 

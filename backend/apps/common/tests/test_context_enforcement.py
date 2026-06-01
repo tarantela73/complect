@@ -1,5 +1,6 @@
 import pytest
-from apps.common.context.core import set_tenant_id, clear_context
+
+from apps.common.context.core import clear_context, set_tenant_id
 from apps.common.context.guard import ContextGuard
 
 

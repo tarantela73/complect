@@ -1,4 +1,5 @@
 from django.urls import re_path
+
 from apps.realtime.consumers import ErpRealtimeConsumer
 
 # Контракт путей подключения к Realtime Mesh платформы Комплект

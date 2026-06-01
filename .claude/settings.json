@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest --tb=short -q)",
+      "Bash(make test-all *)",
+      "Bash(git -C /home/sever/projects/Complect diff --stat)",
+      "Bash(git -C /home/sever/projects/Complect status --short)"
+    ]
+  }
+}

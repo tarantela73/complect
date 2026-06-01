@@ -1,7 +1,9 @@
 import uuid
+
 import django.utils.timezone as tz
-from django.db.models import F
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.db.models import F
+
 from apps.common.tenancy.context import get_current_tenant_id
 from apps.contracts.models.document import CommonDocument, DocumentStage
 
@@ -21,7 +23,7 @@ class DocumentRepository:
                 id=doc_id, tenant_id=tenant_id, is_deleted=False
             ).get()
         except ObjectDoesNotExist:
-            raise PermissionDenied("Документ не найден в контуре текущей компании.")
+            raise PermissionDenied("Документ не найден в контуре текущей компании.") from None
 
     @staticmethod
     def atomic_stage_transition(

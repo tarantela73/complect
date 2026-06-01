@@ -3,11 +3,9 @@ import json
 
 import django.utils.timezone as tz
 import redis
-
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-
 
 GENESIS_HASH = "GENESIS_SALT_VAULT_DOCKER_SECRET"
 

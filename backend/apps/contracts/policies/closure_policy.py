@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+
 from apps.contracts.models.contract import Contract, ContractStatus
 
 

@@ -1,5 +1,7 @@
 from functools import wraps
+
 from django.http import JsonResponse
+
 from apps.common.feature_flags.repository import FeatureFlagRepository
 
 

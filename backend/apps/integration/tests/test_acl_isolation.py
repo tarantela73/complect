@@ -1,7 +1,8 @@
 import pytest
 from django.core.exceptions import ValidationError
-from apps.integration.models.inbox import IntegrationInboxRecord
+
 from apps.integration.anti_corruption.ones_acl import OnesAntiCorruptionLayerFacade
+from apps.integration.models.inbox import IntegrationInboxRecord
 
 
 @pytest.mark.django_db(transaction=True)

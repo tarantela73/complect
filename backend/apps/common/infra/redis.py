@@ -1,4 +1,5 @@
 from functools import lru_cache
+
 import redis
 from django.conf import settings
 

@@ -1,10 +1,12 @@
 import uuid
+
 from django.db import transaction
-from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
-from apps.contragents.repositories.person_repo import PersonProfileRepository
-from apps.contragents.models.contragent import Contragent
+
 from apps.common.security.audit import AuditIntegrityEngine
 from apps.common.tenancy.context_core import get_context
+from apps.contragents.models.contragent import Contragent
+from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
+from apps.contragents.repositories.person_repo import PersonProfileRepository
 
 
 class ContragentRegistrationService:

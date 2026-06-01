@@ -1,5 +1,5 @@
-import pytest
 import uuid
+
 from apps.contracts.schemas.contract_dto import ContractResponseSchema
 
 

@@ -1,10 +1,9 @@
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 
 from apps.common.tenancy.context_core import (
     RequestContext,
     set_context,
-    get_context,
 )
 
 

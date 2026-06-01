@@ -1,10 +1,12 @@
 import json
+
 import django.utils.timezone as tz
 import structlog
 from django.conf import settings
 from django.db import transaction
-from config.celery import app
+
 from apps.common.models.outbox import OutboxRecord
+from config.celery import app
 
 logger = structlog.get_logger(__name__)
 

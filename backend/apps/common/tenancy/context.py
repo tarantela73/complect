@@ -8,7 +8,7 @@ from apps.common.context.core import (
     set_tenant_id,
 )
 
-_current_execution_context: ContextVar[dict] = ContextVar("_current_execution_context", default={})
+_current_execution_context: ContextVar[dict | None] = ContextVar("_current_execution_context", default=None)
 
 
 def set_tenant_context(tenant_id: uuid.UUID) -> None:
@@ -24,4 +24,4 @@ def get_current_tenant_id() -> uuid.UUID:
 
 
 def get_sre_context() -> dict:
-    return _current_execution_context.get()
+    return _current_execution_context.get() or {}

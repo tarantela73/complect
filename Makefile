@@ -62,9 +62,6 @@ collectstatic:
 # TESTING
 # ============================================
 
-# ============================================
-# TESTING
-# ============================================
 
 test:
 	$(COMPOSE) exec backend pytest apps/common/tests/test_context_leakage.py -v

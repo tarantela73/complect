@@ -1,10 +1,11 @@
-import uuid
-from datetime import datetime, timezone
-from dataclasses import dataclass
-from django.db import models, transaction
 import json
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+
 import redis
 from django.conf import settings
+from django.db import models, transaction
 
 
 @dataclass(slots=True, frozen=True)

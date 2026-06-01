@@ -1,13 +1,14 @@
 import uuid
+
 import clamd
 import structlog
+from backend.apps.contracts.models.models import CommonDocument, DocumentStage
+from celery import shared_task
 from django.conf import settings
 from django.db import transaction
-from celery import shared_task
-from backend.apps.contracts.models.models import CommonDocument, DocumentStage
+
 from apps.common.repository.sre_engine import EnterpriseSreRepository
 from apps.common.tasks import BaseEnterpriseTask
-
 
 logger = structlog.get_logger(__name__)
 
@@ -73,5 +74,5 @@ def run_antivirus_scan_task(self, doc_id: str) -> None:
 
     except Exception as exc:
         # Экспоненциальный управляемый бэкофф с джиттером [Пункт 9]
-        raise self.retry(exc=exc, countdown=2**self.request.retries * 15)
+        raise self.retry(exc=exc, countdown=2**self.request.retries * 15) from exc
 

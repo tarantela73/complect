@@ -1,8 +1,9 @@
 import django.utils.timezone as tz
 import structlog
 from django.db import connection
-from config.celery import app
+
 from apps.common.tasks import BaseEnterpriseTask
+from config.celery import app
 
 logger = structlog.get_logger(__name__)
 

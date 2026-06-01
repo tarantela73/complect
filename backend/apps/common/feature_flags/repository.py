@@ -1,6 +1,7 @@
 import structlog
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+
 from apps.common.models.feature_flag import FeatureFlag
 
 logger = structlog.get_logger(__name__)

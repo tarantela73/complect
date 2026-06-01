@@ -1,8 +1,10 @@
-import pytest
 import json
+
+import pytest
 from django.test import Client
-from apps.common.models.feature_flag import FeatureFlag, FeatureFlagType
+
 from apps.common.feature_flags.repository import FeatureFlagRepository
+from apps.common.models.feature_flag import FeatureFlag, FeatureFlagType
 
 
 @pytest.mark.django_db

@@ -1,12 +1,13 @@
-import pytest
 import uuid
-from django.core.exceptions import ValidationError, PermissionDenied
-from django.db import utils
+
+import pytest
+from django.core.exceptions import ValidationError
+
+from apps.common.models.outbox import OutboxRecord
+from apps.common.tenancy.context import set_tenant_context
 from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.services.contract_closure import ContractClosureService
-from apps.common.models.outbox import OutboxRecord
-from apps.common.tenancy.context import set_tenant_context
 
 
 @pytest.mark.django_db(transaction=True)

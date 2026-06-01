@@ -1,7 +1,8 @@
+import uuid
+
 import pytest
 from django.core.exceptions import PermissionDenied
-from django.test import Client
-import uuid
+
 from apps.common.tenancy.context_core import RequestContext, set_context
 from apps.common.tenancy.context_guard import ContextGuard
 
@@ -10,8 +11,6 @@ from apps.common.tenancy.context_guard import ContextGuard
 class TestContextGuardFailFastMesh:
     def test_context_guard_triggers_immediate_fail_fast_on_contaminated_thread(self):
         """[LEVEL 8: SECURITY] Гарантирует падение рантайма при обнаружении грязного контекста."""
-        client = Client()
-
         # Имитируем аварию: в ContextVar текущего потока зависли грязные данные от Прошлого Тенанта
         dirty_ctx = RequestContext(
             tenant_id=uuid.uuid4(), user_id=uuid.uuid4(), request_id=uuid.uuid4(), correlation_id=uuid.uuid4()
