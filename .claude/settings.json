@@ -40,7 +40,8 @@
       "Bash(cp /home/sever/projects/Complect/backend/apps/contracts/migrations/0003_data_migration_example.py /tmp/0003_data_migration_example.py.bak)",
       "Bash(cp /tmp/0002_enforce_rls_contracts.py.bak /home/sever/projects/Complect/backend/apps/contracts/migrations/0002_enforce_rls_contracts.py)",
       "Bash(cp /tmp/0003_data_migration_example.py.bak /home/sever/projects/Complect/backend/apps/contracts/migrations/0003_data_migration_example.py)",
-      "Bash(curl -s -X POST -H 'X-Gateway-Token: __TRACKED_VAR__' -H 'X-Tenant-ID: __TRACKED_VAR__' -H 'X-User-ID: __TRACKED_VAR__' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"contract_number\":\"C-001\",\"title\":\"Договор газоснабжения\",\"resource_type\":\"GAS\",\"total_amount\":100000}' http://localhost:8010/api/v1/contracts/)"
+      "Bash(curl -s -X POST -H 'X-Gateway-Token: __TRACKED_VAR__' -H 'X-Tenant-ID: __TRACKED_VAR__' -H 'X-User-ID: __TRACKED_VAR__' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"contract_number\":\"C-001\",\"title\":\"Договор газоснабжения\",\"resource_type\":\"GAS\",\"total_amount\":100000}' http://localhost:8010/api/v1/contracts/)",
+      "Bash(curl -s -X POST -H 'X-Gateway-Token: __TRACKED_VAR__' -H 'X-Tenant-ID: __TRACKED_VAR__' -H 'X-User-ID: __TRACKED_VAR__' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"name\":\"ООО Газпром\",\"inn\":\"7736050003\",\"contragent_type\":\"LEGAL_ENTITY\"}' http://localhost:8010/api/v1/contragents/)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
