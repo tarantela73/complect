@@ -131,7 +131,7 @@ Next.js Front-end Layer (Папка: /frontend)
 
 ### 4.4 INTERNAL SDK LAYER
 
-- Кросс-импорты моделей между доменами **запрещены** (ADR-0030).
+- Кросс-импорты моделей между доменами **запрещены** (ADR-0005).
 - Общение модулей идёт строго через `apps/common/contracts/` (typing.Protocol).
 
 ### 4.5 DOMAIN EVENTS CONTRACT
@@ -174,7 +174,7 @@ class BaseEnterpriseModel(models.Model):
 - Naming: `snake_case`, plural table names (пример: `contracts_additional_agreements`).
 - Default isolation: `READ COMMITTED`.
 
-### 4.10 MIGRATION POLICY — Expand & Contract (ADR-0027)
+### 4.10 MIGRATION POLICY — Expand & Contract (ADR-0002)
 
 1. **Release N**: добавить nullable column.
 2. **Release N+1**: async Celery backfill (батчи 5000 через `SKIP LOCKED`), переключить write на новый столбец.
@@ -290,7 +290,7 @@ class BaseEnterpriseModel(models.Model):
 
 - Заголовки `Deprecation:` и `Sunset:` обязательны для устаревших endpoint'ов.
 
-### 6.4 OPENAPI FREEZE POLICY (ADR-0028)
+### 6.4 OPENAPI FREEZE POLICY (ADR-0003)
 
 - Спецификация OpenAPI = контракт. Breaking changes требуют: ADR, новую major версию, migration window.
 
@@ -428,7 +428,7 @@ class BaseEnterpriseModel(models.Model):
 }
 ```
 
-### 10.3 ERROR BUDGET POLICY (ADR-0029)
+### 10.3 ERROR BUDGET POLICY (ADR-0004)
 
 - SLA (скользящее 30-дневное окно): REST API — 99.9%, WebSocket — 99.5%, Dashboard — 99.0%.
 
@@ -560,11 +560,16 @@ Complect/                          # Корень монорепозитория
 │
 ├── docs/
 │   └── adr/                       # ARCHITECTURE DECISION RECORDS
-│       ├── 0026-database-partitioning-strategy.md
-│       ├── 0027-zero-downtime-migration-governance.md
-│       ├── 0028-openapi-schema-freeze.md
-│       ├── 0029-sre-slo-governance.md
-│       └── 0030-bounded-context-ownership.md
+│       ├── TEMPLATE.md
+│       ├── 0001-database-partitioning-strategy.md
+│       ├── 0002-zero-downtime-migration-governance.md
+│       ├── 0003-openapi-schema-freeze.md
+│       ├── 0004-sre-slo-governance.md
+│       ├── 0005-bounded-context-ownership.md
+│       ├── 0006-jwt-auth-token-rotation.md
+│       ├── 0007-api-gateway-trust-boundary.md
+│       ├── 0008-cursor-pagination-enforcement.md
+│       └── 0009-pii-vault-query-masking.md
 │
 ├── infra/
 │   ├── nginx/                     # SSL, CSP, HSTS заголовки

@@ -1,0 +1,64 @@
+
+from django.db import models
+
+from apps.common.models.base import BaseEnterpriseModel
+
+
+class TransactionType(models.TextChoices):
+    PAYMENT = "PAYMENT", "Оплата"
+    REFUND = "REFUND", "Возврат"
+    CORRECTION = "CORRECTION", "Корректировка"
+
+
+class TransactionStatus(models.TextChoices):
+    PENDING = "PENDING", "Ожидает обработки"
+    POSTED = "POSTED", "Проведена"
+    REVERSED = "REVERSED", "Сторнирована"
+    FAILED = "FAILED", "Ошибка"
+
+
+class Transaction(BaseEnterpriseModel):
+    """
+    Финансовая транзакция по договору.
+    Сумма хранится в копейках (BigIntegerField) для точной арифметики без float.
+    Мутации только через SELECT FOR UPDATE — см. TransactionPostingService.
+    """
+
+    contract_id = models.UUIDField(db_index=True)
+
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TransactionType.choices,
+        default=TransactionType.PAYMENT,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TransactionStatus.choices,
+        default=TransactionStatus.PENDING,
+        db_index=True,
+    )
+
+    # Сумма в копейках (целое, без float-ошибок)
+    amount = models.BigIntegerField()
+
+    # Внешний идентификатор платежа (банк, 1С, SWIFT)
+    external_ref = models.CharField(max_length=255, blank=True, default="", db_index=True)
+
+    # Пользователь, инициировавший транзакцию
+    posted_by = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        app_label = "finance"
+        db_table = "finance_transactions"
+        indexes = [
+            models.Index(fields=["tenant_id", "contract_id"], name="idx_tx_tenant_contract"),
+            models.Index(fields=["tenant_id", "status"], name="idx_tx_tenant_status"),
+            models.Index(fields=["tenant_id", "id"], name="idx_tx_tenant_cursor"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="tx_amount_positive",
+            )
+        ]
