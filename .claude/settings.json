@@ -30,10 +30,21 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\('paths',{}\\).keys\\(\\)\\)[:10]\\)\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k\\) for k in d.get\\('paths',{}\\).keys\\(\\)]\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\('paths',{}\\).keys\\(\\)\\)\\)\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('paths:', list\\(d.get\\('paths',{}\\).keys\\(\\)\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('paths:', list\\(d.get\\('paths',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(mkdir -p /home/sever/projects/Complect/backend/apps/contracts/queries)",
+      "Bash(python3 -c \"import uuid; print\\(uuid.uuid4\\(\\)\\)\")",
+      "Bash(python3 -c 'import uuid; print\\(uuid.uuid4\\(\\)\\)')",
+      "Bash(curl -s -X POST -H 'X-Gateway-Token: complect_internal_secure_mesh_token_2026' -H 'X-Tenant-ID: 11111111-2222-3333-4444-555555555555' -H 'X-User-ID: 66666666-7777-8888-9999-aaaaaaaaaaaa' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __TRACKED_VAR__' -H 'Content-Type: application/json' -d '{\"contract_number\":\"C-001\",\"title\":\"Договор газоснабжения\",\"resource_type\":\"GAS\",\"total_amount\":100000}' http://localhost:8010/api/v1/contracts/)",
+      "Bash(curl -s -X POST -H 'X-Gateway-Token: __TRACKED_VAR__' -H 'X-Tenant-ID: __TRACKED_VAR__' -H 'X-User-ID: __TRACKED_VAR__' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __TRACKED_VAR__' -H 'Content-Type: application/json' -d '{\"contract_number\":\"C-001\",\"title\":\"Договор газоснабжения\",\"resource_type\":\"GAS\",\"total_amount\":100000}' http://localhost:8010/api/v1/contracts/)",
+      "Bash(cp /home/sever/projects/Complect/backend/apps/contracts/migrations/0002_enforce_rls_contracts.py /tmp/0002_enforce_rls_contracts.py.bak)",
+      "Bash(cp /home/sever/projects/Complect/backend/apps/contracts/migrations/0003_data_migration_example.py /tmp/0003_data_migration_example.py.bak)",
+      "Bash(cp /tmp/0002_enforce_rls_contracts.py.bak /home/sever/projects/Complect/backend/apps/contracts/migrations/0002_enforce_rls_contracts.py)",
+      "Bash(cp /tmp/0003_data_migration_example.py.bak /home/sever/projects/Complect/backend/apps/contracts/migrations/0003_data_migration_example.py)",
+      "Bash(curl -s -X POST -H 'X-Gateway-Token: __TRACKED_VAR__' -H 'X-Tenant-ID: __TRACKED_VAR__' -H 'X-User-ID: __TRACKED_VAR__' -H 'X-Request-ID: __CMDSUB_OUTPUT__' -H 'X-Correlation-ID: __CMDSUB_OUTPUT__' -H 'Idempotency-Key: __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"contract_number\":\"C-001\",\"title\":\"Договор газоснабжения\",\"resource_type\":\"GAS\",\"total_amount\":100000}' http://localhost:8010/api/v1/contracts/)"
     ],
     "additionalDirectories": [
-      "/home/sever/.claude"
+      "/home/sever/.claude",
+      "/home/sever/projects/Complect/backend/apps/contracts"
     ]
   }
 }

@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -20,6 +21,8 @@ class ContractResponseSchema(BaseModel):
     paid_amount: int
     remaining_amount: int = 0
 
+    model_config = {"from_attributes": True}
+
     @model_validator(mode="before")
     @classmethod
     def compute_remaining(cls, values):
@@ -29,3 +32,13 @@ class ContractResponseSchema(BaseModel):
             if "remaining_amount" not in values:
                 values["remaining_amount"] = total - paid
         return values
+
+
+class ContractListResponse(BaseModel):
+    results: list[ContractResponseSchema]
+    next_cursor: Optional[str] = None
+    count: int
+
+
+class ContractCloseRequest(BaseModel):
+    pass

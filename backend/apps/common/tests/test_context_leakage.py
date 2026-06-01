@@ -14,6 +14,7 @@ from apps.common.context.core import (
 
 
 # [ИСПРАВЛЕНО]: Жесткий ИБ-заслон. Принудительно взводим маршрутизатор config.urls для тест-раннера
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("config.urls")
 class TestTransportContextIsolation:
     def test_context_cleanup_after_request(self):
