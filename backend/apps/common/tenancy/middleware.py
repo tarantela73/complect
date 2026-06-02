@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.http import JsonResponse
 
+from apps.common.api.errors import make_error_response
 from apps.common.context.guard import ContextGuard
 from apps.common.context.propagation import apply_propagation_context
 
@@ -46,7 +47,7 @@ class AsgiTenantEnforcementMiddleware:
                 gateway_token = request.headers.get("X-Gateway-Token")
                 if gateway_token != expected_token:
                     return JsonResponse(
-                        {"code": "GATEWAY_TRUST_VIOLATION"},
+                        make_error_response("GATEWAY_TRUST_VIOLATION", "Недействительный шлюзовой токен."),
                         status=403,
                     )
 
@@ -58,10 +59,10 @@ class AsgiTenantEnforcementMiddleware:
 
             if not success:
                 return JsonResponse(
-                    {
-                        "code": "AUTH_GATE_DENIED",
-                        "message": "Missing context headers: Требуются действительные X-Tenant-ID / X-User-ID",
-                    },
+                    make_error_response(
+                        "AUTH_GATE_DENIED",
+                        "Требуются действительные заголовки X-Tenant-ID / X-User-ID.",
+                    ),
                     status=401,
                 )
 
@@ -70,7 +71,7 @@ class AsgiTenantEnforcementMiddleware:
 
         except (ValueError, TypeError) as e:
             return JsonResponse(
-                {"code": "MALFORMED_CONTEXT_HEADERS", "message": str(e)},
+                make_error_response("MALFORMED_CONTEXT_HEADERS", str(e)),
                 status=400,
             )
 

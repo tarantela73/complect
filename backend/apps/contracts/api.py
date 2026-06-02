@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest
 from ninja import Query, Router
 
+from apps.common.api.errors import make_error_response
 from apps.contracts.queries.contract_queries import get_contract_detail, get_contracts_page
 from apps.contracts.schemas.contract_dto import (
     ContractCreateRequestSchema,
@@ -33,8 +34,8 @@ def list_contracts(
 def get_contract(request: HttpRequest, contract_id: uuid.UUID):
     try:
         return 200, get_contract_detail(contract_id)
-    except PermissionDenied as exc:
-        return 403, {"error": {"code": "CONTRACT_NOT_FOUND", "message": str(exc)}}
+    except PermissionDenied:
+        return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
 
 
 @router.post("/", response={201: ContractResponseSchema, 400: dict, 409: dict})
@@ -43,7 +44,7 @@ def create_contract(request: HttpRequest, body: ContractCreateRequestSchema):
         result = ContractCreateService.execute(body)
         return 201, result
     except ValidationError as exc:
-        return 400, {"error": {"code": "VALIDATION_ERROR", "message": str(exc)}}
+        return 400, make_error_response("VALIDATION_ERROR", str(exc))
 
 
 @router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
@@ -58,7 +59,7 @@ def close_contract(request: HttpRequest, contract_id: uuid.UUID):
             correlation_id=ctx.correlation_id,
         )
         return 200, get_contract_detail(contract_id)
-    except PermissionDenied as exc:
-        return 403, {"error": {"code": "CONTRACT_NOT_FOUND", "message": str(exc)}}
+    except PermissionDenied:
+        return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
     except ValidationError as exc:
-        return 400, {"error": {"code": "BUSINESS_RULE_VIOLATION", "message": str(exc)}}
+        return 400, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))

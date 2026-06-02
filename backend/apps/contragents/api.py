@@ -6,6 +6,7 @@ from django.db import transaction
 from django.http import HttpRequest
 from ninja import Query, Router
 
+from apps.common.api.errors import make_error_response
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contragents.models.contragent import Contragent, ContragentType
 from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
@@ -42,7 +43,7 @@ def list_contragents(
 def get_contragent(request: HttpRequest, contragent_id: uuid.UUID):
     result = get_contragent_detail(contragent_id)
     if result is None:
-        return 404, {"error": {"code": "CONTRAGENT_NOT_FOUND"}}
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
     return 200, result
 
 
@@ -50,10 +51,13 @@ def get_contragent(request: HttpRequest, contragent_id: uuid.UUID):
 def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
     try:
         if body.contragent_type not in ContragentType.values:
-            return 400, {"error": {"code": "INVALID_TYPE", "message": f"Допустимые типы: {ContragentType.values}"}}
+            return 400, make_error_response(
+                "INVALID_TYPE",
+                f"Допустимые типы: {ContragentType.values}",
+            )
         ContragentValidationPolicy.verify_inn_compliance(body.contragent_type, body.inn)
     except ValidationError as exc:
-        return 400, {"error": {"code": "VALIDATION_ERROR", "message": str(exc)}}
+        return 400, make_error_response("VALIDATION_ERROR", str(exc))
 
     tenant_id = get_tenant_id()
     with transaction.atomic():
@@ -77,20 +81,20 @@ def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
 @router.get("/{contragent_id}/persons/", response={200: PersonListResponse, 404: dict})
 def list_persons(request: HttpRequest, contragent_id: uuid.UUID):
     if get_contragent_detail(contragent_id) is None:
-        return 404, {"error": {"code": "CONTRAGENT_NOT_FOUND"}}
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
     profiles = get_person_profiles(contragent_id)
     return 200, {"results": profiles, "count": len(profiles)}
 
 
-@router.post("/{contragent_id}/persons/", response={201: dict, 400: dict, 404: dict})
+@router.post("/{contragent_id}/persons/", response={201: dict, 400: dict, 403: dict, 404: dict})
 def create_person(request: HttpRequest, contragent_id: uuid.UUID, body: PersonCreateRequest):
     if get_contragent_detail(contragent_id) is None:
-        return 404, {"error": {"code": "CONTRAGENT_NOT_FOUND"}}
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
 
     try:
         ContragentValidationPolicy.verify_fio_regex(body.first_name, body.last_name)
     except ValidationError as exc:
-        return 400, {"error": {"code": "VALIDATION_ERROR", "message": str(exc)}}
+        return 400, make_error_response("VALIDATION_ERROR", str(exc))
 
     try:
         profile_id = ContragentRegistrationService.register_person_profile(
@@ -103,5 +107,8 @@ def create_person(request: HttpRequest, contragent_id: uuid.UUID, body: PersonCr
             phone=body.phone,
         )
         return 201, {"id": str(profile_id)}
-    except (ValidationError, PermissionDenied) as exc:
-        return 400, {"error": {"code": "REGISTRATION_ERROR", "message": str(exc)}}
+    except ValidationError as exc:
+        return 400, make_error_response("REGISTRATION_ERROR", str(exc))
+    except PermissionDenied:
+        # no-oracle: same response as "not found" to prevent tenant enumeration
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")

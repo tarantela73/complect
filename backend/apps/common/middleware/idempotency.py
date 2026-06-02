@@ -6,6 +6,7 @@ import structlog
 from django.conf import settings
 from django.http import JsonResponse
 
+from apps.common.api.errors import make_error_response
 from apps.common.context.core import get_tenant_id
 from apps.common.infra.redis import get_idempotency_redis
 
@@ -44,10 +45,10 @@ class IdempotencyEnforcementMiddleware:
 
         if not idem_key:
             return JsonResponse(
-                {
-                    "code": "MISSING_IDEMPOTENCY_KEY",
-                    "message": "Для выполнения мутационных операций обязателен заголовок Idempotency-Key.",
-                },
+                make_error_response(
+                    "MISSING_IDEMPOTENCY_KEY",
+                    "Для выполнения мутационных операций обязателен заголовок Idempotency-Key.",
+                ),
                 status=400,
             )
 
@@ -55,9 +56,10 @@ class IdempotencyEnforcementMiddleware:
             uuid.UUID(idem_key)
         except ValueError:
             return JsonResponse(
-                {
-                    "code": "MALFORMED_IDEMPOTENCY_KEY",
-                },
+                make_error_response(
+                    "MALFORMED_IDEMPOTENCY_KEY",
+                    "Idempotency-Key должен быть валидным UUID v4.",
+                ),
                 status=400,
             )
 
@@ -82,19 +84,19 @@ class IdempotencyEnforcementMiddleware:
 
             if cached_payload["payload_hash"] != payload_hash:
                 return JsonResponse(
-                    {
-                        "code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
-                        "message": "Конфликт: Idempotency-Key совпадает, но тело запроса изменилось.",
-                    },
+                    make_error_response(
+                        "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                        "Конфликт: Idempotency-Key совпадает, но тело запроса изменилось.",
+                    ),
                     status=409,
                 )
 
             if cached_payload["status"] == "PROCESSING":
                 response = JsonResponse(
-                    {
-                        "code": "REQUEST_IN_PROCESSING",
-                        "message": "Предыдущий запрос с данным ключом еще обрабатывается системой. Ожидайте.",
-                    },
+                    make_error_response(
+                        "REQUEST_IN_PROCESSING",
+                        "Предыдущий запрос с данным ключом ещё обрабатывается. Ожидайте.",
+                    ),
                     status=425,
                 )
                 response["Retry-After"] = "3"
@@ -123,9 +125,10 @@ class IdempotencyEnforcementMiddleware:
 
         if not acquired:
             response = JsonResponse(
-                {
-                    "code": "CONCURRENT_IDEMPOTENT_REQUEST",
-                },
+                make_error_response(
+                    "CONCURRENT_IDEMPOTENT_REQUEST",
+                    "Конкурирующий запрос с тем же ключом уже выполняется.",
+                ),
                 status=425,
             )
             response["Retry-After"] = "3"

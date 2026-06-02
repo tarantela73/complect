@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest
 from ninja import Query, Router
 
+from apps.common.api.errors import make_error_response
 from apps.common.tenancy.context_core import get_context
 from apps.finance.queries.transaction_queries import get_transactions_page
 from apps.finance.schemas.transaction_dto import (
@@ -56,14 +57,14 @@ def post_transaction(request: HttpRequest, body: TransactionPostRequest):
             external_ref=tx.external_ref,
         )
     except ValidationError as exc:
-        return 400, {"error": {"code": "VALIDATION_ERROR", "message": str(exc)}}
+        return 400, make_error_response("VALIDATION_ERROR", str(exc))
     except PermissionDenied as exc:
-        return 403, {"error": {"code": "FORBIDDEN", "message": str(exc)}}
+        return 403, make_error_response("FORBIDDEN", str(exc))
 
 
 @router.post(
     "/transactions/{tx_id}/reverse/",
-    response={200: TransactionResponse, 400: dict, 403: dict},
+    response={200: TransactionResponse, 403: dict},
 )
 def reverse_transaction(request: HttpRequest, tx_id: uuid.UUID):
     try:
@@ -78,4 +79,4 @@ def reverse_transaction(request: HttpRequest, tx_id: uuid.UUID):
             external_ref=tx.external_ref,
         )
     except PermissionDenied as exc:
-        return 403, {"error": {"code": "FORBIDDEN", "message": str(exc)}}
+        return 403, make_error_response("FORBIDDEN", str(exc))

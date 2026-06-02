@@ -57,7 +57,7 @@ class TestTransportContextIsolation:
             HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
         )
         assert response.status_code == 401
-        assert response.json()["code"] == "AUTH_GATE_DENIED"
+        assert response.json()["error"]["code"] == "AUTH_GATE_DENIED"
 
     def test_malformed_headers_rejected(self):
         """[TEST 3: MALFORMED UUID] Проверяет отсечку битых UUID в заголовках (400)."""
@@ -69,7 +69,7 @@ class TestTransportContextIsolation:
         }
         response = client.get("/api/v1/contracts/", **headers)
         assert response.status_code == 400
-        assert response.json()["code"] == "MALFORMED_CONTEXT_HEADERS"
+        assert response.json()["error"]["code"] == "MALFORMED_CONTEXT_HEADERS"
 
     def test_malformed_correlation_id_rejected(self):
         """[TEST 4: MALFORMED CORRELATION ID] Верифицирует валидацию UUID для Correlation-ID (400)."""
@@ -83,7 +83,7 @@ class TestTransportContextIsolation:
         }
         response = client.get("/api/v1/contracts/", **headers)
         assert response.status_code == 400
-        assert response.json()["code"] == "MALFORMED_CONTEXT_HEADERS"
+        assert response.json()["error"]["code"] == "MALFORMED_CONTEXT_HEADERS"
 
     def test_context_isolation_between_requests(self):
         """[TEST 5: LEAK PREVENTION] Гарантирует изоляцию памяти между последовательными запросами."""

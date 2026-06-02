@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest
 from ninja import Query, Router
 
+from apps.common.api.errors import make_error_response
 from apps.objects.queries.object_queries import (
     get_object_detail,
     get_objects_geojson,
@@ -73,8 +74,8 @@ def objects_geojson(
 def get_object(request: HttpRequest, object_id: uuid.UUID):
     try:
         return 200, get_object_detail(object_id)
-    except PermissionDenied as exc:
-        return 403, {"error": {"code": "OBJECT_NOT_FOUND", "message": str(exc)}}
+    except PermissionDenied:
+        return 403, make_error_response("OBJECT_NOT_FOUND", "Объект не найден.")
 
 
 @router.post("/", response={201: FeatureSchema, 400: dict})
@@ -83,7 +84,7 @@ def create_object(request: HttpRequest, body: SupplyObjectCreateRequest):
         obj = ObjectCreateService.execute(body)
         return 201, get_object_detail(obj.id)
     except (ValidationError, ValueError) as exc:
-        return 400, {"error": {"code": "VALIDATION_ERROR", "message": str(exc)}}
+        return 400, make_error_response("VALIDATION_ERROR", str(exc))
 
 
 @router.patch("/{object_id}/location/", response={204: None, 400: dict, 403: dict})
@@ -91,8 +92,8 @@ def update_location(request: HttpRequest, object_id: uuid.UUID, body: UpdateLoca
     try:
         ObjectLocationService.update_location(object_id, body)
         return 204, None
-    except PermissionDenied as exc:
-        return 403, {"error": {"code": "OBJECT_NOT_FOUND", "message": str(exc)}}
+    except PermissionDenied:
+        return 403, make_error_response("OBJECT_NOT_FOUND", "Объект не найден.")
 
 
 @router.delete("/{object_id}/", response={204: None, 403: dict})
@@ -100,5 +101,5 @@ def delete_object(request: HttpRequest, object_id: uuid.UUID):
     try:
         ObjectDeleteService.soft_delete(object_id)
         return 204, None
-    except PermissionDenied as exc:
-        return 403, {"error": {"code": "DELETE_FORBIDDEN", "message": str(exc)}}
+    except PermissionDenied:
+        return 403, make_error_response("DELETE_FORBIDDEN", "Удаление запрещено.")
