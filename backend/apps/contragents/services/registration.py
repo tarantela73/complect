@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
 from apps.common.security.audit import AuditIntegrityEngine
@@ -28,7 +29,13 @@ class ContragentRegistrationService:
         ctx = get_context()
 
         with transaction.atomic():
-            contragent = Contragent.objects.get(id=contragent_id)
+            contragent = Contragent.objects.filter(
+                id=contragent_id,
+                tenant_id=ctx.tenant_id,
+                is_deleted=False,
+            ).first()
+            if not contragent:
+                raise PermissionDenied("Контрагент не найден или недоступен для текущего тенанта.")
 
             profile = PersonProfileRepository.create_secure_profile(
                 contragent=contragent,

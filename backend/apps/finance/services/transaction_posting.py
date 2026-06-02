@@ -99,7 +99,7 @@ class TransactionPostingService:
                 paid_amount=contract.paid_amount - delta
             )
 
-            Transaction.objects.filter(id=tx_id).update(status=TransactionStatus.REVERSED)
+            Transaction.objects.filter(id=tx_id, tenant_id=tenant_id).update(status=TransactionStatus.REVERSED)
             tx.status = TransactionStatus.REVERSED
 
         return tx
