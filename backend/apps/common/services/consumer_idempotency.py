@@ -2,6 +2,7 @@ import uuid
 
 import structlog
 from django.db import IntegrityError
+from django.utils import timezone as tz
 
 from apps.common.models.processed_event import ProcessedEvent
 
@@ -10,15 +11,15 @@ logger = structlog.get_logger(__name__)
 
 class ConsumerIdempotencyService:
     """
-    Deduplication gate for at-least-once event consumers.
+    Distributed delivery guarantee for at-least-once event consumers.
 
-    Usage:
-        if not ConsumerIdempotencyService.claim(outbox_record_id, consumer, tenant_id):
-            return  # already processed — skip
-        process_the_event()
+    Lifecycle:
+        claimed  → claim() returns True, acked_at=NULL  (processing started)
+        acked    → ack() stamps acked_at                 (processing confirmed)
+        duplicate→ claim() returns False                 (skip, already claimed)
 
     The INSERT + IntegrityError pattern is race-free: the DB unique constraint
-    is the only true gate. get_or_create() would have a SELECT-then-INSERT gap.
+    on (outbox_record_id, consumer) is the only true gate.
     """
 
     @staticmethod
@@ -42,5 +43,39 @@ class ConsumerIdempotencyService:
                 "consumer_event_already_processed",
                 outbox_record_id=str(outbox_record_id),
                 consumer=consumer,
+            )
+            return False
+
+    @staticmethod
+    def ack(outbox_record_id: uuid.UUID, consumer: str) -> bool:
+        """
+        Confirm successful completion of event processing.
+
+        Returns True  — acked (acked_at stamped).
+        Returns False — no matching claim found (unknown event/consumer pair).
+        Never raises.
+
+        Idempotent: calling ack() twice on the same pair is a no-op on the
+        second call (acked_at already set, updated_count=0 → returns False).
+        """
+        try:
+            updated = ProcessedEvent.objects.filter(
+                outbox_record_id=outbox_record_id,
+                consumer=consumer,
+                acked_at__isnull=True,
+            ).update(acked_at=tz.now())
+            if updated:
+                logger.debug(
+                    "consumer_event_acked",
+                    outbox_record_id=str(outbox_record_id),
+                    consumer=consumer,
+                )
+            return bool(updated)
+        except Exception as exc:
+            logger.error(
+                "consumer_event_ack_failed",
+                outbox_record_id=str(outbox_record_id),
+                consumer=consumer,
+                error=str(exc),
             )
             return False

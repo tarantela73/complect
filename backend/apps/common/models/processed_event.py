@@ -16,6 +16,9 @@ class ProcessedEvent(models.Model):
     consumer = models.CharField(max_length=255)
     tenant_id = models.UUIDField()
     processed_at = models.DateTimeField(auto_now_add=True)
+    # NULL = claimed but not yet acked (in-flight or crashed consumer).
+    # NOT NULL = processing confirmed complete.
+    acked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "common_processed_events"
@@ -31,5 +34,11 @@ class ProcessedEvent(models.Model):
             models.Index(
                 fields=["consumer", "tenant_id", "processed_at"],
                 name="processed_event_lookup_idx",
+            ),
+            # Covers replay detection: find in-flight / crashed consumers efficiently.
+            models.Index(
+                fields=["consumer", "tenant_id", "processed_at"],
+                name="processed_event_unacked_idx",
+                condition=models.Q(acked_at__isnull=True),
             ),
         ]
