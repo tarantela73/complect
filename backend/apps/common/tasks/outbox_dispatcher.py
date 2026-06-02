@@ -18,17 +18,23 @@ MAX_PUBLISH_RETRIES: int = getattr(settings, "OUTBOX_MAX_PUBLISH_RETRIES", 5)
 _BACKOFF_BASE: int = getattr(settings, "OUTBOX_BACKOFF_BASE_SECONDS", 30)
 _BACKOFF_CAP: int = getattr(settings, "OUTBOX_BACKOFF_MAX_SECONDS", 300)
 
+# Injectable clock — patch in tests to advance time without DB manipulation.
+_clock = tz.now
+
 
 def _next_retry_at(retry_count: int):
     """Exponential backoff with 10% jitter: min(base × 2^n, cap)."""
     delay = min(_BACKOFF_BASE * (2 ** retry_count), _BACKOFF_CAP)
-    return tz.now() + timedelta(seconds=delay + random.uniform(0, delay * 0.1))
+    return _clock() + timedelta(seconds=delay + random.uniform(0, delay * 0.1))
 
 
 @app.task(base=BaseEnterpriseTask, queue="outbox")
 def run_outbox_polling_dispatcher_task() -> None:
     """
     Polling dispatcher for the Transactional Outbox pattern (ADR-0003).
+
+    Primary trigger: transaction.on_commit hook in TransactionalOutboxService.
+    Fallback trigger: Beat schedule every 10 seconds (covers orphaned records).
 
     Guarantees:
     - At-least-once delivery to Redis Streams (consumers must deduplicate on outbox_record_id).
@@ -37,7 +43,7 @@ def run_outbox_polling_dispatcher_task() -> None:
     - Permanent failure after MAX_PUBLISH_RETRIES — record excluded from polling, not deleted.
     - Per-record error isolation — one stuck record does not block the batch.
     """
-    now = tz.now()
+    now = _clock()
     records = list(
         OutboxRecord.objects.filter(
             is_processed=False,
@@ -90,7 +96,7 @@ def run_outbox_polling_dispatcher_task() -> None:
                 )
 
                 locked_record.is_processed = True
-                locked_record.processed_at = tz.now()
+                locked_record.processed_at = _clock()
                 locked_record.next_retry_at = None
                 locked_record.save(update_fields=["is_processed", "processed_at", "next_retry_at"])
 
@@ -102,7 +108,7 @@ def run_outbox_polling_dispatcher_task() -> None:
                 update_fields = ["retry_count", "last_error", "next_retry_at"]
 
                 if new_retry_count >= MAX_PUBLISH_RETRIES:
-                    locked_record.failed_permanently_at = tz.now()
+                    locked_record.failed_permanently_at = _clock()
                     update_fields.append("failed_permanently_at")
                     logger.error(
                         "outbox_record_permanently_failed",

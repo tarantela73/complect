@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
+import apps.common.tasks.outbox_dispatcher as dispatcher_module
 import pytest
 from django.conf import settings
 from django.utils import timezone as tz
@@ -63,14 +64,13 @@ class TestOutboxReliabilityMesh:
     def test_permanently_failed_after_max_retries(self):
         """After MAX_PUBLISH_RETRIES failures the record is marked permanently failed."""
         record = _push()
+        t = tz.now()
 
         with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=ConnectionError("Redis down")):
-            for _ in range(MAX_PUBLISH_RETRIES):
-                run_outbox_polling_dispatcher_task()
-                # Collapse the backoff window so the next iteration sees the record.
-                OutboxRecord.objects.filter(id=record.id).update(
-                    next_retry_at=tz.now() - timedelta(seconds=1)
-                )
+            for i in range(MAX_PUBLISH_RETRIES):
+                # Advance clock by 1h per step — collapses any backoff window cleanly.
+                with patch.object(dispatcher_module, "_clock", new=lambda _i=i: t + timedelta(hours=_i + 1)):
+                    run_outbox_polling_dispatcher_task()
 
         record.refresh_from_db()
         assert record.retry_count == MAX_PUBLISH_RETRIES
@@ -80,13 +80,12 @@ class TestOutboxReliabilityMesh:
     def test_permanently_failed_record_excluded_from_polling(self):
         """Records with failed_permanently_at set are never picked up again."""
         record = _push()
+        t = tz.now()
 
         with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=ConnectionError("Redis down")):
-            for _ in range(MAX_PUBLISH_RETRIES):
-                run_outbox_polling_dispatcher_task()
-                OutboxRecord.objects.filter(id=record.id).update(
-                    next_retry_at=tz.now() - timedelta(seconds=1)
-                )
+            for i in range(MAX_PUBLISH_RETRIES):
+                with patch.object(dispatcher_module, "_clock", new=lambda _i=i: t + timedelta(hours=_i + 1)):
+                    run_outbox_polling_dispatcher_task()
 
         record.refresh_from_db()
         assert record.failed_permanently_at is not None
@@ -281,3 +280,18 @@ class TestOutboxReliabilityMesh:
         record.refresh_from_db()
         assert record.is_processed is True
         assert record.next_retry_at is None
+
+    # ── WAKE-UP ON INSERT ─────────────────────────────────────────────────────
+
+    def test_push_fires_dispatcher_on_commit(self):
+        """push_to_outbox must enqueue the dispatcher task after the transaction commits."""
+        dispatch_calls: list = []
+
+        with patch.object(
+            run_outbox_polling_dispatcher_task,
+            "apply_async",
+            side_effect=lambda *a, **kw: dispatch_calls.append(1),
+        ):
+            _push()
+
+        assert dispatch_calls == [1], "Dispatcher was not triggered after outbox write"
