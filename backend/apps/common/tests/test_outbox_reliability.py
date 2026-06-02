@@ -285,6 +285,9 @@ class TestOutboxReliabilityMesh:
 
     def test_push_fires_dispatcher_on_commit(self):
         """push_to_outbox must enqueue the dispatcher task after the transaction commits."""
+        from django.core.cache import cache
+        cache.delete("outbox:dispatch:wakeup")
+
         dispatch_calls: list = []
 
         with patch.object(

@@ -161,6 +161,8 @@ OUTBOX_MAX_PUBLISH_RETRIES = 5
 # Exponential backoff: delay = min(BASE × 2^retry_count, CAP) + jitter(10%)
 OUTBOX_BACKOFF_BASE_SECONDS = 30
 OUTBOX_BACKOFF_MAX_SECONDS = 300
+# Coalescing: at most one wake-up dispatch per this window (prevents apply_async storm on bulk writes).
+OUTBOX_WAKEUP_COALESCE_TTL = 2
 
 # ===========================================================================
 # INTERNATIONALIZATION
