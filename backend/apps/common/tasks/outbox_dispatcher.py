@@ -11,7 +11,7 @@ from config.celery import app
 logger = structlog.get_logger(__name__)
 
 
-@app.task(queue="infrastructure")
+@app.task(queue="outbox")
 def run_outbox_polling_dispatcher_task() -> None:
     """
     [ADR 0003 / ИСПРАВЛЕНО] SRE Поллинг-Диспетчер транзакционного Outbox.

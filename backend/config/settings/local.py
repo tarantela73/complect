@@ -3,18 +3,24 @@ import os
 
 import redis
 
-from apps.common.security.secrets import get_docker_secret
+from apps.common.security.secrets import get_secret
 
 from .base import *  # noqa: F401, F403
 
 ROOT_URLCONF = "config.urls"
-DEBUG = os.getenv("DEBUG", "True").lower() in ("1", "true", "yes", "on")
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).lower() in ("1", "true", "yes", "on")
+
+
+DEBUG = _env_bool("DEBUG", default=True)
 
 # ===========================================================================
 # DATABASE
 # ===========================================================================
 
-DB_PASSWORD = get_docker_secret(
+DB_PASSWORD = get_secret(
     "POSTGRES_PASSWORD",
     secret_file_env="DATABASE_PASSWORD_FILE",
     default="dev_root_secure_postgres_pass_2026",
@@ -22,7 +28,7 @@ DB_PASSWORD = get_docker_secret(
 
 DB_NAME = os.getenv("POSTGRES_DB", "complect_db")
 DB_USER = os.getenv("POSTGRES_USER", "complect_admin")
-DB_HOST = os.getenv("DATABASE_HOST", "postgres_primary")
+DB_PRIMARY_HOST = os.getenv("DATABASE_HOST", "postgres_primary")
 DB_REPLICA_HOST = os.getenv("DATABASE_REPLICA_HOST", "postgres_replica")
 DB_PORT = os.getenv("DATABASE_PORT", "5432")
 
@@ -40,7 +46,7 @@ DATABASES = {
         "NAME": DB_NAME,
         "USER": DB_USER,
         "PASSWORD": DB_PASSWORD,
-        "HOST": DB_HOST,
+        "HOST": DB_PRIMARY_HOST,
         "PORT": DB_PORT,
         "CONN_MAX_AGE": 600,
         "CONN_HEALTH_CHECKS": True,
@@ -56,10 +62,11 @@ DATABASES = {
         "CONN_MAX_AGE": 600,
         "CONN_HEALTH_CHECKS": True,
         "OPTIONS": _DB_OPTIONS,
+        "TEST": {"MIRROR": "default"},
     },
 }
 
-POSTGRES_REPLICA_ENABLED = os.getenv("POSTGRES_REPLICA_ENABLED", "True").lower() in ("1", "true", "yes", "on")
+POSTGRES_REPLICA_ENABLED = _env_bool("POSTGRES_REPLICA_ENABLED", default=True)
 POSTGRES_REPLICA_MAX_LAG = float(os.getenv("POSTGRES_REPLICA_MAX_LAG", "1.0"))
 
 SECRET_KEY = os.getenv("SECRET_KEY", "local-dev-insecure-key-change-me-32chars")
@@ -87,10 +94,9 @@ CHANNEL_LAYERS = {
 }
 
 CELERY_BROKER_URL = REDIS_CELERY_URL
-ENABLE_OTEL = os.getenv("ENABLE_OTEL", "false").lower() in ("1", "true", "yes")
+ENABLE_OTEL = _env_bool("ENABLE_OTEL", default=False)
 
 REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
 EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_secure_mesh_token_2026")
 
-DATABASES["replica"]["TEST"] = {"MIRROR": "default"}

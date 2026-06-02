@@ -78,7 +78,7 @@ class AuditIntegrityEngine:
 
         for log in logs:
             if log.previous_hash != expected_previous_hash:
-                redis_client = redis.Redis.from_url(settings.REDIS_URL)
+                redis_client = redis.Redis.from_url(settings.REDIS_DEFAULT_URL)
 
                 redis_client.set(
                     "flag:kill_switch:finance_disabled",
