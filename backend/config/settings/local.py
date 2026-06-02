@@ -1,61 +1,62 @@
 # backend/config/settings/local.py
 import os
-from pathlib import Path
 
 import redis
+
+from apps.common.security.secrets import get_docker_secret
 
 from .base import *  # noqa: F401, F403
 
 ROOT_URLCONF = "config.urls"
 DEBUG = os.getenv("DEBUG", "True").lower() in ("1", "true", "yes", "on")
 
+# ===========================================================================
+# DATABASE
+# ===========================================================================
 
-def read_secret_file(path: str | None) -> str | None:
-    if not path:
-        return None
-    p = Path(path)
-    if p.is_file():
-        return p.read_text().strip()
-    return None
-
-
-def get_db_password() -> str:
-    secret_path = (
-        os.getenv("DATABASE_PASSWORD_FILE") or os.getenv("DB_PASSWORD_FILE") or "/run/secrets/db_root_password"
-    )
-    password = read_secret_file(secret_path)
-    if password:
-        return password
-    return os.getenv("POSTGRES_PASSWORD", "dev_root_secure_postgres_pass_2026")
-
+DB_PASSWORD = get_docker_secret(
+    "POSTGRES_PASSWORD",
+    secret_file_env="DATABASE_PASSWORD_FILE",
+    default="dev_root_secure_postgres_pass_2026",
+)
 
 DB_NAME = os.getenv("POSTGRES_DB", "complect_db")
 DB_USER = os.getenv("POSTGRES_USER", "complect_admin")
-DB_HOST_PRIMARY = os.getenv("DATABASE_HOST", "postgres_primary")
-DB_HOST_REPLICA = os.getenv("DATABASE_REPLICA_HOST", "postgres_replica")
+DB_HOST = os.getenv("DATABASE_HOST", "postgres_primary")
+DB_REPLICA_HOST = os.getenv("DATABASE_REPLICA_HOST", "postgres_replica")
 DB_PORT = os.getenv("DATABASE_PORT", "5432")
-DB_PASSWORD = get_db_password()
 
+_DB_OPTIONS = {
+    "options": (
+        "-c statement_timeout=30000 "
+        "-c lock_timeout=10000 "
+        "-c idle_in_transaction_session_timeout=15000"
+    ),
+}
 
-def base_db_config(host: str) -> dict:
-    return {
+DATABASES = {
+    "default": {
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": DB_NAME,
         "USER": DB_USER,
         "PASSWORD": DB_PASSWORD,
-        "HOST": host,
+        "HOST": DB_HOST,
         "PORT": DB_PORT,
-        "CONN_MAX_AGE": 60,
+        "CONN_MAX_AGE": 600,
         "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {
-            "options": "-c statement_timeout=30000 -c lock_timeout=10000 -c idle_in_transaction_session_timeout=15000"
-        },
-    }
-
-
-DATABASES = {
-    "default": base_db_config(DB_HOST_PRIMARY),
-    "replica": base_db_config(DB_HOST_REPLICA),
+        "OPTIONS": _DB_OPTIONS,
+    },
+    "replica": {
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PASSWORD": DB_PASSWORD,
+        "HOST": DB_REPLICA_HOST,
+        "PORT": DB_PORT,
+        "CONN_MAX_AGE": 600,
+        "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": _DB_OPTIONS,
+    },
 }
 
 POSTGRES_REPLICA_ENABLED = os.getenv("POSTGRES_REPLICA_ENABLED", "True").lower() in ("1", "true", "yes", "on")
