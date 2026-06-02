@@ -1,8 +1,10 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.conf import settings
+from django.utils import timezone as tz
 
 from apps.common.events.contracts import ContractClosedEvent
 from apps.common.models.outbox import OutboxRecord
@@ -65,6 +67,10 @@ class TestOutboxReliabilityMesh:
         with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=ConnectionError("Redis down")):
             for _ in range(MAX_PUBLISH_RETRIES):
                 run_outbox_polling_dispatcher_task()
+                # Collapse the backoff window so the next iteration sees the record.
+                OutboxRecord.objects.filter(id=record.id).update(
+                    next_retry_at=tz.now() - timedelta(seconds=1)
+                )
 
         record.refresh_from_db()
         assert record.retry_count == MAX_PUBLISH_RETRIES
@@ -78,6 +84,9 @@ class TestOutboxReliabilityMesh:
         with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=ConnectionError("Redis down")):
             for _ in range(MAX_PUBLISH_RETRIES):
                 run_outbox_polling_dispatcher_task()
+                OutboxRecord.objects.filter(id=record.id).update(
+                    next_retry_at=tz.now() - timedelta(seconds=1)
+                )
 
         record.refresh_from_db()
         assert record.failed_permanently_at is not None
@@ -229,3 +238,46 @@ class TestOutboxReliabilityMesh:
 
         record.refresh_from_db()
         assert record.is_processed is False
+
+    # ── BACKOFF ───────────────────────────────────────────────────────────────
+
+    def test_failure_sets_next_retry_at(self):
+        """After a failed dispatch next_retry_at must be set to a future timestamp."""
+        record = _push()
+
+        with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=ConnectionError("down")):
+            run_outbox_polling_dispatcher_task()
+
+        record.refresh_from_db()
+        assert record.next_retry_at is not None
+        assert record.next_retry_at > tz.now()
+
+    def test_backoff_window_respected(self):
+        """Record with future next_retry_at must not be dispatched until the window expires."""
+        record = _push()
+        OutboxRecord.objects.filter(id=record.id).update(
+            retry_count=1,
+            next_retry_at=tz.now() + timedelta(hours=1),
+        )
+
+        xadd_calls: list = []
+        with patch.object(settings.REDIS_CLIENT, "xadd", side_effect=lambda *a, **kw: xadd_calls.append(1)):
+            run_outbox_polling_dispatcher_task()
+
+        assert xadd_calls == [], "Record in backoff window was dispatched prematurely"
+        record.refresh_from_db()
+        assert record.is_processed is False
+
+    def test_backoff_expired_record_is_dispatched(self):
+        """Record with an elapsed next_retry_at must be picked up and processed normally."""
+        record = _push()
+        OutboxRecord.objects.filter(id=record.id).update(
+            retry_count=1,
+            next_retry_at=tz.now() - timedelta(seconds=1),
+        )
+
+        run_outbox_polling_dispatcher_task()
+
+        record.refresh_from_db()
+        assert record.is_processed is True
+        assert record.next_retry_at is None

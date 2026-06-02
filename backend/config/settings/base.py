@@ -158,6 +158,9 @@ CELERY_BEAT_SCHEDULE = {
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
 OUTBOX_MAX_PUBLISH_RETRIES = 5
+# Exponential backoff: delay = min(BASE × 2^retry_count, CAP) + jitter(10%)
+OUTBOX_BACKOFF_BASE_SECONDS = 30
+OUTBOX_BACKOFF_MAX_SECONDS = 300
 
 # ===========================================================================
 # INTERNATIONALIZATION

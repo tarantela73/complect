@@ -51,6 +51,11 @@ class OutboxRecord(models.Model):
         db_index=True,
     )
 
+    next_retry_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         db_table = "common_transactional_outbox"
 
@@ -60,6 +65,11 @@ class OutboxRecord(models.Model):
             models.Index(
                 fields=["is_processed", "created_at"],
                 name="outbox_dispatch_idx",
+            ),
+            models.Index(
+                fields=["next_retry_at", "created_at"],
+                name="outbox_ready_dispatch_idx",
+                condition=models.Q(is_processed=False, failed_permanently_at__isnull=True),
             ),
         ]
 
