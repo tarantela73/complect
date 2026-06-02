@@ -1,5 +1,11 @@
 from django.urls import include, path
 
+from apps.common.api.errors import (
+    django_bad_request,
+    django_page_not_found,
+    django_permission_denied,
+    django_server_error,
+)
 from apps.contracts.api import router as contracts_router
 from apps.contragents.api import router as contragents_router
 from apps.finance.api import router as finance_router
@@ -17,3 +23,10 @@ urlpatterns = [
     path("", include("config.health_urls")),
     path("api/v1/", api.urls),
 ]
+
+# Django fallback error handlers — enforce rule 6.6 envelope for all paths
+# that bypass Ninja (CSRF failure, unknown URL, uncaught server error).
+handler400 = django_bad_request
+handler403 = django_permission_denied
+handler404 = django_page_not_found
+handler500 = django_server_error

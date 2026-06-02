@@ -1,5 +1,5 @@
 from django.http import HttpRequest, JsonResponse
-from ninja.errors import AuthenticationError, ValidationError
+from ninja.errors import AuthenticationError, ValidationError as NinjaValidationError
 
 
 def _ctx_ids() -> tuple[str | None, str | None]:
@@ -29,7 +29,7 @@ def make_error_response(
     }
 
 
-def ninja_validation_error_handler(request: HttpRequest, exc: ValidationError):
+def ninja_validation_error_handler(request: HttpRequest, exc: NinjaValidationError):
     return JsonResponse(
         make_error_response(
             code="VALIDATION_ERROR",
@@ -47,4 +47,37 @@ def ninja_auth_error_handler(request: HttpRequest, exc: AuthenticationError):
             message="Не аутентифицирован.",
         ),
         status=401,
+    )
+
+
+# ── Django-level fallback handlers (rule 6.6) ────────────────────────────────
+# Wired in config/urls.py as handler400/403/404/500.
+# These fire when exceptions propagate past Ninja and all middleware
+# (e.g. CSRF failure, ASGI 404 for unknown paths, uncaught server errors).
+
+def django_bad_request(request: HttpRequest, exception=None):
+    return JsonResponse(
+        make_error_response("BAD_REQUEST", "Некорректный запрос."),
+        status=400,
+    )
+
+
+def django_permission_denied(request: HttpRequest, exception=None):
+    return JsonResponse(
+        make_error_response("FORBIDDEN", "Доступ запрещён."),
+        status=403,
+    )
+
+
+def django_page_not_found(request: HttpRequest, exception=None):
+    return JsonResponse(
+        make_error_response("NOT_FOUND", "Ресурс не найден."),
+        status=404,
+    )
+
+
+def django_server_error(request: HttpRequest):
+    return JsonResponse(
+        make_error_response("INTERNAL_SERVER_ERROR", "Внутренняя ошибка сервера."),
+        status=500,
     )
