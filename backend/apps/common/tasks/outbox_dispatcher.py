@@ -5,10 +5,12 @@ from datetime import timedelta
 import django.utils.timezone as tz
 import structlog
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
 from apps.common.models.outbox import OutboxRecord
+from apps.common.services.outbox_service import _INFLIGHT_CACHE_KEY
 from apps.common.tasks import BaseEnterpriseTask
 from config.celery import app
 
@@ -39,92 +41,92 @@ def run_outbox_polling_dispatcher_task() -> None:
     Guarantees:
     - At-least-once delivery to Redis Streams (consumers must deduplicate on outbox_record_id).
     - Exponential backoff with jitter prevents retry storms during Redis outages.
-    - SELECT FOR UPDATE SKIP LOCKED prevents duplicate processing under concurrent workers.
+    - SELECT FOR UPDATE SKIP LOCKED acquires locks before slicing — eliminates the
+      TOCTOU gap of a lock-after-select pattern under concurrent workers.
     - Permanent failure after MAX_PUBLISH_RETRIES — record excluded from polling, not deleted.
     - Per-record error isolation — one stuck record does not block the batch.
     """
     now = _clock()
-    records = list(
-        OutboxRecord.objects.filter(
-            is_processed=False,
-            failed_permanently_at__isnull=True,
-        ).filter(
-            Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now)
-        ).order_by("created_at")[:100]
-    )
-
-    if not records:
-        return
-
-    redis_client = settings.REDIS_CLIENT
-
-    for record in records:
+    try:
         with transaction.atomic():
-            locked_record = (
+            # Lock before slice: SELECT FOR UPDATE SKIP LOCKED in the initial query
+            # prevents the double-selection window of lock-after-select. Concurrent
+            # workers see already-locked rows and skip them via SKIP LOCKED, so there
+            # is no overlap between batches and no wasted re-query per record.
+            records = list(
                 OutboxRecord.objects.select_for_update(skip_locked=True)
                 .filter(
-                    id=record.id,
                     is_processed=False,
                     failed_permanently_at__isnull=True,
                 )
                 .filter(
                     Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now)
                 )
-                .first()
+                .order_by("created_at")[:100]
             )
 
-            if not locked_record:
-                continue
+            if not records:
+                return
 
-            try:
-                tenant_id_str = str(locked_record.payload_json.get("tenant_id", "global"))
-                stream_name = f"erp:streams:tenant:{tenant_id_str}"
+            redis_client = settings.REDIS_CLIENT
 
-                redis_client.xadd(
-                    name=stream_name,
-                    fields={
-                        # Canonical deduplication key for consumers (at-least-once guarantee).
-                        # Consumers MUST ignore events already processed by this ID.
-                        "outbox_record_id": str(locked_record.id),
-                        "event_type": locked_record.event_type,
-                        "correlation_id": str(locked_record.correlation_id),
-                        "payload": json.dumps(locked_record.payload_json),
-                    },
-                    id="*",
-                    maxlen=10000,
-                    approximate=True,
-                )
+            for record in records:
+                publish_error = None
+                try:
+                    tenant_id_str = str(record.payload_json.get("tenant_id", "global"))
+                    stream_name = f"erp:streams:tenant:{tenant_id_str}"
 
-                locked_record.is_processed = True
-                locked_record.processed_at = _clock()
-                locked_record.next_retry_at = None
-                locked_record.save(update_fields=["is_processed", "processed_at", "next_retry_at"])
-
-            except Exception as exc:
-                new_retry_count = locked_record.retry_count + 1
-                locked_record.retry_count = new_retry_count
-                locked_record.last_error = str(exc)
-                locked_record.next_retry_at = _next_retry_at(new_retry_count)
-                update_fields = ["retry_count", "last_error", "next_retry_at"]
-
-                if new_retry_count >= MAX_PUBLISH_RETRIES:
-                    locked_record.failed_permanently_at = _clock()
-                    update_fields.append("failed_permanently_at")
-                    logger.error(
-                        "outbox_record_permanently_failed",
-                        record_id=str(locked_record.id),
-                        event_type=locked_record.event_type,
-                        retry_count=new_retry_count,
-                        error=str(exc),
+                    redis_client.xadd(
+                        name=stream_name,
+                        fields={
+                            # Canonical deduplication key for consumers (at-least-once guarantee).
+                            # Consumers MUST ignore events already processed by this ID.
+                            "outbox_record_id": str(record.id),
+                            "event_type": record.event_type,
+                            "correlation_id": str(record.correlation_id),
+                            "payload": json.dumps(record.payload_json),
+                        },
+                        id="*",
+                        maxlen=10000,
+                        approximate=True,
                     )
+                except Exception as exc:
+                    publish_error = exc
+
+                if publish_error is None:
+                    record.is_processed = True
+                    record.processed_at = _clock()
+                    record.next_retry_at = None
+                    record.save(update_fields=["is_processed", "processed_at", "next_retry_at"])
                 else:
-                    logger.warning(
-                        "outbox_record_publish_failed",
-                        record_id=str(locked_record.id),
-                        event_type=locked_record.event_type,
-                        retry_count=new_retry_count,
-                        error=str(exc),
-                        next_retry_at=locked_record.next_retry_at.isoformat(),
-                    )
+                    new_retry_count = record.retry_count + 1
+                    record.retry_count = new_retry_count
+                    record.last_error = str(publish_error)
+                    record.next_retry_at = _next_retry_at(new_retry_count)
+                    update_fields = ["retry_count", "last_error", "next_retry_at"]
 
-                locked_record.save(update_fields=update_fields)
+                    if new_retry_count >= MAX_PUBLISH_RETRIES:
+                        record.failed_permanently_at = _clock()
+                        update_fields.append("failed_permanently_at")
+                        logger.error(
+                            "outbox_record_permanently_failed",
+                            record_id=str(record.id),
+                            event_type=record.event_type,
+                            retry_count=new_retry_count,
+                            error=str(publish_error),
+                        )
+                    else:
+                        logger.warning(
+                            "outbox_record_publish_failed",
+                            record_id=str(record.id),
+                            event_type=record.event_type,
+                            retry_count=new_retry_count,
+                            error=str(publish_error),
+                            next_retry_at=record.next_retry_at.isoformat(),
+                        )
+
+                    record.save(update_fields=update_fields)
+    finally:
+        # Release inflight guard so the next on_commit write can trigger a fresh wake-up.
+        # This runs whether the task succeeded, failed, or raised unexpectedly.
+        cache.delete(_INFLIGHT_CACHE_KEY)

@@ -18,12 +18,22 @@ class ConsumerIdempotencyService:
         acked    → ack() stamps acked_at                 (processing confirmed)
         duplicate→ claim() returns False                 (skip, already claimed)
 
+    Ownership model:
+        When instance_id is provided to claim(), ack() requires the same instance_id.
+        This prevents cross-instance ACK: instance B cannot confirm work claimed by A.
+        Without instance_id, ACK is unbound (legacy / simple consumers).
+
     The INSERT + IntegrityError pattern is race-free: the DB unique constraint
     on (outbox_record_id, consumer) is the only true gate.
     """
 
     @staticmethod
-    def claim(outbox_record_id: uuid.UUID, consumer: str, tenant_id: uuid.UUID) -> bool:
+    def claim(
+        outbox_record_id: uuid.UUID,
+        consumer: str,
+        tenant_id: uuid.UUID,
+        instance_id: uuid.UUID | None = None,
+    ) -> bool:
         """
         Attempt to claim processing rights for an event.
 
@@ -36,6 +46,7 @@ class ConsumerIdempotencyService:
                 outbox_record_id=outbox_record_id,
                 consumer=consumer,
                 tenant_id=tenant_id,
+                claimed_by_instance_id=instance_id,
             )
             return True
         except IntegrityError:
@@ -47,23 +58,34 @@ class ConsumerIdempotencyService:
             return False
 
     @staticmethod
-    def ack(outbox_record_id: uuid.UUID, consumer: str) -> bool:
+    def ack(
+        outbox_record_id: uuid.UUID,
+        consumer: str,
+        instance_id: uuid.UUID | None = None,
+    ) -> bool:
         """
         Confirm successful completion of event processing.
 
         Returns True  — acked (acked_at stamped).
-        Returns False — no matching claim found (unknown event/consumer pair).
+        Returns False — no matching claim found, or instance_id mismatch.
         Never raises.
 
-        Idempotent: calling ack() twice on the same pair is a no-op on the
-        second call (acked_at already set, updated_count=0 → returns False).
+        Idempotent: calling ack() twice returns False on the second call
+        (acked_at filter misses the already-stamped record).
+
+        When instance_id is provided, only the instance that claimed the event
+        can ack it. This is an ownership check: ack returns False if
+        claimed_by_instance_id != instance_id.
         """
         try:
-            updated = ProcessedEvent.objects.filter(
+            qs = ProcessedEvent.objects.filter(
                 outbox_record_id=outbox_record_id,
                 consumer=consumer,
                 acked_at__isnull=True,
-            ).update(acked_at=tz.now())
+            )
+            if instance_id is not None:
+                qs = qs.filter(claimed_by_instance_id=instance_id)
+            updated = qs.update(acked_at=tz.now())
             if updated:
                 logger.debug(
                     "consumer_event_acked",

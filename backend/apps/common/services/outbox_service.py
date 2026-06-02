@@ -12,7 +12,10 @@ from apps.common.tenancy.context import get_current_tenant_id
 logger = structlog.get_logger(__name__)
 
 _WAKEUP_CACHE_KEY = "outbox:dispatch:wakeup"
+_INFLIGHT_CACHE_KEY = "outbox:dispatch:inflight"
 _WAKEUP_COALESCE_TTL: int = getattr(settings, "OUTBOX_WAKEUP_COALESCE_TTL", 2)
+# Must exceed max expected task duration. Safety net if task crashes without cleanup.
+_INFLIGHT_GUARD_TTL: int = getattr(settings, "OUTBOX_INFLIGHT_GUARD_TTL", 30)
 
 
 class TransactionalOutboxService:
@@ -36,16 +39,25 @@ class TransactionalOutboxService:
             correlation_id=event.correlation_id,
         )
 
-        # Fast-path dispatch: one wake-up per COALESCE_TTL window.
-        # cache.add() is SETNX — only the first on_commit in a burst wins the lock.
-        # Beat schedule (10s) remains the fallback for orphaned records.
+        # Fast-path dispatch with two-level guard:
+        # 1. wakeup_key (TTL=2s): debounce — at most one wake-up per burst window.
+        # 2. inflight_key (TTL=30s): at-least-once guarantee — if the task crashes
+        #    before clearing the inflight key, the TTL expires and the next insert
+        #    can trigger a new wake-up. Without this, a crashed task silently eats
+        #    the coalesce window: process A sets wakeup, task crashes, process B
+        #    sees wakeup still set → no dispatch → silent loss until Beat fires.
         def _fire_dispatcher() -> None:
             try:
                 from apps.common.tasks.outbox_dispatcher import (
                     run_outbox_polling_dispatcher_task,
                 )
                 if cache.add(_WAKEUP_CACHE_KEY, 1, timeout=_WAKEUP_COALESCE_TTL):
-                    run_outbox_polling_dispatcher_task.apply_async(countdown=0)
+                    if cache.add(_INFLIGHT_CACHE_KEY, 1, timeout=_INFLIGHT_GUARD_TTL):
+                        try:
+                            run_outbox_polling_dispatcher_task.apply_async(countdown=0)
+                        except Exception:
+                            cache.delete(_INFLIGHT_CACHE_KEY)
+                            raise
             except Exception as exc:
                 logger.warning("outbox_dispatcher_wakeup_failed", error=str(exc))
 

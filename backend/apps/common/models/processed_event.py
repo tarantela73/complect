@@ -19,6 +19,9 @@ class ProcessedEvent(models.Model):
     # NULL = claimed but not yet acked (in-flight or crashed consumer).
     # NOT NULL = processing confirmed complete.
     acked_at = models.DateTimeField(null=True, blank=True)
+    # Worker/pod UUID that claimed this event. ack() verifies ownership when provided,
+    # preventing cross-instance ACK (e.g., instance B acking what instance A claimed).
+    claimed_by_instance_id = models.UUIDField(null=True, blank=True)
 
     class Meta:
         db_table = "common_processed_events"

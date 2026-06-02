@@ -135,6 +135,46 @@ class TestConsumerAckTracking:
         assert record.acked_at is not None
 
 
+# ── Ownership-bound ACK (instance_id) ────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestConsumerAckOwnership:
+
+    def test_claim_stores_instance_id(self):
+        event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.claimed_by_instance_id == instance_id
+
+    def test_ack_with_correct_instance_id_succeeds(self):
+        event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id)
+        assert ConsumerIdempotencyService.ack(event_id, "svc", instance_id=instance_id) is True
+
+    def test_ack_with_wrong_instance_id_fails(self):
+        """instance B must not be able to ack what instance A claimed."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a)
+        assert ConsumerIdempotencyService.ack(event_id, "svc", instance_id=instance_b) is False
+
+    def test_ack_without_instance_id_bypasses_ownership(self):
+        """Legacy consumers without instance_id can still ack (backward compat)."""
+        event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id)
+        # ack() without instance_id ignores claimed_by_instance_id filter
+        assert ConsumerIdempotencyService.ack(event_id, "svc") is True
+
+    def test_wrong_instance_ack_does_not_stamp_acked_at(self):
+        """Failed ownership check must leave acked_at=NULL."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a)
+        ConsumerIdempotencyService.ack(event_id, "svc", instance_id=instance_b)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.acked_at is None
+
+
 # ── Coalescing wake-up (fix 5.1) ─────────────────────────────────────────────
 # Requires transaction=True so that transaction.on_commit fires after each write.
 
@@ -147,6 +187,7 @@ class TestOutboxCoalescing:
         one dispatcher wake-up, not N apply_async calls.
         """
         cache.delete("outbox:dispatch:wakeup")
+        cache.delete("outbox:dispatch:inflight")
 
         dispatch_calls: list = []
 

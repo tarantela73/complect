@@ -163,6 +163,9 @@ OUTBOX_BACKOFF_BASE_SECONDS = 30
 OUTBOX_BACKOFF_MAX_SECONDS = 300
 # Coalescing: at most one wake-up dispatch per this window (prevents apply_async storm on bulk writes).
 OUTBOX_WAKEUP_COALESCE_TTL = 2
+# Inflight guard TTL: if the dispatcher task crashes without cleanup, this is the
+# silence window before the next write can trigger a new wake-up. Must exceed max task duration.
+OUTBOX_INFLIGHT_GUARD_TTL = 30
 
 # ===========================================================================
 # INTERNATIONALIZATION

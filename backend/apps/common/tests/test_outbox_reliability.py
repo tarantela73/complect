@@ -287,6 +287,7 @@ class TestOutboxReliabilityMesh:
         """push_to_outbox must enqueue the dispatcher task after the transaction commits."""
         from django.core.cache import cache
         cache.delete("outbox:dispatch:wakeup")
+        cache.delete("outbox:dispatch:inflight")
 
         dispatch_calls: list = []
 
@@ -298,3 +299,39 @@ class TestOutboxReliabilityMesh:
             _push()
 
         assert dispatch_calls == [1], "Dispatcher was not triggered after outbox write"
+
+    def test_inflight_guard_prevents_second_wake_up(self):
+        """
+        If the inflight guard key is set, a second on_commit write must not
+        trigger a duplicate dispatcher — the first task is still in-flight.
+        """
+        from django.core.cache import cache
+        cache.delete("outbox:dispatch:wakeup")
+        cache.delete("outbox:dispatch:inflight")
+
+        dispatch_calls: list = []
+
+        with patch.object(
+            run_outbox_polling_dispatcher_task,
+            "apply_async",
+            side_effect=lambda *a, **kw: dispatch_calls.append(1),
+        ):
+            _push()  # first write: wakeup + inflight set, task enqueued
+            cache.delete("outbox:dispatch:wakeup")  # simulate TTL expiry of coalesce window
+            _push()  # second write: wakeup acquired BUT inflight still set → no second task
+
+        assert len(dispatch_calls) == 1, (
+            f"Expected 1 dispatch (inflight guard), got {len(dispatch_calls)}"
+        )
+
+    def test_task_clears_inflight_guard_on_completion(self):
+        """Dispatcher task must delete the inflight guard key after processing."""
+        from django.core.cache import cache
+        cache.set("outbox:dispatch:inflight", 1, timeout=30)
+        _push()
+
+        run_outbox_polling_dispatcher_task()
+
+        assert cache.get("outbox:dispatch:inflight") is None, (
+            "Inflight guard was not cleared after task completed"
+        )
