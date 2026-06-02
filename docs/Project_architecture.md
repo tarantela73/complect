@@ -273,6 +273,9 @@ class BaseEnterpriseModel(models.Model):
 
 - UTC everywhere. NTP sync mandatory.
 - Drift policy: Warning >2s; Critical >5s; Block finance >15s.
+- Django: `TIME_ZONE = "UTC"`, `USE_TZ = True`. Хранение всегда в UTC.
+- Отображение для пользователя: `Europe/Moscow` — только на фронтенде (`Intl.DateTimeFormat` / `date-fns-tz`).
+- API всегда отдаёт ISO8601 с суффиксом `+00:00`.
 
 ---
 

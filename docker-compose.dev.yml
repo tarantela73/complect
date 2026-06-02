@@ -194,7 +194,7 @@ services:
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"
-      TIME_ZONE: Europe/Moscow
+      TIME_ZONE: UTC
       LANGUAGE_CODE: ru-ru
       POSTGRES_DB: complect_db
       POSTGRES_USER: complect_admin
@@ -262,7 +262,7 @@ services:
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"
-      TIME_ZONE: Europe/Moscow
+      TIME_ZONE: UTC
       LANGUAGE_CODE: ru-ru
       POSTGRES_DB: complect_db
       POSTGRES_USER: complect_admin
@@ -307,7 +307,7 @@ services:
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"
-      TIME_ZONE: Europe/Moscow
+      TIME_ZONE: UTC
       LANGUAGE_CODE: ru-ru
       REDIS_DEFAULT_URL: redis://redis:6379/0
       REDIS_CELERY_URL: redis://redis:6379/2

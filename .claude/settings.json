@@ -49,7 +49,12 @@
       "Bash(mv 0030-bounded-context-ownership.md 0005-bounded-context-ownership.md)",
       "Bash(cd /home/sever/projects/Complect && \\\\ *)",
       "Bash(mkdir -p /home/sever/projects/Complect/backend/apps/finance/models /home/sever/projects/Complect/backend/apps/finance/migrations /home/sever/projects/Complect/backend/apps/finance/schemas /home/sever/projects/Complect/backend/apps/finance/services /home/sever/projects/Complect/backend/apps/finance/queries)",
-      "Bash(touch /home/sever/projects/Complect/backend/apps/finance/__init__.py /home/sever/projects/Complect/backend/apps/finance/migrations/__init__.py /home/sever/projects/Complect/backend/apps/finance/models/__init__.py /home/sever/projects/Complect/backend/apps/finance/schemas/__init__.py /home/sever/projects/Complect/backend/apps/finance/services/__init__.py /home/sever/projects/Complect/backend/apps/finance/queries/__init__.py)"
+      "Bash(touch /home/sever/projects/Complect/backend/apps/finance/__init__.py /home/sever/projects/Complect/backend/apps/finance/migrations/__init__.py /home/sever/projects/Complect/backend/apps/finance/models/__init__.py /home/sever/projects/Complect/backend/apps/finance/schemas/__init__.py /home/sever/projects/Complect/backend/apps/finance/services/__init__.py /home/sever/projects/Complect/backend/apps/finance/queries/__init__.py)",
+      "Bash(gh api *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git clone *)",
+      "Bash(mkdir -p /home/sever/projects/Complect/backend/apps/finance/tests)",
+      "Bash(touch /home/sever/projects/Complect/backend/apps/finance/tests/__init__.py)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
