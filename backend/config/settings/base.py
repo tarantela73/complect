@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from kombu import Exchange, Queue
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Переопределяются в local.py / prod.py
@@ -132,6 +134,18 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_MAX_RETRIES = 5
+
+# rule 4.15 — queue topology (6 queues, high/normal/low priority tiers)
+_default_exchange = Exchange("default", type="direct")
+CELERY_TASK_QUEUES = (
+    Queue("default",       _default_exchange,         routing_key="default"),
+    Queue("outbox",        Exchange("outbox"),         routing_key="outbox"),
+    Queue("notifications", Exchange("notifications"),  routing_key="notifications"),
+    Queue("finance",       Exchange("finance"),        routing_key="finance"),
+    Queue("files",         Exchange("files"),          routing_key="files"),
+    Queue("retention",     Exchange("retention"),      routing_key="retention"),
+)
+CELERY_TASK_DEFAULT_QUEUE = "default"
 
 # ===========================================================================
 # INTERNATIONALIZATION

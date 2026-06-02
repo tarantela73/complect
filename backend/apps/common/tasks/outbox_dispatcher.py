@@ -6,12 +6,13 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.common.models.outbox import OutboxRecord
+from apps.common.tasks import BaseEnterpriseTask
 from config.celery import app
 
 logger = structlog.get_logger(__name__)
 
 
-@app.task(queue="outbox")
+@app.task(base=BaseEnterpriseTask, queue="outbox")
 def run_outbox_polling_dispatcher_task() -> None:
     """
     [ADR 0003 / ИСПРАВЛЕНО] SRE Поллинг-Диспетчер транзакционного Outbox.

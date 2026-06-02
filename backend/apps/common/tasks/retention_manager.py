@@ -8,7 +8,7 @@ from config.celery import app
 logger = structlog.get_logger(__name__)
 
 
-@app.task(base=BaseEnterpriseTask, queue="infrastructure")
+@app.task(base=BaseEnterpriseTask, queue="retention")
 def run_database_partition_and_retention_job_task() -> None:
     """
     [ИСПРАВЛЕНО] Автоматический менеджер секционирования и очистки данных СУБД.
