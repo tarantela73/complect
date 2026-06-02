@@ -1,7 +1,9 @@
 """
 Contract tests: every HTTP boundary in the system must return rule 6.6 envelope.
-Covers Ninja handlers, middleware rejections, and Django fallback handlers.
+Covers Ninja handlers, middleware rejections, Django fallback handlers,
+and the outermost ASGI error boundary.
 """
+import json
 import uuid
 
 import pytest
@@ -14,6 +16,7 @@ from apps.common.api.errors import (
     django_server_error,
     make_error_response,
 )
+from apps.common.middleware.asgi_error import AsgiErrorBoundaryMiddleware
 
 VALID_HEADERS = {
     "HTTP_X_TENANT_ID": str(uuid.uuid4()),
@@ -159,6 +162,84 @@ class TestMiddlewareEnvelope:
         )
         assert response.status_code == 400
         _assert_envelope(response.json(), "MALFORMED_IDEMPOTENCY_KEY")
+
+
+# ── ASGI error boundary ───────────────────────────────────────────────────────
+
+class TestAsgiErrorBoundary:
+    """
+    AsgiErrorBoundaryMiddleware must catch unhandled exceptions from the
+    inner ASGI application and return a rule 6.6 envelope without leaking
+    traceback or exception details.
+    """
+
+    async def _collect_response(self, scope, receive, send_fn):
+        responses = []
+
+        async def capture(event):
+            responses.append(event)
+
+        async def boom_app(scope, receive, send):
+            raise RuntimeError("simulated ASGI-level crash")
+
+        middleware = AsgiErrorBoundaryMiddleware(boom_app)
+        await middleware(scope, receive, capture)
+        return responses
+
+    @pytest.mark.asyncio
+    async def test_catches_http_exception_returns_500_envelope(self):
+        scope = {"type": "http"}
+        events = []
+
+        async def capturing_send(event):
+            events.append(event)
+
+        async def crashing_app(scope, receive, send):
+            raise RuntimeError("ASGI crash before Django")
+
+        middleware = AsgiErrorBoundaryMiddleware(crashing_app)
+        await middleware(scope, None, capturing_send)
+
+        start_event = events[0]
+        body_event = events[1]
+
+        assert start_event["status"] == 500
+        content_type = dict(start_event["headers"])[b"content-type"]
+        assert content_type == b"application/json"
+
+        data = json.loads(body_event["body"])
+        _assert_envelope(data, "INTERNAL_SERVER_ERROR")
+        assert data["error"]["detail"] is None
+
+    @pytest.mark.asyncio
+    async def test_websocket_scope_not_intercepted(self):
+        """WebSocket failures are outside HTTP contract — must pass through."""
+        scope = {"type": "websocket"}
+        raised = []
+
+        async def crashing_app(scope, receive, send):
+            raised.append(True)
+            raise RuntimeError("ws crash")
+
+        middleware = AsgiErrorBoundaryMiddleware(crashing_app)
+        with pytest.raises(RuntimeError):
+            await middleware(scope, None, None)
+
+        assert raised  # app was called, exception propagated
+
+    @pytest.mark.asyncio
+    async def test_healthy_request_passes_through(self):
+        """Normal requests must not be intercepted."""
+        scope = {"type": "http"}
+        called = []
+
+        async def healthy_app(scope, receive, send):
+            called.append(True)
+
+        middleware = AsgiErrorBoundaryMiddleware(healthy_app)
+        await middleware(scope, None, None)
+
+        assert called
 
 
 # ── Ninja validation error ────────────────────────────────────────────────────
