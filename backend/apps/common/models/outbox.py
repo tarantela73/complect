@@ -41,6 +41,16 @@ class OutboxRecord(models.Model):
         blank=True,
     )
 
+    retry_count = models.PositiveSmallIntegerField(default=0)
+
+    last_error = models.TextField(null=True, blank=True)
+
+    failed_permanently_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     class Meta:
         db_table = "common_transactional_outbox"
 

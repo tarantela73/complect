@@ -147,6 +147,18 @@ CELERY_TASK_QUEUES = (
 )
 CELERY_TASK_DEFAULT_QUEUE = "default"
 
+# rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
+CELERY_BEAT_SCHEDULE = {
+    "outbox-polling-dispatcher": {
+        "task": "apps.common.tasks.outbox_dispatcher.run_outbox_polling_dispatcher_task",
+        "schedule": 10.0,  # every 10 seconds
+        "options": {"queue": "outbox"},
+    },
+}
+
+# Tunable per-environment; dispatcher marks records permanently failed after this many retries.
+OUTBOX_MAX_PUBLISH_RETRIES = 5
+
 # ===========================================================================
 # INTERNATIONALIZATION
 # ===========================================================================
