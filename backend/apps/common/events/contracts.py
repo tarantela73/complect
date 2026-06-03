@@ -2,10 +2,12 @@
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import ClassVar
 
 
 @dataclass(slots=True, frozen=True)
 class ContractClosedEvent:
+    EVENT_TYPE: ClassVar[str] = "contracts.ContractClosed"
     event_id: uuid.UUID
     correlation_id: uuid.UUID
     occurred_at: datetime

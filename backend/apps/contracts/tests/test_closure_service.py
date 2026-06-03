@@ -69,6 +69,6 @@ class TestContractClosureServiceSuite:
         # Проверяем, что в Transactional Outbox упала персистентная запись события [4.3]
         outbox_event = OutboxRecord.objects.filter(correlation_id=self.correlation_id).first()
         assert outbox_event is not None
-        assert outbox_event.event_type == "ContractClosedEvent"
+        assert outbox_event.event_type == "contracts.ContractClosed"
         assert outbox_event.payload_json["contract_id"] == str(contract.id)
         assert outbox_event.payload_json["remaining_amount"] == 0

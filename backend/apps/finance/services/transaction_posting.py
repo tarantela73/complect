@@ -3,6 +3,8 @@ import uuid
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
+from apps.common.events.finance import TransactionPostedEvent
+from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contracts.models.contract import Contract
 from apps.finance.models.transaction import Transaction, TransactionStatus, TransactionType
@@ -24,6 +26,7 @@ class TransactionPostingService:
         posted_by: uuid.UUID,
         external_ref: str = "",
         transaction_type: str = TransactionType.PAYMENT,
+        correlation_id: uuid.UUID | None = None,
     ) -> Transaction:
         if amount <= 0:
             raise ValidationError("Сумма транзакции должна быть положительной.")
@@ -67,6 +70,17 @@ class TransactionPostingService:
             delta = amount if transaction_type == TransactionType.PAYMENT else -amount
             Contract.objects.filter(id=contract_id, tenant_id=tenant_id).update(
                 paid_amount=contract.paid_amount + delta
+            )
+
+            # Emit domain event to complete the causal chain (ADR-0014: contracts → finance pair).
+            TransactionalOutboxService.push_to_outbox(
+                TransactionPostedEvent.create(
+                    correlation_id=correlation_id or uuid.uuid4(),
+                    contract_id=contract_id,
+                    transaction_id=tx.id,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                )
             )
 
         return tx

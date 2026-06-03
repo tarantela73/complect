@@ -47,7 +47,7 @@ class TransactionalOutboxService:
         record_id = uuid.uuid4()
         record = OutboxRecord.objects.create(
             id=record_id,
-            event_type=event.__class__.__name__,
+            event_type=getattr(type(event), "EVENT_TYPE", event.__class__.__name__),
             payload_json=payload,
             correlation_id=event.correlation_id,
             causal_root_id=causal_root_id if causal_root_id is not None else record_id,
