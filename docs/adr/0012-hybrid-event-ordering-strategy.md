@@ -289,6 +289,59 @@ Celery worker для serial slots:
 Hash sharding: `N_ROUTING_SLOTS=256` → максимум 256 параллельных потоков для Finance,
 каждый слот обрабатывается строго последовательно.
 
+#### 5. Slot Locking Invariant (Mode A)
+
+Mode A гарантирует FIFO только при соблюдении всех трёх условий:
+
+```text
+At any point in time, at most one active consumer processes a given slot.
+```
+
+Операционные требования для обеспечения инварианта:
+
+| Параметр | Значение | Причина |
+|---|---|---|
+| `CELERY_WORKER_PREFETCH_MULTIPLIER` | `1` | нет спекулятивного prefetch |
+| `acks_late` | `True` | ACK только после обработки |
+| `max_tasks_per_child` | `1` | нет накопленного состояния между задачами |
+| concurrency per serial worker | `1` | один поток на слот |
+
+При нарушении любого из условий Mode A деградирует до best-effort FIFO.
+Нарушение не вызывает ошибку — оно вызывает silent reordering.
+
+### Event Classification Rules
+
+**Это правило обязательно для любого нового event type:**
+
+```text
+IF событие мутирует состояние через delta (increment/decrement, append, remove)
+   → MUST использовать Mode A (Serial Dispatch)
+
+IF событие представляет последнее состояние (snapshot, last-write-wins)
+   → MUST использовать Mode B (Monotonic Fence)
+
+IF неизвестно или спорно
+   → DEFAULT Mode A
+```
+
+**Почему default Mode A при неопределённости:** неверная классификация snapshot → Mode A
+снижает параллелизм (принято). Неверная классификация delta → Mode B вызывает silent data
+corruption без ошибок. Асимметрия рисков требует conservative default.
+
+Примеры классификации:
+
+| Event | Тип | Режим | Обоснование |
+|---|---|---|---|
+| `FinanceTransactionPosted` | delta | Mode A | проводка изменяет баланс |
+| `BalanceRecalculated` | snapshot | Mode B | последнее значение перезаписывает предыдущее |
+| `ContractStatusChanged` | snapshot | Mode B | статус = текущее состояние |
+| `ContractUpdated` | snapshot* | Mode B | *если partial merge — пересмотреть |
+| `LineItemAdded` | delta | Mode A | изменяет состав агрегата |
+| `LineItemRemoved` | delta | Mode A | изменяет состав агрегата |
+
+> **Предупреждение:** `ContractUpdated` может стать delta, если consumer делает partial field
+> merge вместо полного overwrite. В этом случае требуется переклассификация в Mode A.
+
 ### Итоговая гарантийная матрица (обновление к ADR-0010)
 
 | Сценарий | ADR-0010 | ADR-0011 | ADR-0012 |
