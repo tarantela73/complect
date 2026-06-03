@@ -154,6 +154,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 10.0,  # every 10 seconds
         "options": {"queue": "outbox"},
     },
+    "chain-completeness-monitor": {
+        "task": "apps.common.tasks.chain_completeness_monitor.run_chain_completeness_monitor_task",
+        "schedule": 60.0,  # every 60 seconds
+        "options": {"queue": "outbox"},
+    },
 }
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
@@ -169,6 +174,15 @@ OUTBOX_INFLIGHT_GUARD_TTL = 30
 # Consumer lease TTL (ADR-0011): default ownership window. reclaim() can take over
 # after expiry. Set per-consumer via lease_ttl= arg for long-running handlers.
 CONSUMER_LEASE_TTL_SECONDS = 300
+
+# Chain Completeness SLO (ADR-0017).
+# Records must have acked ProcessedEvent within this many seconds of OutboxRecord creation.
+CHAIN_COMPLETENESS_SLO_WINDOW_SECONDS = 300
+# Observation slack: how far back beyond the SLO deadline to look per measurement tick.
+# Prevents false positives from scheduler jitter; must be >= beat interval.
+CHAIN_COMPLETENESS_OBSERVATION_SLACK_SECONDS = 300
+# SLO target (99.9%): fraction of chains that must be complete within the SLO window.
+CHAIN_COMPLETENESS_SLO_TARGET = 0.999
 
 # ===========================================================================
 # INTERNATIONALIZATION
