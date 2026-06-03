@@ -22,6 +22,9 @@ class ProcessedEvent(models.Model):
     # Worker/pod UUID that claimed this event. ack() verifies ownership when provided,
     # preventing cross-instance ACK (e.g., instance B acking what instance A claimed).
     claimed_by_instance_id = models.UUIDField(null=True, blank=True)
+    # Lease expiry for crash recovery (ADR-0011). NULL = no lease (legacy, infinite).
+    # When set, reclaim() can atomically take over after this timestamp.
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "common_processed_events"
@@ -43,5 +46,11 @@ class ProcessedEvent(models.Model):
                 fields=["consumer", "tenant_id", "processed_at"],
                 name="processed_event_unacked_idx",
                 condition=models.Q(acked_at__isnull=True),
+            ),
+            # Covers reclaim() scan: expired leases on unacked records.
+            models.Index(
+                fields=["consumer", "lease_expires_at"],
+                name="processed_event_lease_idx",
+                condition=models.Q(acked_at__isnull=True, lease_expires_at__isnull=False),
             ),
         ]

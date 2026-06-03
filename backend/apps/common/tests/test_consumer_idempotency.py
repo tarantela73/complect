@@ -175,6 +175,196 @@ class TestConsumerAckOwnership:
         assert record.acked_at is None
 
 
+# ── Lease & Reclaim (ADR-0011) ────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestConsumerLease:
+
+    def test_claim_with_lease_ttl_sets_lease_expires_at(self):
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at is not None
+
+    def test_claim_without_lease_ttl_leaves_lease_expires_at_null(self):
+        """Legacy consumers without lease_ttl get infinite lease (backward compat)."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at is None
+
+    def test_lease_expires_at_is_in_the_future(self):
+        from django.utils import timezone as tz
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at > tz.now()
+
+
+@pytest.mark.django_db
+class TestConsumerReclaim:
+
+    def test_reclaim_expired_lease_returns_true(self):
+        """Worker B can take over after Worker A's lease expires."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        # Simulate lease expiry: set lease_expires_at to the past
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+
+        assert ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_b) is True
+
+    def test_reclaim_transfers_ownership(self):
+        """After reclaim, claimed_by_instance_id is updated to the new owner."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+        ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_b)
+
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.claimed_by_instance_id == instance_b
+
+    def test_reclaim_sets_new_lease_expires_at(self):
+        """reclaim() must extend the lease to a new future deadline."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+        ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, lease_ttl=300)
+
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at > tz.now()
+
+    def test_reclaim_valid_lease_returns_false(self):
+        """reclaim() on a still-valid lease must not steal ownership."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        assert ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_b) is False
+
+    def test_reclaim_does_not_affect_valid_owner(self):
+        """Failed reclaim must leave the original owner and lease untouched."""
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        before = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc").lease_expires_at
+
+        ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_b)
+
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.claimed_by_instance_id == instance_a
+        assert record.lease_expires_at == before
+
+    def test_reclaim_null_lease_returns_false(self):
+        """Legacy records with lease_expires_at=NULL are immune to reclaim()."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)  # no lease_ttl
+        assert ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id) is False
+
+    def test_reclaim_acked_record_returns_false(self):
+        """Already-acked records must not be reclaimed."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+        ConsumerIdempotencyService.ack(event_id, "svc")
+
+        assert ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id) is False
+
+    def test_reclaim_concurrent_workers_only_one_succeeds(self):
+        """
+        Two concurrent reclaim() calls must result in exactly one success.
+        Verified via sequential DB simulation: second call sees updated lease_expires_at.
+        """
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b, instance_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+
+        result_b = ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_b)
+        result_c = ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id, instance_id=instance_c)
+
+        assert result_b is True
+        assert result_c is False  # lease already renewed by B
+
+
+@pytest.mark.django_db
+class TestConsumerHeartbeat:
+
+    def test_heartbeat_extends_lease(self):
+        """heartbeat() must push lease_expires_at further into the future."""
+        from django.utils import timezone as tz
+
+        event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id, lease_ttl=300)
+        before = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc").lease_expires_at
+
+        result = ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_id, lease_ttl=300)
+
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert result is True
+        assert record.lease_expires_at >= before
+
+    def test_heartbeat_wrong_instance_returns_false(self):
+        """Only the current owner can heartbeat."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_a, lease_ttl=300)
+        assert ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_b) is False
+
+    def test_heartbeat_expired_lease_returns_false(self):
+        """heartbeat() on an already-expired lease must fail — it may have been reclaimed."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id, lease_ttl=300)
+        ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
+            lease_expires_at=tz.now() - timedelta(seconds=1)
+        )
+
+        assert ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_id) is False
+
+    def test_heartbeat_does_not_raise(self):
+        """heartbeat() must never propagate exceptions."""
+        try:
+            ConsumerIdempotencyService.heartbeat(uuid.uuid4(), "svc", uuid.uuid4())
+        except Exception as exc:
+            pytest.fail(f"heartbeat() raised unexpectedly: {exc}")
+
+
 # ── Coalescing wake-up (fix 5.1) ─────────────────────────────────────────────
 # Requires transaction=True so that transaction.on_commit fires after each write.
 

@@ -166,6 +166,9 @@ OUTBOX_WAKEUP_COALESCE_TTL = 2
 # Inflight guard TTL: if the dispatcher task crashes without cleanup, this is the
 # silence window before the next write can trigger a new wake-up. Must exceed max task duration.
 OUTBOX_INFLIGHT_GUARD_TTL = 30
+# Consumer lease TTL (ADR-0011): default ownership window. reclaim() can take over
+# after expiry. Set per-consumer via lease_ttl= arg for long-running handlers.
+CONSUMER_LEASE_TTL_SECONDS = 300
 
 # ===========================================================================
 # INTERNATIONALIZATION
