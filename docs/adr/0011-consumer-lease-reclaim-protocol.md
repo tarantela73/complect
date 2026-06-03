@@ -104,13 +104,24 @@ TTL — в Redis. ProcessedEvent не меняется.
 
 ## Decision
 
-**Реализуем TTL-based Lease с `lease_expires_at` (Option 1).**
+**Реализуем TTL-based Lease с `lease_expires_at` (Option 1) с семантикой safe-by-default.**
 
-К `ProcessedEvent` добавляется поле `lease_expires_at`. `claim()` принимает опциональный
-`lease_ttl` — если передан, устанавливает дедлайн; если нет, `lease_expires_at=NULL`
-(бесконечный lease, старое поведение). Новый метод `reclaim()` атомарно перехватывает
-истёкший claim через один `UPDATE ... WHERE lease_expires_at < now()`. Метод `heartbeat()`
-продлевает lease для long-running обработчиков.
+К `ProcessedEvent` добавляется поле `lease_expires_at`. Lease **включён по умолчанию**:
+`claim()` без `lease_ttl` использует `settings.CONSUMER_LEASE_TTL_SECONDS`. Бесконечный
+lease требует явного `claim(lease_ttl=None)` — это unsafe opt-out, не дефолт.
+`reclaim()` атомарно перехватывает истёкший claim через `UPDATE ... WHERE lease_expires_at < now()`.
+`heartbeat()` продлевает lease для long-running обработчиков.
+
+**API-контракт:**
+
+```python
+claim()               # lease = settings.CONSUMER_LEASE_TTL_SECONDS  (recoverable by default)
+claim(lease_ttl=None) # lease = NULL, infinite                        (explicit unsafe opt-out)
+claim(lease_ttl=N)    # lease = N seconds                             (custom TTL)
+```
+
+Это модель **safe-by-default, unsafe-by-opt-in**: каждый новый consumer автоматически
+recoverable без необходимости явно передавать `lease_ttl`.
 
 ---
 
@@ -118,22 +129,30 @@ TTL — в Redis. ProcessedEvent не меняется.
 
 ### Positive Consequences
 
+- Все новые consumers recoverable-by-default — нет дрейфа к смешанной модели.
 - Zombie consumers автоматически recoverable: другой инстанс может reclaim после TTL.
 - Нет ручного вмешательства для recovery при crash.
-- Backward compatible: старые consumers с `lease_ttl=None` не затронуты.
 - Reclaim атомарен через DB UPDATE — нет distributed lock.
+- Контракт защищён тестами: `test_claim_without_lease_argument_creates_default_lease`
+  и `test_claim_with_explicit_none_creates_infinite_lease`.
 
 ### Negative Consequences / Accepted Tradeoffs
 
-- **Business effect idempotency не закрыта этим ADR.** Finance domain должен самостоятельно обеспечить идемпотентность через `external_ref` unique constraint. Lease & Reclaim — transport-layer решение.
-- TTL выбирается статически: при длительной обработке consumer ДОЛЖЕН вызывать `heartbeat()` до истечения lease, иначе reclaim произойдёт раньше завершения.
-- `lease_expires_at IS NULL` записи (старые claims) не recoverable через `reclaim()` автоматически — требуют ручного анализа или отдельного migration job.
+- **Business effect idempotency не закрыта этим ADR.** Finance domain обеспечивает
+  идемпотентность через `UNIQUE(tenant_id, external_ref) WHERE external_ref != ''`.
+  Lease & Reclaim — transport-layer решение, не business-layer.
+- TTL выбирается статически: при длительной обработке consumer ДОЛЖЕН вызывать
+  `heartbeat()` до истечения lease, иначе reclaim произойдёт раньше завершения.
+- Записи с `lease_expires_at=NULL` (явный opt-out) не recoverable через `reclaim()` —
+  требуют ручного анализа или backfill job при переходе к полностью управляемой модели.
 
 ### Risks
 
-- Слишком короткий `CONSUMER_LEASE_TTL_SECONDS` (< P99 processing time) → ложные reclaim при нормальной работе → дублирование обработки.
-- Consumer не вызывает `heartbeat()` при долгой операции → reclaim в середине транзакции → два воркера processing одновременно. Митигация: `heartbeat()` должен вызываться каждые `TTL/3` секунд.
-- Решение не ревьюется при масштабировании consumer fleet > 50 инстансов.
+- Слишком короткий `CONSUMER_LEASE_TTL_SECONDS` (< P99 processing time) → ложные reclaim
+  при нормальной работе → дублирование обработки.
+- Consumer не вызывает `heartbeat()` при долгой операции → reclaim в середине транзакции.
+  Митигация: `heartbeat()` вызывается каждые `TTL/3` секунд.
+- Решение пересматривается при масштабировании consumer fleet > 50 инстансов.
 
 ---
 

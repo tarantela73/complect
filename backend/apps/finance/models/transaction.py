@@ -60,5 +60,13 @@ class Transaction(BaseEnterpriseModel):
             models.CheckConstraint(
                 condition=models.Q(amount__gt=0),
                 name="tx_amount_positive",
-            )
+            ),
+            # Prevents duplicate postings from event replay: same external_ref within
+            # a tenant is always the same payment. Empty string excluded — not all
+            # transactions have an external reference.
+            models.UniqueConstraint(
+                fields=["tenant_id", "external_ref"],
+                condition=~models.Q(external_ref=""),
+                name="finance_tx_external_ref_uq",
+            ),
         ]

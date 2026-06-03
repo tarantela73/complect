@@ -12,6 +12,11 @@ logger = structlog.get_logger(__name__)
 
 _LEASE_TTL: int = getattr(settings, "CONSUMER_LEASE_TTL_SECONDS", 300)
 
+# Sentinel: distinguishes "caller passed no lease_ttl" from "caller passed None".
+# Default (no arg) → use settings.CONSUMER_LEASE_TTL_SECONDS (safe-by-default).
+# Explicit None   → infinite lease (unsafe opt-out for legacy consumers).
+_UNSET = object()
+
 
 class ConsumerIdempotencyService:
     """
@@ -29,9 +34,10 @@ class ConsumerIdempotencyService:
         Without instance_id, ACK is unbound (legacy consumers).
 
     Lease model (ADR-0011):
-        When lease_ttl is provided to claim(), lease_expires_at deadline is set.
+        Lease is enabled by default (safe-by-default, unsafe-by-opt-in).
+        claim() without lease_ttl uses settings.CONSUMER_LEASE_TTL_SECONDS.
+        claim(lease_ttl=None) creates an infinite lease — explicit opt-out only.
         After expiry, reclaim() atomically transfers ownership to another instance.
-        lease_ttl=None → lease_expires_at=NULL → infinite lease (legacy behaviour).
 
     The INSERT + IntegrityError pattern is race-free: the DB unique constraint
     on (outbox_record_id, consumer) is the only true gate.
@@ -43,7 +49,7 @@ class ConsumerIdempotencyService:
         consumer: str,
         tenant_id: uuid.UUID,
         instance_id: uuid.UUID | None = None,
-        lease_ttl: int | None = None,
+        lease_ttl: int | None = _UNSET,  # type: ignore[assignment]
     ) -> bool:
         """
         Attempt to claim processing rights for an event.
@@ -51,8 +57,17 @@ class ConsumerIdempotencyService:
         Returns True  — first claim: proceed with processing.
         Returns False — already claimed: call reclaim() to check if lease expired.
         Never raises.
+
+        lease_ttl not provided → default TTL from settings (recoverable by default).
+        lease_ttl=None         → infinite lease, reclaim() cannot recover this claim.
+        lease_ttl=N            → custom TTL in seconds.
         """
-        lease_expires_at = tz.now() + timedelta(seconds=lease_ttl) if lease_ttl else None
+        if lease_ttl is _UNSET:
+            effective_ttl: int | None = _LEASE_TTL
+        else:
+            effective_ttl = lease_ttl  # type: ignore[assignment]
+
+        lease_expires_at = tz.now() + timedelta(seconds=effective_ttl) if effective_ttl else None
         try:
             ProcessedEvent.objects.create(
                 outbox_record_id=outbox_record_id,
@@ -89,8 +104,8 @@ class ConsumerIdempotencyService:
         Two concurrent workers: the first UPDATE sets a new lease_expires_at; the
         second finds the condition no longer satisfied → 0 rows → False.
 
-        Only works on records with lease_expires_at IS NOT NULL. Legacy claims
-        (lease_expires_at=NULL) are unaffected.
+        Only works on records with lease_expires_at IS NOT NULL. Infinite-lease claims
+        (lease_expires_at=NULL) are unaffected — they require manual recovery.
         """
         try:
             ttl = lease_ttl if lease_ttl is not None else _LEASE_TTL

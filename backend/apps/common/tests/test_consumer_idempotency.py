@@ -180,23 +180,36 @@ class TestConsumerAckOwnership:
 @pytest.mark.django_db
 class TestConsumerLease:
 
-    def test_claim_with_lease_ttl_sets_lease_expires_at(self):
-        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
-        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
-        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
-        assert record.lease_expires_at is not None
-
-    def test_claim_without_lease_ttl_leaves_lease_expires_at_null(self):
-        """Legacy consumers without lease_ttl get infinite lease (backward compat)."""
+    def test_claim_without_lease_argument_creates_default_lease(self):
+        """
+        Safe-by-default: claim() without lease_ttl must set lease_expires_at
+        from settings.CONSUMER_LEASE_TTL_SECONDS. No more unrecoverable claims by accident.
+        """
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
         ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
         record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at is not None
+
+    def test_claim_with_explicit_none_creates_infinite_lease(self):
+        """
+        Unsafe opt-out: claim(lease_ttl=None) creates infinite lease — reclaim() cannot
+        recover this claim. Requires explicit intent, not the default path.
+        """
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=None)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
         assert record.lease_expires_at is None
 
-    def test_lease_expires_at_is_in_the_future(self):
+    def test_claim_with_custom_lease_ttl_sets_lease_expires_at(self):
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=60)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.lease_expires_at is not None
+
+    def test_default_lease_expires_at_is_in_the_future(self):
         from django.utils import timezone as tz
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
-        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=300)
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
         record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
         assert record.lease_expires_at > tz.now()
 
@@ -276,10 +289,10 @@ class TestConsumerReclaim:
         assert record.claimed_by_instance_id == instance_a
         assert record.lease_expires_at == before
 
-    def test_reclaim_null_lease_returns_false(self):
-        """Legacy records with lease_expires_at=NULL are immune to reclaim()."""
+    def test_reclaim_infinite_lease_returns_false(self):
+        """Explicit infinite-lease records (lease_ttl=None) are immune to reclaim()."""
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
-        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)  # no lease_ttl
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, lease_ttl=None)
         assert ConsumerIdempotencyService.reclaim(event_id, "svc", tenant_id) is False
 
     def test_reclaim_acked_record_returns_false(self):
