@@ -25,7 +25,7 @@ class FinanceContractClosedConsumer(BaseDomainConsumer):
     consumer_name = "finance.contract_closed_consumer"
     ordering_mode = "STRICT"
     handled_event_types = frozenset({ContractClosedEvent.EVENT_TYPE})
-    expected_emissions = frozenset({TransactionPostedEvent.EVENT_TYPE})
+    required_emissions = frozenset({TransactionPostedEvent.EVENT_TYPE})
 
     def _emission_required(self, event: StreamEvent) -> bool:
         return int(event.payload.get("remaining_amount", 0)) > 0

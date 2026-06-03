@@ -89,11 +89,13 @@ class _FailingConsumer(BaseDomainConsumer):
         raise RuntimeError("domain_error")
 
 
-class _EmissionEnforcedConsumer(BaseDomainConsumer):
-    consumer_name = "test.emission_consumer"
+class _RequiredEmissionConsumer(BaseDomainConsumer):
+    """Consumer with a hard emission contract."""
+
+    consumer_name = "test.required_emission_consumer"
     ordering_mode = "STRICT"
     handled_event_types = frozenset({"contracts.ContractClosed"})
-    expected_emissions = frozenset({"fake.EmittedEvent"})
+    required_emissions = frozenset({"fake.RequiredEvent"})
 
     def __init__(self, *, should_emit: bool = True):
         super().__init__()
@@ -102,7 +104,7 @@ class _EmissionEnforcedConsumer(BaseDomainConsumer):
     def process(self, event: StreamEvent) -> None:
         if self._should_emit:
             OutboxRecord.objects.create(
-                event_type="fake.EmittedEvent",
+                event_type="fake.RequiredEvent",
                 payload_json={"tenant_id": str(event.tenant_id)},
                 correlation_id=event.correlation_id,
                 causal_root_id=uuid.uuid4(),
@@ -110,13 +112,29 @@ class _EmissionEnforcedConsumer(BaseDomainConsumer):
             )
 
 
-class _ConditionalEmissionConsumer(_EmissionEnforcedConsumer):
-    """Requires emission only when payload contains require=True."""
+class _ConditionalEmissionConsumer(_RequiredEmissionConsumer):
+    """Hard emission check suppressed when payload.require == False."""
 
     consumer_name = "test.conditional_emission_consumer"
 
     def _emission_required(self, event: StreamEvent) -> bool:
         return bool(event.payload.get("require", True))
+
+
+class _OptionalEmissionConsumer(BaseDomainConsumer):
+    """Consumer with a soft (warning-only) emission contract."""
+
+    consumer_name = "test.optional_emission_consumer"
+    ordering_mode = "STRICT"
+    handled_event_types = frozenset({"contracts.ContractClosed"})
+    optional_emissions = frozenset({"fake.OptionalEvent"})
+
+    def __init__(self):
+        super().__init__()
+        self.processed: list[StreamEvent] = []
+
+    def process(self, event: StreamEvent) -> None:
+        self.processed.append(event)
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +324,33 @@ class TestIncidentRouting:
             with pytest.raises(RuntimeError, match="domain_error"):
                 consumer.handle(rec)
 
+    def test_incident_not_routed_twice_for_same_causal_root(self):
+        from django.core.cache import cache
+
+        consumer = _FailingConsumer()
+        rec = _make_outbox()
+        event = BaseDomainConsumer._to_stream_event(rec)
+        exc = RuntimeError("repeat_error")
+
+        with patch(
+            "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
+        ) as mock_route:
+            mock_decision = MagicMock()
+            mock_decision.structlog_labels = {}
+            mock_route.return_value = mock_decision
+
+            consumer._route_incident(event, exc)
+            consumer._route_incident(event, exc)
+
+        mock_route.assert_called_once()
+
+        dedup_key = (
+            f"incident:dedup:{consumer.consumer_name}"
+            f":{event.causal_root_id or event.outbox_record_id}"
+            f":{type(exc).__name__}"
+        )
+        cache.delete(dedup_key)
+
 
 # ---------------------------------------------------------------------------
 # run_batch
@@ -376,8 +421,8 @@ class TestRunBatch:
 @pytest.mark.django_db
 class TestEmissionVerification:
 
-    def test_passes_when_expected_emission_exists(self):
-        consumer = _EmissionEnforcedConsumer(should_emit=True)
+    def test_required_passes_when_emission_exists(self):
+        consumer = _RequiredEmissionConsumer(should_emit=True)
         rec = _make_outbox()
         consumer.handle(rec)
         assert ProcessedEvent.objects.filter(
@@ -386,19 +431,19 @@ class TestEmissionVerification:
             acked_at__isnull=False,
         ).exists()
 
-    def test_raises_when_emission_missing(self):
+    def test_required_raises_when_emission_missing(self):
         from apps.common.services.consumer_base import CausalEmissionMissingError
 
-        consumer = _EmissionEnforcedConsumer(should_emit=False)
+        consumer = _RequiredEmissionConsumer(should_emit=False)
         rec = _make_outbox()
         with pytest.raises(CausalEmissionMissingError) as exc_info:
             consumer.handle(rec)
-        assert "fake.EmittedEvent" in str(exc_info.value.missing_event_types)
+        assert "fake.RequiredEvent" in str(exc_info.value.missing_event_types)
 
-    def test_missing_emission_routes_incident(self):
+    def test_required_missing_routes_incident(self):
         from apps.common.services.consumer_base import CausalEmissionMissingError
 
-        consumer = _EmissionEnforcedConsumer(should_emit=False)
+        consumer = _RequiredEmissionConsumer(should_emit=False)
         rec = _make_outbox()
         with patch(
             "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
@@ -410,7 +455,7 @@ class TestEmissionVerification:
                 consumer.handle(rec)
         mock_route.assert_called_once()
 
-    def test_predicate_false_suppresses_check(self):
+    def test_predicate_false_suppresses_required_check(self):
         rec_id = uuid.uuid4()
         rec = OutboxRecord.objects.create(
             id=rec_id,
@@ -428,8 +473,33 @@ class TestEmissionVerification:
             acked_at__isnull=False,
         ).exists()
 
-    def test_none_expected_emissions_skips_all_checks(self):
-        # _StrictConsumer.expected_emissions is None — no check, no error
+    def test_optional_absent_does_not_raise(self):
+        consumer = _OptionalEmissionConsumer()
+        rec = _make_outbox()
+        consumer.handle(rec)
+        assert len(consumer.processed) == 1
+        assert ProcessedEvent.objects.filter(
+            outbox_record_id=rec.id,
+            consumer=consumer.consumer_name,
+            acked_at__isnull=False,
+        ).exists()
+
+    def test_optional_absent_emits_warning_log(self):
+        import structlog.testing
+
+        consumer = _OptionalEmissionConsumer()
+        rec = _make_outbox()
+        with structlog.testing.capture_logs() as logs:
+            consumer.handle(rec)
+        warning_events = [
+            e for e in logs
+            if e.get("log_level") == "warning"
+            and e.get("event") == "consumer_optional_emission_absent"
+        ]
+        assert len(warning_events) == 1
+        assert warning_events[0]["event_type"] == "fake.OptionalEvent"
+
+    def test_no_emissions_declared_skips_all_checks(self):
         consumer = _StrictConsumer()
         rec = _make_outbox()
         consumer.handle(rec)

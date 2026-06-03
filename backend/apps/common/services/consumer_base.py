@@ -11,9 +11,18 @@ Two ordering modes:
   FENCED  — Mode B. AggregateSequenceFenceService.advance() discards stale snapshots.
 
 Emission enforcement:
-  Subclasses may declare expected_emissions (frozenset of EVENT_TYPE strings) to enable
-  execution-time causal correctness checks. Override _emission_required() to make the
-  check conditional on event payload (e.g. skip when remaining_amount == 0).
+  required_emissions — hard contract: CausalEmissionMissingError raised if absent after process().
+  optional_emissions — soft contract: warning logged, no raise.
+  Override _emission_required(event) to gate required checks on payload conditions
+  (e.g. skip when remaining_amount == 0 to avoid false positives).
+
+  Safety invariant: _verify_emission() queries OutboxRecord by correlation_id using an
+  inline SELECT (not on_commit). This is correct because process() commits its inner
+  @atomic before returning — all writes are visible on the same DB connection. If handle()
+  is wrapped in an outer @atomic in the future, the writes remain visible within that
+  transaction (same connection, same transaction scope). Deferred on_commit verification
+  would break the ack-before-verify ordering: if verification fires post-commit, the event
+  is already acked and a retry cannot reprocess it.
 """
 from __future__ import annotations
 
@@ -94,9 +103,11 @@ class BaseDomainConsumer(ABC):
     ordering_mode: ClassVar[Literal["STRICT", "FENCED"]]
     handled_event_types: ClassVar[frozenset[str]]
     supports_repair: ClassVar[bool] = True
-    # Declare to enable execution-time causal emission enforcement.
-    # Override _emission_required() to make the check conditional on event payload.
-    expected_emissions: ClassVar[frozenset[str] | None] = None
+    # Hard contract: CausalEmissionMissingError if absent after process().
+    # Gate with _emission_required() to avoid false positives on conditional branches.
+    required_emissions: ClassVar[frozenset[str] | None] = None
+    # Soft contract: warning logged only, no raise. No predicate needed.
+    optional_emissions: ClassVar[frozenset[str]] = frozenset()
 
     def __init__(self) -> None:
         self._instance_id = uuid.uuid4()
@@ -106,10 +117,10 @@ class BaseDomainConsumer(ABC):
 
     def _emission_required(self, event: StreamEvent) -> bool:
         """
-        Override to make emission enforcement conditional on event payload.
-        Default: required whenever expected_emissions is declared on the class.
+        Gates required_emissions enforcement. Does not affect optional_emissions.
+        Override to suppress the hard check on conditional payload branches.
         """
-        return self.expected_emissions is not None
+        return self.required_emissions is not None
 
     @classmethod
     def _domain(cls) -> str:
@@ -195,7 +206,7 @@ class BaseDomainConsumer(ABC):
 
             self.process(event)
 
-            if self.expected_emissions is not None and self._emission_required(event):
+            if self.required_emissions is not None or self.optional_emissions:
                 self._verify_emission(event)
 
             ConsumerIdempotencyService.ack(
@@ -252,35 +263,61 @@ class BaseDomainConsumer(ABC):
         return len(records)
 
     def _verify_emission(self, event: StreamEvent) -> None:
-        """
-        Called after process() when emission enforcement is active.
-
-        Queries outbox by correlation_id — safe because process() commits its inner
-        @atomic before returning, making the outbox record visible on the same connection.
-        """
         from apps.common.models.outbox import OutboxRecord as _OutboxRecord
 
-        assert self.expected_emissions is not None  # guarded by caller
-        missing = frozenset(
-            et
-            for et in self.expected_emissions
+        if self.required_emissions is not None and self._emission_required(event):
+            missing = frozenset(
+                et
+                for et in self.required_emissions
+                if not _OutboxRecord.objects.filter(
+                    correlation_id=event.correlation_id,
+                    event_type=et,
+                ).exists()
+            )
+            if missing:
+                raise CausalEmissionMissingError(
+                    consumer=self.consumer_name,
+                    outbox_record_id=event.outbox_record_id,
+                    correlation_id=event.correlation_id,
+                    missing_event_types=missing,
+                )
+
+        for et in self.optional_emissions:
             if not _OutboxRecord.objects.filter(
                 correlation_id=event.correlation_id,
                 event_type=et,
-            ).exists()
-        )
-        if missing:
-            raise CausalEmissionMissingError(
-                consumer=self.consumer_name,
-                outbox_record_id=event.outbox_record_id,
-                correlation_id=event.correlation_id,
-                missing_event_types=missing,
-            )
+            ).exists():
+                logger.warning(
+                    "consumer_optional_emission_absent",
+                    consumer=self.consumer_name,
+                    event_type=et,
+                    outbox_record_id=str(event.outbox_record_id),
+                    correlation_id=str(event.correlation_id),
+                )
 
     def _route_incident(self, event: StreamEvent, exc: Exception) -> None:
         from apps.common.services.incident_routing import IncidentContext, IncidentRoutingPolicy
 
         try:
+            # Dedup key prevents incident storm on Celery retry loops.
+            # causal_root_id is stable across retries for the same causal chain.
+            dedup_key = (
+                f"incident:dedup:{self.consumer_name}"
+                f":{event.causal_root_id or event.outbox_record_id}"
+                f":{type(exc).__name__}"
+            )
+            from django.core.cache import cache
+
+            if not cache.add(dedup_key, 1, timeout=300):
+                logger.debug(
+                    "consumer_incident_deduplicated",
+                    consumer=self.consumer_name,
+                    event_type=event.event_type,
+                    exc_type=type(exc).__name__,
+                    dedup_key=dedup_key,
+                )
+                return
+
             ctx = IncidentContext(
                 incidents=(),
                 causal_root_id=event.causal_root_id,
