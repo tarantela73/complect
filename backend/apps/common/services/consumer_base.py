@@ -26,6 +26,7 @@ Emission enforcement:
 """
 from __future__ import annotations
 
+import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -111,6 +112,7 @@ class BaseDomainConsumer(ABC):
 
     def __init__(self) -> None:
         self._instance_id = uuid.uuid4()
+        self._total_verify_ms: float = 0.0
 
     @abstractmethod
     def process(self, event: StreamEvent) -> None: ...
@@ -207,7 +209,9 @@ class BaseDomainConsumer(ABC):
             self.process(event)
 
             if self.required_emissions is not None or self.optional_emissions:
+                _t0 = time.perf_counter()
                 self._verify_emission(event)
+                self._total_verify_ms += (time.perf_counter() - _t0) * 1000
 
             ConsumerIdempotencyService.ack(
                 outbox_record_id=event.outbox_record_id,
@@ -228,7 +232,10 @@ class BaseDomainConsumer(ABC):
 
         Mode B (FENCED): ordered by created_at; fence check inside handle() discards stale.
 
-        Returns count of records picked up (includes duplicates discarded before processing).
+        Returns count of records picked up. Emits consumer_batch_complete log with
+        execution decomposition: picked_up / acked / failed / verify_ms.
+        On first handle() failure the batch is aborted (status="aborted") and re-raises
+        so Celery retry can reprocess the failing record.
         """
         from django.db.models import Exists, F, OuterRef
 
@@ -256,11 +263,39 @@ class BaseDomainConsumer(ABC):
             qs = qs.order_by("created_at")
 
         records = list(qs[:batch_size])
+        picked_up = len(records)
+        acked = 0
+        failed = 0
 
         for record in records:
-            self.handle(record)
+            try:
+                self.handle(record)
+                acked += 1
+            except Exception:
+                failed += 1
+                logger.info(
+                    "consumer_batch_complete",
+                    consumer=self.consumer_name,
+                    picked_up=picked_up,
+                    acked=acked,
+                    failed=failed,
+                    verify_ms=round(self._total_verify_ms, 2),
+                    status="aborted",
+                )
+                raise
 
-        return len(records)
+        if picked_up:
+            logger.info(
+                "consumer_batch_complete",
+                consumer=self.consumer_name,
+                picked_up=picked_up,
+                acked=acked,
+                failed=failed,
+                verify_ms=round(self._total_verify_ms, 2),
+                status="complete",
+            )
+
+        return picked_up
 
     def _verify_emission(self, event: StreamEvent) -> None:
         from apps.common.models.outbox import OutboxRecord as _OutboxRecord

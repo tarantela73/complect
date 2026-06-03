@@ -413,6 +413,57 @@ class TestRunBatch:
         seqs = [e.aggregate_seq for e in consumer.processed]
         assert seqs == [1, 2, 3]
 
+    def test_batch_complete_log_emitted_on_success(self):
+        import structlog.testing
+
+        consumer = _StrictConsumer()
+        for _ in range(2):
+            _make_outbox()
+        with structlog.testing.capture_logs() as logs:
+            consumer.run_batch()
+        batch_logs = [e for e in logs if e.get("event") == "consumer_batch_complete"]
+        assert len(batch_logs) == 1
+        entry = batch_logs[0]
+        assert entry["picked_up"] == 2
+        assert entry["acked"] == 2
+        assert entry["failed"] == 0
+        assert entry["status"] == "complete"
+        assert "verify_ms" in entry
+
+    def test_batch_complete_log_status_aborted_on_failure(self):
+        import structlog.testing
+
+        consumer = _FailingConsumer()
+        _make_outbox()
+        with structlog.testing.capture_logs() as logs:
+            with pytest.raises(RuntimeError):
+                consumer.run_batch()
+        batch_logs = [e for e in logs if e.get("event") == "consumer_batch_complete"]
+        assert len(batch_logs) == 1
+        entry = batch_logs[0]
+        assert entry["failed"] == 1
+        assert entry["status"] == "aborted"
+
+    def test_verify_ms_reflects_emission_check_time(self):
+        import structlog.testing
+
+        consumer = _RequiredEmissionConsumer(should_emit=True)
+        _make_outbox()
+        with structlog.testing.capture_logs() as logs:
+            consumer.run_batch()
+        entry = next(e for e in logs if e.get("event") == "consumer_batch_complete")
+        assert isinstance(entry["verify_ms"], float)
+
+    def test_empty_batch_emits_no_log(self):
+        import structlog.testing
+
+        consumer = _StrictConsumer()
+        with structlog.testing.capture_logs() as logs:
+            count = consumer.run_batch()
+        assert count == 0
+        batch_logs = [e for e in logs if e.get("event") == "consumer_batch_complete"]
+        assert len(batch_logs) == 0
+
 
 # ---------------------------------------------------------------------------
 # Emission enforcement

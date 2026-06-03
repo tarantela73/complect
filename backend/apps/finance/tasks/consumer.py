@@ -84,6 +84,4 @@ def run_finance_consumer_task() -> None:
     Must run with Celery worker concurrency=1 on the 'finance' queue to enforce
     Mode A (STRICT) per-aggregate ordering invariant (ADR-0012).
     """
-    processed = FinanceContractClosedConsumer().run_batch()
-    if processed:
-        logger.info("finance_consumer_batch_complete", processed=processed)
+    FinanceContractClosedConsumer().run_batch()

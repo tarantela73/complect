@@ -91,6 +91,4 @@ def run_contracts_consumer_task() -> None:
     Mode B (FENCED): safe with default worker concurrency. Fence check inside
     BaseDomainConsumer.handle() discards stale snapshots atomically.
     """
-    processed = ContractsTransactionSyncConsumer().run_batch()
-    if processed:
-        logger.info("contracts_consumer_batch_complete", processed=processed)
+    ContractsTransactionSyncConsumer().run_batch()
