@@ -157,19 +157,43 @@ class ConsumerIdempotencyService:
         try:
             ttl = lease_ttl if lease_ttl is not None else _LEASE_TTL
             now = tz.now()
+            # Grace window (TTL/10) absorbs clock skew and network jitter at the expiry
+            # boundary. claimed_by_instance_id is the real ownership guard: reclaim()
+            # transfers it atomically, so a late heartbeat from the old owner cannot
+            # resurrect the lease even within the grace window.
+            grace = timedelta(seconds=ttl // 10)
             updated = ProcessedEvent.objects.filter(
                 outbox_record_id=outbox_record_id,
                 consumer=consumer,
                 claimed_by_instance_id=instance_id,
                 acked_at__isnull=True,
-                lease_expires_at__gt=now,
+                lease_expires_at__gt=now - grace,
             ).update(lease_expires_at=now + timedelta(seconds=ttl))
             if not updated:
+                # Diagnostic SELECT on failure path only — diagnose split-brain vs expiry.
+                record = (
+                    ProcessedEvent.objects.filter(
+                        outbox_record_id=outbox_record_id,
+                        consumer=consumer,
+                    )
+                    .values("claimed_by_instance_id", "lease_expires_at", "acked_at")
+                    .first()
+                )
+                if record is None:
+                    reason = "record_missing"
+                elif record["acked_at"] is not None:
+                    reason = "already_acked"
+                elif record["claimed_by_instance_id"] != instance_id:
+                    # reclaim() transferred ownership — split-brain symptom.
+                    reason = "ownership_mismatch"
+                else:
+                    reason = "lease_expired_beyond_grace"
                 logger.warning(
                     "consumer_event_heartbeat_missed",
                     outbox_record_id=str(outbox_record_id),
                     consumer=consumer,
                     instance_id=str(instance_id),
+                    reason=reason,
                 )
             return bool(updated)
         except Exception as exc:
