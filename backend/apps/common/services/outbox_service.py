@@ -20,7 +20,18 @@ _INFLIGHT_GUARD_TTL: int = getattr(settings, "OUTBOX_INFLIGHT_GUARD_TTL", 30)
 
 class TransactionalOutboxService:
     @staticmethod
-    def push_to_outbox(event) -> OutboxRecord:
+    def push_to_outbox(
+        event,
+        *,
+        causal_root_id: uuid.UUID | None = None,
+    ) -> OutboxRecord:
+        """
+        Write a domain event to the Transactional Outbox within the current transaction.
+
+        causal_root_id — pass the original OutboxRecord.id when creating a repair or
+        compensating event so the causal chain remains traceable (ADR-0015 Invariant 3).
+        Omit for normal flow: causal_root_id defaults to the new record's own id.
+        """
         try:
             tenant_id = get_current_tenant_id()
         except Exception:
@@ -33,10 +44,13 @@ class TransactionalOutboxService:
         }
         payload["tenant_id"] = str(tenant_id)
 
+        record_id = uuid.uuid4()
         record = OutboxRecord.objects.create(
+            id=record_id,
             event_type=event.__class__.__name__,
             payload_json=payload,
             correlation_id=event.correlation_id,
+            causal_root_id=causal_root_id if causal_root_id is not None else record_id,
         )
 
         # Fast-path dispatch with two-level guard:

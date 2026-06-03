@@ -50,6 +50,7 @@ class ConsumerIdempotencyService:
         tenant_id: uuid.UUID,
         instance_id: uuid.UUID | None = None,
         lease_ttl: int | None = _UNSET,  # type: ignore[assignment]
+        causal_root_id: uuid.UUID | None = None,
     ) -> bool:
         """
         Attempt to claim processing rights for an event.
@@ -61,6 +62,8 @@ class ConsumerIdempotencyService:
         lease_ttl not provided → default TTL from settings (recoverable by default).
         lease_ttl=None         → infinite lease, reclaim() cannot recover this claim.
         lease_ttl=N            → custom TTL in seconds.
+        causal_root_id         → propagated from Redis Stream payload (ADR-0015/0016).
+                                  Enables post-archival causal queries without OutboxRecord JOIN.
         """
         if lease_ttl is _UNSET:
             effective_ttl: int | None = _LEASE_TTL
@@ -75,6 +78,7 @@ class ConsumerIdempotencyService:
                 tenant_id=tenant_id,
                 claimed_by_instance_id=instance_id,
                 lease_expires_at=lease_expires_at,
+                causal_root_id=causal_root_id,
             )
             return True
         except IntegrityError:

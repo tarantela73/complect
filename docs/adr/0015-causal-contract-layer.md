@@ -71,6 +71,28 @@ leaf nodes и partial chains. Это принятый компромисс (си
 
 ---
 
+## Consistency Model — явное определение
+
+**Система обеспечивает _eventual causal consistency_, а не _strict causal consistency_.**
+
+Инварианты (Invariant 1–3) проверяются на трёх уровнях:
+
+1. **Write-time** — `push_to_outbox()` устанавливает `causal_root_id`; `execute_task_replay()` его сохраняет
+2. **Archive-time** — pre-archive check для Invariant 1 (Fence reference check)
+3. **Query-time** — `CausalQueryService` возвращает `chain_complete` как индикатор целостности
+
+Нет единой транзакционной enforcement boundary, которая охватывает все три инварианта одновременно.
+Это осознанный компромисс: строгая causal consistency потребует distributed lock или serializable
+isolation через все таблицы при каждом write — несовместимо с throughput требованиями outbox pipeline.
+
+**Следствие:** между write-time установкой `causal_root_id` и archive-time проверкой Fence
+существует window временного рассогласования. В этом window Invariant 1 технически нарушим
+если два конкурирующих процесса (archive job + dispatcher) не скоординированы.
+
+Митигация: `archive_processed_outbox_records_task` использует `SKIP LOCKED` — архивируется
+только то, что не находится в активной обработке. Window рассогласования ограничен
+временем одного dispatch batch (< 1s при нормальной работе).
+
 ---
 
 ## CausalUnit — определение
@@ -146,7 +168,7 @@ class CausalUnit:
 Какие поля `CausalUnit` каждый слой обязан **принять на вход** и **передать без изменений**:
 
 | Слой | outbox_record_id | causal_root_id | correlation_id | aggregate_seq | tenant_id |
-|---|---|---|---|---|---|
+| ---- | ---------------- | -------------- | -------------- | ------------- | --------- |
 | `TransactionalOutboxService.push_to_outbox()` | генерирует | = outbox_record_id (если нет) | propagates | allocates | propagates |
 | `outbox_dispatcher.py` → Celery payload | propagates | propagates | propagates | propagates | propagates |
 | `ConsumerIdempotencyService.claim()` | links | — (не хранит) | — (не хранит) | — (не хранит) | stores |
@@ -239,6 +261,7 @@ def push_to_outbox(
 ## Review Date
 
 Пересмотреть при:
+
 - Введении Event Sourcing: `causal_root_id` семантика потребует расширения для event streams.
 - P99 инцидент где lineage восстановить невозможно несмотря на этот ADR: значит, пропущен
   слой, не попавший в таблицу сохранения полей.

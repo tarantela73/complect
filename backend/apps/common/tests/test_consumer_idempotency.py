@@ -358,17 +358,27 @@ class TestConsumerHeartbeat:
         assert ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_b) is False
 
     def test_heartbeat_expired_lease_returns_false(self):
-        """heartbeat() on an already-expired lease must fail — it may have been reclaimed."""
+        """heartbeat() on a lease expired beyond the grace window must fail.
+
+        Grace window = TTL/10. With TTL=300s the window is 30s.
+        Setting lease_expires_at = now() - 31s puts it strictly outside the grace
+        window, so the heartbeat filter finds no matching row and returns False.
+        A 1s-expired lease would still be within the grace window and succeed —
+        that is intentional behaviour (absorbs clock skew/jitter at the boundary).
+        """
         from datetime import timedelta
         from django.utils import timezone as tz
 
+        ttl = 300
+        grace = ttl // 10  # 30s
+
         event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id, lease_ttl=300)
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id, lease_ttl=ttl)
         ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").update(
-            lease_expires_at=tz.now() - timedelta(seconds=1)
+            lease_expires_at=tz.now() - timedelta(seconds=grace + 1)
         )
 
-        assert ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_id) is False
+        assert ConsumerIdempotencyService.heartbeat(event_id, "svc", instance_id, lease_ttl=ttl) is False
 
     def test_heartbeat_does_not_raise(self):
         """heartbeat() must never propagate exceptions."""
@@ -376,6 +386,44 @@ class TestConsumerHeartbeat:
             ConsumerIdempotencyService.heartbeat(uuid.uuid4(), "svc", uuid.uuid4())
         except Exception as exc:
             pytest.fail(f"heartbeat() raised unexpectedly: {exc}")
+
+
+# ── Causal root propagation (ADR-0015/0016) ───────────────────────────────────
+
+@pytest.mark.django_db
+class TestClaimCausalRootPropagation:
+
+    def test_claim_stores_causal_root_id(self):
+        """causal_root_id passed to claim() must be persisted on ProcessedEvent."""
+        event_id, tenant_id, root_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(
+            event_id, "svc", tenant_id, causal_root_id=root_id
+        )
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.causal_root_id == root_id
+
+    def test_claim_without_causal_root_id_stores_null(self):
+        """Backward compat: claim() without causal_root_id stores NULL."""
+        event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
+        record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
+        assert record.causal_root_id is None
+
+    def test_repair_flow_causal_root_differs_from_outbox_record_id(self):
+        """
+        Repair/compensation events: causal_root_id == original root, not the repair record id.
+        This validates the two-identity model (ADR-0015): execution identity ≠ causal identity.
+        """
+        original_root_id = uuid.uuid4()
+        repair_event_id = uuid.uuid4()  # different from original_root_id
+        tenant_id = uuid.uuid4()
+
+        ConsumerIdempotencyService.claim(
+            repair_event_id, "svc", tenant_id, causal_root_id=original_root_id
+        )
+        record = ProcessedEvent.objects.get(outbox_record_id=repair_event_id, consumer="svc")
+        assert record.causal_root_id == original_root_id
+        assert record.outbox_record_id != record.causal_root_id
 
 
 # ── Coalescing wake-up (fix 5.1) ─────────────────────────────────────────────

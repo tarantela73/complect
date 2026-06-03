@@ -68,3 +68,93 @@ class TestCeleryStreamsDlqMesh:
             )
 
         assert len(AdminDlqManagementService.inspect_dead_letters(count=1)) == 0
+
+    def test_causal_root_id_preserved_in_dlq_stream(self):
+        """
+        causal_root_id passed in task headers must be written to the DLQ stream
+        and returned by inspect_dead_letters() (ADR-0015 Invariant 2).
+        """
+        redis_client = settings.REDIS_CLIENT
+        stream_name = "infrastructure:dlq:stream"
+        redis_client.delete(stream_name)
+
+        task_uuid = str(uuid.uuid4())
+        corr_uuid = uuid.uuid4()
+        causal_root_uuid = uuid.uuid4()
+
+        einfo_mock = MagicMock()
+        einfo_mock.traceback = "Traceback lines..."
+
+        dlq_fail_stub_task.push_request(
+            retries=5,
+            headers={"correlation_id": str(corr_uuid), "causal_root_id": str(causal_root_uuid)},
+        )
+        try:
+            dlq_fail_stub_task.on_failure(
+                exc=ValueError("Causal failure"),
+                task_id=task_uuid,
+                args=[99],
+                kwargs={},
+                einfo=einfo_mock,
+            )
+        finally:
+            dlq_fail_stub_task.pop_request()
+
+        records = AdminDlqManagementService.inspect_dead_letters(count=1)
+        assert len(records) == 1
+        assert records[0]["causal_root_id"] == str(causal_root_uuid)
+
+    def test_causal_root_id_propagated_on_replay(self):
+        """
+        execute_task_replay() must include causal_root_id in task headers so the
+        replayed task inherits the original causal chain (ADR-0015 Invariant 2).
+        """
+        redis_client = settings.REDIS_CLIENT
+        stream_name = "infrastructure:dlq:stream"
+        redis_client.delete(stream_name)
+
+        task_uuid = str(uuid.uuid4())
+        corr_uuid = uuid.uuid4()
+        causal_root_uuid = uuid.uuid4()
+
+        einfo_mock = MagicMock()
+        einfo_mock.traceback = "..."
+
+        dlq_fail_stub_task.push_request(
+            retries=5,
+            headers={"correlation_id": str(corr_uuid), "causal_root_id": str(causal_root_uuid)},
+        )
+        try:
+            dlq_fail_stub_task.on_failure(
+                exc=ValueError("x"),
+                task_id=task_uuid,
+                args=[1],
+                kwargs={},
+                einfo=einfo_mock,
+            )
+        finally:
+            dlq_fail_stub_task.pop_request()
+
+        records = AdminDlqManagementService.inspect_dead_letters(count=1)
+        seq_id = records[0]["sequence_id"]
+
+        _current_execution_context.set(
+            {
+                "user_id": uuid.uuid4(),
+                "request_id": uuid.uuid4(),
+                "correlation_id": corr_uuid,
+            }
+        )
+
+        with patch("config.celery.app.send_task") as mock_send_task:
+            AdminDlqManagementService.execute_task_replay(seq_id)
+            mock_send_task.assert_called_once_with(
+                name="apps.common.tasks.dlq_fail_stub",
+                args=[1],
+                kwargs={},
+                task_id=task_uuid,
+                headers={
+                    "correlation_id": str(corr_uuid),
+                    "causal_root_id": str(causal_root_uuid),
+                },
+            )

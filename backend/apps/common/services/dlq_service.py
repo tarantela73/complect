@@ -31,6 +31,8 @@ class AdminDlqManagementService:
                 "exception_message": fields["exception_message"],
                 "failed_at": fields.get("failed_at", ""),
                 "correlation_id": fields["correlation_id"],
+                # causal_root_id: logical chain root from ADR-0015. Empty string = pre-ADR-0015 record.
+                "causal_root_id": fields.get("causal_root_id", ""),
             }
             for seq_id, fields in raw_records
         ]
@@ -63,23 +65,31 @@ class AdminDlqManagementService:
         kwargs = json.loads(fields["kwargs"])
         task_id = fields["task_id"]
         corr_id = fields["correlation_id"]
+        # Propagate causal_root_id unchanged so the replayed task inherits the original
+        # causal chain (ADR-0015 Invariant 2: DLQ Causal Preservation).
+        causal_root_id = fields.get("causal_root_id", "")
 
         logger.info(
             "DLQ_REPLAY_START",
             task_name=task_name,
             sequence_id=sequence_id,
             triggered_by=sre_ctx.get("user_id"),
+            causal_root_id=causal_root_id or None,
         )
 
         # -------------------------
         # 3. DISPATCH TO CELERY
         # -------------------------
+        headers: dict = {"correlation_id": corr_id}
+        if causal_root_id:
+            headers["causal_root_id"] = causal_root_id
+
         celery_app.send_task(
             name=task_name,
             args=args,
             kwargs=kwargs,
             task_id=task_id,
-            headers={"correlation_id": corr_id},
+            headers=headers,
         )
 
         # -------------------------

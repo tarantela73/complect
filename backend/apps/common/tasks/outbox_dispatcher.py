@@ -82,6 +82,10 @@ def run_outbox_polling_dispatcher_task() -> None:
                             # Canonical deduplication key for consumers (at-least-once guarantee).
                             # Consumers MUST ignore events already processed by this ID.
                             "outbox_record_id": str(record.id),
+                            # causal_root_id: stable logical root of the causal chain (ADR-0015).
+                            # Equals outbox_record_id for normal events; differs for repair/compensation.
+                            # Falls back to outbox_record_id for pre-ADR-0015 records (causal_root_id=NULL).
+                            "causal_root_id": str(record.causal_root_id) if record.causal_root_id else str(record.id),
                             "event_type": record.event_type,
                             "correlation_id": str(record.correlation_id),
                             "payload": json.dumps(record.payload_json),
