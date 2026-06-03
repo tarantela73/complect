@@ -89,6 +89,36 @@ class _FailingConsumer(BaseDomainConsumer):
         raise RuntimeError("domain_error")
 
 
+class _EmissionEnforcedConsumer(BaseDomainConsumer):
+    consumer_name = "test.emission_consumer"
+    ordering_mode = "STRICT"
+    handled_event_types = frozenset({"contracts.ContractClosed"})
+    expected_emissions = frozenset({"fake.EmittedEvent"})
+
+    def __init__(self, *, should_emit: bool = True):
+        super().__init__()
+        self._should_emit = should_emit
+
+    def process(self, event: StreamEvent) -> None:
+        if self._should_emit:
+            OutboxRecord.objects.create(
+                event_type="fake.EmittedEvent",
+                payload_json={"tenant_id": str(event.tenant_id)},
+                correlation_id=event.correlation_id,
+                causal_root_id=uuid.uuid4(),
+                is_processed=False,
+            )
+
+
+class _ConditionalEmissionConsumer(_EmissionEnforcedConsumer):
+    """Requires emission only when payload contains require=True."""
+
+    consumer_name = "test.conditional_emission_consumer"
+
+    def _emission_required(self, event: StreamEvent) -> bool:
+        return bool(event.payload.get("require", True))
+
+
 # ---------------------------------------------------------------------------
 # StreamEvent construction
 # ---------------------------------------------------------------------------
@@ -340,6 +370,73 @@ class TestRunBatch:
 
 
 # ---------------------------------------------------------------------------
+# Emission enforcement
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestEmissionVerification:
+
+    def test_passes_when_expected_emission_exists(self):
+        consumer = _EmissionEnforcedConsumer(should_emit=True)
+        rec = _make_outbox()
+        consumer.handle(rec)
+        assert ProcessedEvent.objects.filter(
+            outbox_record_id=rec.id,
+            consumer=consumer.consumer_name,
+            acked_at__isnull=False,
+        ).exists()
+
+    def test_raises_when_emission_missing(self):
+        from apps.common.services.consumer_base import CausalEmissionMissingError
+
+        consumer = _EmissionEnforcedConsumer(should_emit=False)
+        rec = _make_outbox()
+        with pytest.raises(CausalEmissionMissingError) as exc_info:
+            consumer.handle(rec)
+        assert "fake.EmittedEvent" in str(exc_info.value.missing_event_types)
+
+    def test_missing_emission_routes_incident(self):
+        from apps.common.services.consumer_base import CausalEmissionMissingError
+
+        consumer = _EmissionEnforcedConsumer(should_emit=False)
+        rec = _make_outbox()
+        with patch(
+            "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
+        ) as mock_route:
+            mock_decision = MagicMock()
+            mock_decision.structlog_labels = {}
+            mock_route.return_value = mock_decision
+            with pytest.raises(CausalEmissionMissingError):
+                consumer.handle(rec)
+        mock_route.assert_called_once()
+
+    def test_predicate_false_suppresses_check(self):
+        rec_id = uuid.uuid4()
+        rec = OutboxRecord.objects.create(
+            id=rec_id,
+            event_type="contracts.ContractClosed",
+            payload_json={"tenant_id": str(_TENANT), "require": False},
+            correlation_id=uuid.uuid4(),
+            causal_root_id=rec_id,
+            is_processed=True,
+        )
+        consumer = _ConditionalEmissionConsumer(should_emit=False)
+        consumer.handle(rec)
+        assert ProcessedEvent.objects.filter(
+            outbox_record_id=rec.id,
+            consumer=consumer.consumer_name,
+            acked_at__isnull=False,
+        ).exists()
+
+    def test_none_expected_emissions_skips_all_checks(self):
+        # _StrictConsumer.expected_emissions is None — no check, no error
+        consumer = _StrictConsumer()
+        rec = _make_outbox()
+        consumer.handle(rec)
+        assert len(consumer.processed) == 1
+
+
+# ---------------------------------------------------------------------------
 # FinanceContractClosedConsumer (integration)
 # ---------------------------------------------------------------------------
 
@@ -443,6 +540,40 @@ class TestFinanceContractClosedConsumer:
         consumer.handle(rec)
 
         assert not Transaction.objects.filter(contract_id=contract_id).exists()
+
+    def test_emission_predicate_false_for_zero_balance(self):
+        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
+
+        consumer = FinanceContractClosedConsumer()
+        event = StreamEvent(
+            outbox_record_id=uuid.uuid4(),
+            causal_root_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            tenant_id=_TENANT,
+            aggregate_id=None,
+            aggregate_type=None,
+            aggregate_seq=None,
+            event_type="contracts.ContractClosed",
+            payload={"remaining_amount": 0},
+        )
+        assert consumer._emission_required(event) is False
+
+    def test_emission_predicate_true_for_positive_balance(self):
+        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
+
+        consumer = FinanceContractClosedConsumer()
+        event = StreamEvent(
+            outbox_record_id=uuid.uuid4(),
+            causal_root_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            tenant_id=_TENANT,
+            aggregate_id=None,
+            aggregate_type=None,
+            aggregate_seq=None,
+            event_type="contracts.ContractClosed",
+            payload={"remaining_amount": 500},
+        )
+        assert consumer._emission_required(event) is True
 
     def test_causal_chain_complete_after_processing(self):
         """TransactionPostedEvent outbox record shares causal_root_id with ContractClosedEvent."""

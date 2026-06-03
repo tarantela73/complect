@@ -13,6 +13,7 @@ import uuid
 import structlog
 
 from apps.common.events.contracts import ContractClosedEvent
+from apps.common.events.finance import TransactionPostedEvent
 from apps.common.services.consumer_base import BaseDomainConsumer, StreamEvent
 from apps.common.tasks import BaseEnterpriseTask
 from config.celery import app
@@ -24,6 +25,10 @@ class FinanceContractClosedConsumer(BaseDomainConsumer):
     consumer_name = "finance.contract_closed_consumer"
     ordering_mode = "STRICT"
     handled_event_types = frozenset({ContractClosedEvent.EVENT_TYPE})
+    expected_emissions = frozenset({TransactionPostedEvent.EVENT_TYPE})
+
+    def _emission_required(self, event: StreamEvent) -> bool:
+        return int(event.payload.get("remaining_amount", 0)) > 0
 
     def process(self, event: StreamEvent) -> None:
         from apps.common.context.core import set_tenant_id

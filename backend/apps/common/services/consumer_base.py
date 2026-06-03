@@ -9,6 +9,11 @@ Two ordering modes:
   STRICT — Mode A. No fence check. Ordering guaranteed operationally by single-concurrency
             worker on the Finance Celery queue (ADR-0012 Slot Locking Invariant).
   FENCED  — Mode B. AggregateSequenceFenceService.advance() discards stale snapshots.
+
+Emission enforcement:
+  Subclasses may declare expected_emissions (frozenset of EVENT_TYPE strings) to enable
+  execution-time causal correctness checks. Override _emission_required() to make the
+  check conditional on event payload (e.g. skip when remaining_amount == 0).
 """
 from __future__ import annotations
 
@@ -26,6 +31,31 @@ if TYPE_CHECKING:
     from apps.common.models.outbox import OutboxRecord
 
 logger = structlog.get_logger(__name__)
+
+
+class CausalEmissionMissingError(Exception):
+    """
+    Raised by BaseDomainConsumer._verify_emission() when process() completed
+    without writing an expected outbox event.
+
+    Routed to IncidentRoutingPolicy before re-raise — same path as process() failures.
+    """
+
+    def __init__(
+        self,
+        *,
+        consumer: str,
+        outbox_record_id: uuid.UUID,
+        correlation_id: uuid.UUID,
+        missing_event_types: frozenset[str],
+    ) -> None:
+        self.consumer = consumer
+        self.outbox_record_id = outbox_record_id
+        self.correlation_id = correlation_id
+        self.missing_event_types = missing_event_types
+        super().__init__(
+            f"Consumer {consumer!r} completed without emitting: {missing_event_types}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,12 +94,22 @@ class BaseDomainConsumer(ABC):
     ordering_mode: ClassVar[Literal["STRICT", "FENCED"]]
     handled_event_types: ClassVar[frozenset[str]]
     supports_repair: ClassVar[bool] = True
+    # Declare to enable execution-time causal emission enforcement.
+    # Override _emission_required() to make the check conditional on event payload.
+    expected_emissions: ClassVar[frozenset[str] | None] = None
 
     def __init__(self) -> None:
         self._instance_id = uuid.uuid4()
 
     @abstractmethod
     def process(self, event: StreamEvent) -> None: ...
+
+    def _emission_required(self, event: StreamEvent) -> bool:
+        """
+        Override to make emission enforcement conditional on event payload.
+        Default: required whenever expected_emissions is declared on the class.
+        """
+        return self.expected_emissions is not None
 
     @classmethod
     def _domain(cls) -> str:
@@ -155,6 +195,9 @@ class BaseDomainConsumer(ABC):
 
             self.process(event)
 
+            if self.expected_emissions is not None and self._emission_required(event):
+                self._verify_emission(event)
+
             ConsumerIdempotencyService.ack(
                 outbox_record_id=event.outbox_record_id,
                 consumer=self.consumer_name,
@@ -207,6 +250,32 @@ class BaseDomainConsumer(ABC):
             self.handle(record)
 
         return len(records)
+
+    def _verify_emission(self, event: StreamEvent) -> None:
+        """
+        Called after process() when emission enforcement is active.
+
+        Queries outbox by correlation_id — safe because process() commits its inner
+        @atomic before returning, making the outbox record visible on the same connection.
+        """
+        from apps.common.models.outbox import OutboxRecord as _OutboxRecord
+
+        assert self.expected_emissions is not None  # guarded by caller
+        missing = frozenset(
+            et
+            for et in self.expected_emissions
+            if not _OutboxRecord.objects.filter(
+                correlation_id=event.correlation_id,
+                event_type=et,
+            ).exists()
+        )
+        if missing:
+            raise CausalEmissionMissingError(
+                consumer=self.consumer_name,
+                outbox_record_id=event.outbox_record_id,
+                correlation_id=event.correlation_id,
+                missing_event_types=missing,
+            )
 
     def _route_incident(self, event: StreamEvent, exc: Exception) -> None:
         from apps.common.services.incident_routing import IncidentContext, IncidentRoutingPolicy
