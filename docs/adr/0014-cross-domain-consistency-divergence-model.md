@@ -1,7 +1,7 @@
 # ADR-0014: Cross-Domain Consistency Divergence Model & Resolution Policy
 
 **Date:** 2026-06-03
-**Status:** Proposed
+**Status:** Accepted
 **Author(s):** Platform / Common Infrastructure
 **Deciders:** Platform Team
 

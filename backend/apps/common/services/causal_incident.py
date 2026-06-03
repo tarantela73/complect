@@ -90,8 +90,8 @@ class CausalIncidentClassifier:
       2. EXECUTION_DUPLICATION      → duplicate_ack_count > 1
       3. LOSS_OF_CAUSALITY          → archived_nodes present, chain incomplete
       4. PARTIAL_PROPAGATION_FAILURE→ dlq_nodes present, no archived nodes
-      5. DIVERGENCE / SILENT_SKIP   → domain registry provided, chain complete
-      6. ORDERING_VIOLATION         → future (ADR-0012), always None in Phase 1
+      5. DIVERGENCE / SILENT_SKIP   → domain registry provided, chain complete (ADR-0014)
+      6. ORDERING_VIOLATION         → gap in aggregate_seq per aggregate (ADR-0012)
       7. Unclassified               → None
     """
 

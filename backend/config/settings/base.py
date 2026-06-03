@@ -164,6 +164,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 86400.0,  # daily
         "options": {"queue": "retention"},
     },
+    "causal-pair-slo-monitor": {
+        "task": "apps.common.tasks.causal_pair_monitor.check_causal_pair_slo_task",
+        "schedule": 60.0,  # every 60 seconds — observability only, no repair
+        "options": {"queue": "notifications"},
+    },
 }
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
