@@ -10,6 +10,7 @@ import pytest
 from apps.common.services.causal_incident import CausalIncident
 from apps.common.services.incident_routing import (
     IncidentBundle,
+    IncidentContext,
     IncidentRoutingPolicy,
     RoutingDecision,
 )
@@ -247,9 +248,7 @@ class TestEdgeCases:
 
     def test_empty_bundle_raises(self):
         with pytest.raises(ValueError, match="empty"):
-            IncidentRoutingPolicy.route(
-                IncidentBundle(incidents=frozenset(), causal_root_id=_ROOT, is_compound=False)
-            )
+            IncidentRoutingPolicy.route(IncidentContext(incidents=(), causal_root_id=_ROOT))
 
     def test_routing_decision_is_immutable(self):
         b = _bundle(_incident("LOSS_OF_CAUSALITY"))
@@ -257,10 +256,10 @@ class TestEdgeCases:
         with pytest.raises((AttributeError, TypeError)):
             d.owner_team = "hacked"  # type: ignore[misc]
 
-    def test_incident_bundle_is_immutable(self):
+    def test_incident_context_is_immutable(self):
         b = _bundle(_incident("LOSS_OF_CAUSALITY"))
         with pytest.raises((AttributeError, TypeError)):
-            b.is_compound = True  # type: ignore[misc]
+            b.causal_root_id = uuid.uuid4()  # type: ignore[misc]
 
     def test_from_incidents_factory(self):
         i1 = _incident("LOSS_OF_CAUSALITY")
@@ -273,3 +272,108 @@ class TestEdgeCases:
     def test_single_incident_from_factory(self):
         b = IncidentBundle.from_incidents(frozenset({_incident("LOSS_OF_CAUSALITY")}), _ROOT)
         assert b.is_compound is False
+
+
+class TestCompoundNewRule:
+    """New compound rule: len(incidents)>1 OR len(domains)>1 OR (divergence AND slo_violated)."""
+
+    def test_single_incident_cross_domain_is_compound(self):
+        inc = _incident("DIVERGENCE", domains=frozenset({"finance", "contracts"}))
+        ctx = IncidentContext(incidents=(inc,), causal_root_id=_ROOT)
+        assert ctx.is_compound is True
+
+    def test_divergence_plus_chain_slo_is_compound(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            divergence_state="DETECTABLE",
+            chain_slo_violated=True,
+        )
+        assert ctx.is_compound is True
+
+    def test_divergence_alone_not_compound(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            divergence_state="DETECTABLE",
+            chain_slo_violated=False,
+        )
+        assert ctx.is_compound is False
+
+    def test_chain_slo_alone_not_compound(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            chain_slo_violated=True,
+        )
+        assert ctx.is_compound is False
+
+    def test_compound_divergence_plus_slo_structlog_labels(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            divergence_state="IRREVERSIBLE",
+            chain_slo_violated=True,
+            affected_domains=frozenset({"finance"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert d.compound is True
+        assert d.structlog_labels["incident.divergence_state"] == "IRREVERSIBLE"
+        assert d.structlog_labels["incident.chain_slo_violated"] == "true"
+
+
+class TestMonitoringOnlyRouting:
+    """Routing paths with no CausalIncident objects — SLO monitors and task failures."""
+
+    def test_causal_pair_violation_routes_to_finance(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            divergence_state="DETECTABLE",
+            causal_pair_violations=frozenset({"contract_closed → finance_transaction_posted"}),
+            affected_domains=frozenset({"finance", "contracts"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert d.owner_team == "finance_domain"
+        assert "platform_sre" in d.escalation_path
+
+    def test_chain_slo_violated_routes_to_platform_sre(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            chain_slo_violated=True,
+            affected_domains=frozenset({"infrastructure"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert d.owner_team == "platform_sre"
+
+    def test_pair_violations_in_structlog_labels(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            causal_pair_violations=frozenset({"pair_A", "pair_B"}),
+            affected_domains=frozenset({"contracts"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert "pair_A" in d.structlog_labels["incident.pair_violations"]
+        assert "pair_B" in d.structlog_labels["incident.pair_violations"]
+
+    def test_monitoring_only_never_requires_incident_commander(self):
+        ctx = IncidentContext(
+            incidents=(),
+            causal_root_id=_ROOT,
+            divergence_state="DETECTABLE",
+            chain_slo_violated=True,
+            affected_domains=frozenset({"finance", "contracts"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert d.requires_incident_commander is False
+
+    def test_incident_root_absent_produces_empty_string_label(self):
+        ctx = IncidentContext(
+            incidents=(),
+            chain_slo_violated=True,
+            affected_domains=frozenset({"infrastructure"}),
+        )
+        d = IncidentRoutingPolicy.route(ctx)
+        assert d.structlog_labels["incident.root"] == ""

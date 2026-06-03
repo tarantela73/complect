@@ -1,8 +1,18 @@
 # backend/apps/common/tasks/__init__.py
+import uuid
+
 import structlog
 from celery import Task
 
 logger = structlog.get_logger(__name__)
+
+
+def _domain_from_task_name(task_name: str) -> str:
+    """apps.finance.tasks.X → finance; anything else → infrastructure."""
+    parts = (task_name or "").split(".")
+    if len(parts) >= 2 and parts[0] == "apps":
+        return parts[1]
+    return "infrastructure"
 
 
 class BaseEnterpriseTask(Task):
@@ -45,4 +55,25 @@ class BaseEnterpriseTask(Task):
         except Exception as e:
             logger.error("DLQ_WRITE_FAILED", error=str(e))
 
+        self._emit_routing_decision(causal_root_id, correlation_id)
         super().on_failure(exc, task_id, args, kwargs, einfo)
+
+    def _emit_routing_decision(
+        self,
+        causal_root_id: str | None,
+        correlation_id: str | None,
+    ) -> None:
+        from apps.common.services.incident_routing import IncidentContext, IncidentRoutingPolicy
+
+        try:
+            ctx = IncidentContext(
+                incidents=(),
+                causal_root_id=uuid.UUID(causal_root_id) if causal_root_id else None,
+                correlation_id=uuid.UUID(correlation_id) if correlation_id else None,
+                chain_slo_violated=True,
+                affected_domains=frozenset({_domain_from_task_name(self.name or "")}),
+            )
+            decision = IncidentRoutingPolicy.route(ctx)
+            logger.warning("task_failure_routed", **decision.structlog_labels)
+        except Exception as routing_err:
+            logger.error("task_failure_routing_error", error=str(routing_err))

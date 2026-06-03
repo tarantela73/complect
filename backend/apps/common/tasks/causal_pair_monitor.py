@@ -5,11 +5,22 @@ from django.conf import settings
 from django.utils import timezone as tz
 
 from apps.common.models.outbox import OutboxRecord
-from apps.common.services.causal_pair_registry import CAUSAL_PAIRS, CausalDivergenceClassifier
+from apps.common.services.causal_pair_registry import CAUSAL_PAIRS, CausalDivergenceClassifier, CausalPairDefinition
+from apps.common.services.incident_routing import IncidentContext, IncidentRoutingPolicy
 from apps.common.tasks import BaseEnterpriseTask
 from config.celery import app
 
 logger = structlog.get_logger(__name__)
+
+
+def _domains_from_pair(pair_def: CausalPairDefinition) -> frozenset[str]:
+    """Extract domain prefixes from event type strings: 'contracts.X' → 'contracts'."""
+    domains: set[str] = set()
+    for event_type in (pair_def.source_event, pair_def.expected_event):
+        parts = event_type.split(".", 1)
+        if len(parts) == 2:
+            domains.add(parts[0])
+    return frozenset(domains)
 
 
 @app.task(base=BaseEnterpriseTask, queue="notifications")
@@ -48,6 +59,14 @@ def check_causal_pair_slo_task() -> None:
                     source_created_at=source["created_at"],
                     reference_time=now,
                 )
+                ctx = IncidentContext(
+                    incidents=(),
+                    causal_root_id=root_id,
+                    divergence_state=divergence_state,
+                    causal_pair_violations=frozenset({pair_def.name}),
+                    affected_domains=_domains_from_pair(pair_def),
+                )
+                decision = IncidentRoutingPolicy.route(ctx)
                 logger.warning(
                     "causal_pair_slo_violation",
                     pair_name=pair_def.name,
@@ -57,4 +76,5 @@ def check_causal_pair_slo_task() -> None:
                     causal_root_id=str(root_id),
                     divergence_state=divergence_state,
                     age_seconds=int((now - source["created_at"]).total_seconds()),
+                    **decision.structlog_labels,
                 )

@@ -127,8 +127,17 @@ def run_chain_completeness_monitor_task() -> None:
     )
 
     if metrics["slo_violated"]:
+        from apps.common.services.incident_routing import IncidentContext, IncidentRoutingPolicy
+
+        ctx = IncidentContext(
+            incidents=(),
+            chain_slo_violated=True,
+            affected_domains=frozenset({"infrastructure"}),
+        )
+        decision = IncidentRoutingPolicy.route(ctx)
         logger.error(
             "chain_completeness_slo_violated",
             completeness_rate=metrics["completeness_rate"],
             incomplete_chains=metrics["incomplete_chains"],
+            **decision.structlog_labels,
         )
