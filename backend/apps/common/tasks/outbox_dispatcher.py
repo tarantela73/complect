@@ -20,6 +20,24 @@ MAX_PUBLISH_RETRIES: int = getattr(settings, "OUTBOX_MAX_PUBLISH_RETRIES", 5)
 _BACKOFF_BASE: int = getattr(settings, "OUTBOX_BACKOFF_BASE_SECONDS", 30)
 _BACKOFF_CAP: int = getattr(settings, "OUTBOX_BACKOFF_MAX_SECONDS", 300)
 
+# Mode A (ADR-0012): aggregate types that require serial dispatch.
+# Events for these types are routed to per-slot streams processed by
+# a single-concurrency worker — guarantees per-slot FIFO within a slot.
+SERIAL_DISPATCH_AGGREGATE_TYPES: frozenset[str] = frozenset(
+    getattr(settings, "SERIAL_DISPATCH_AGGREGATE_TYPES", {"finance.transaction", "finance.balance"})
+)
+_N_ROUTING_SLOTS: int = getattr(settings, "OUTBOX_SERIAL_ROUTING_SLOTS", 256)
+
+
+def _routing_stream(record: OutboxRecord, tenant_id_str: str) -> str:
+    if (
+        record.aggregate_type in SERIAL_DISPATCH_AGGREGATE_TYPES
+        and record.aggregate_id is not None
+    ):
+        slot = record.aggregate_id.int % _N_ROUTING_SLOTS
+        return f"erp:streams:serial:{slot}"
+    return f"erp:streams:tenant:{tenant_id_str}"
+
 # Injectable clock — patch in tests to advance time without DB manipulation.
 _clock = tz.now
 
@@ -74,8 +92,7 @@ def run_outbox_polling_dispatcher_task() -> None:
                 publish_error = None
                 try:
                     tenant_id_str = str(record.payload_json.get("tenant_id", "global"))
-                    stream_name = f"erp:streams:tenant:{tenant_id_str}"
-
+                    stream_name = _routing_stream(record, tenant_id_str)
                     redis_client.xadd(
                         name=stream_name,
                         fields={
@@ -88,6 +105,11 @@ def run_outbox_polling_dispatcher_task() -> None:
                             "causal_root_id": str(record.causal_root_id) if record.causal_root_id else str(record.id),
                             "event_type": record.event_type,
                             "correlation_id": str(record.correlation_id),
+                            # Aggregate causal integrity fields (ADR-0012).
+                            # aggregate_seq="" means pre-ADR-0012 record; consumer fence check skips.
+                            "aggregate_id": str(record.aggregate_id) if record.aggregate_id else "",
+                            "aggregate_type": record.aggregate_type or "",
+                            "aggregate_seq": str(record.aggregate_seq) if record.aggregate_seq is not None else "",
                             "payload": json.dumps(record.payload_json),
                         },
                         id="*",

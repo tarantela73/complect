@@ -58,7 +58,7 @@ class TestCeleryStreamsDlqMesh:
         )
 
         with patch("config.celery.app.send_task") as mock_send_task:
-            AdminDlqManagementService.execute_task_replay(record["sequence_id"])
+            repair_token = AdminDlqManagementService.execute_task_replay(record["sequence_id"])
             mock_send_task.assert_called_once_with(
                 name="apps.common.tasks.dlq_fail_stub",
                 args=[42],
@@ -67,6 +67,12 @@ class TestCeleryStreamsDlqMesh:
                 headers={"correlation_id": str(corr_uuid)},
             )
 
+        # ADR-0013 Gap A fix: record persists after replay, not deleted until mark_repaired().
+        assert repair_token
+        assert len(AdminDlqManagementService.inspect_dead_letters(count=1)) == 1
+
+        # Explicit operator sign-off clears the DLQ record.
+        AdminDlqManagementService.mark_repaired(record["sequence_id"], operator_id="test-operator")
         assert len(AdminDlqManagementService.inspect_dead_letters(count=1)) == 0
 
     def test_causal_root_id_preserved_in_dlq_stream(self):

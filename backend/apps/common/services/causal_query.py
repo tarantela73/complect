@@ -273,33 +273,106 @@ class CausalQueryService:
     def get_aggregate_history(
         tenant_id: uuid.UUID,
         aggregate_type: str,
-        aggregate_id: str,
+        aggregate_id: uuid.UUID,
         queried_by: str,
         cursor: int | None = None,
         limit: int = 50,
     ) -> CausalChain:
         """
-        Class C: aggregate event history ordered by aggregate_seq.
+        Class C: aggregate event history ordered by aggregate_seq (ADR-0012).
 
-        Blocked on ADR-0012 — OutboxRecord does not yet have aggregate_seq field.
-        Returns empty chain with missing_layers=("aggregate_seq_unavailable",).
+        Cursor pagination: WHERE aggregate_seq < cursor ORDER BY aggregate_seq DESC.
+        Only returns records with aggregate_seq IS NOT NULL (populated post-ADR-0012).
+
+        If no records have aggregate_seq set, returns empty chain with
+        missing_layers=("aggregate_seq_unavailable",) — call site must handle.
         """
+        qs = OutboxRecord.objects.filter(
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            aggregate_seq__isnull=False,
+            payload_json__tenant_id=str(tenant_id),
+        )
+        if cursor is not None:
+            qs = qs.filter(aggregate_seq__lt=cursor)
+
+        outbox_rows = list(
+            qs.values(
+                "id",
+                "causal_root_id",
+                "correlation_id",
+                "event_type",
+                "created_at",
+                "is_processed",
+                "failed_permanently_at",
+                "aggregate_id",
+                "aggregate_type",
+                "aggregate_seq",
+            ).order_by("-aggregate_seq")[:limit]
+        )
+
+        outbox_by_id: dict[uuid.UUID, dict] = {r["id"]: r for r in outbox_rows}
+        outbox_ids = set(outbox_by_id.keys())
+
+        pe_by_outbox_id: dict[uuid.UUID, dict] = {}
+        if outbox_ids:
+            for pe in ProcessedEvent.objects.filter(
+                outbox_record_id__in=outbox_ids,
+            ).values("outbox_record_id", "acked_at"):
+                oid = pe["outbox_record_id"]
+                existing = pe_by_outbox_id.get(oid)
+                if existing is None or (pe["acked_at"] is not None and existing["acked_at"] is None):
+                    pe_by_outbox_id[oid] = pe
+
+        nodes: list[CausalNode] = []
+        for row in outbox_by_id.values():
+            nodes.append(
+                CausalNode(
+                    outbox_record_id=row["id"],
+                    causal_root_id=row["causal_root_id"] or row["id"],
+                    correlation_id=row["correlation_id"],
+                    tenant_id=tenant_id,
+                    occurred_at=row["created_at"],
+                    event_type=row["event_type"],
+                    aggregate_id=str(row["aggregate_id"]) if row["aggregate_id"] else None,
+                    aggregate_type=row["aggregate_type"],
+                    aggregate_seq=row["aggregate_seq"],
+                    processing_status=_derive_status(row, pe_by_outbox_id),
+                    outbox_archived=False,
+                )
+            )
+
+        missing_layers: list[str] = []
+        if not nodes:
+            missing_layers.append("aggregate_seq_unavailable")
+
+        # Class C nodes are already ordered by -aggregate_seq from DB;
+        # re-sort ascending for consistent CausalChain ordering.
+        nodes.sort(key=lambda n: n.aggregate_seq or 0)
+
+        chain_complete = bool(nodes) and all(
+            n.processing_status == "acked" for n in nodes
+        )
+
+        result = CausalChain(
+            root_id=aggregate_id,
+            nodes=tuple(nodes),
+            chain_complete=chain_complete,
+            missing_layers=tuple(missing_layers),
+            queried_at=tz.now(),
+            queried_by=queried_by,
+        )
+
         logger.info(
             "causal_query_executed",
             query_class="aggregate_history",
             tenant_id=str(tenant_id),
             aggregate_type=aggregate_type,
-            aggregate_id=aggregate_id,
+            aggregate_id=str(aggregate_id),
             queried_by=queried_by,
-            chain_complete=False,
-            node_count=0,
+            chain_complete=result.chain_complete,
+            node_count=len(result.nodes),
+            cursor=cursor,
         )
 
-        return CausalChain(
-            root_id=uuid.UUID(int=0),
-            nodes=(),
-            chain_complete=False,
-            missing_layers=("aggregate_seq_unavailable",),
-            queried_at=tz.now(),
-            queried_by=queried_by,
-        )
+        return result

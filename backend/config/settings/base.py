@@ -159,6 +159,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60.0,  # every 60 seconds
         "options": {"queue": "outbox"},
     },
+    "outbox-archive": {
+        "task": "apps.common.tasks.retention_manager.archive_processed_outbox_records_task",
+        "schedule": 86400.0,  # daily
+        "options": {"queue": "retention"},
+    },
 }
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
@@ -174,6 +179,22 @@ OUTBOX_INFLIGHT_GUARD_TTL = 30
 # Consumer lease TTL (ADR-0011): default ownership window. reclaim() can take over
 # after expiry. Set per-consumer via lease_ttl= arg for long-running handlers.
 CONSUMER_LEASE_TTL_SECONDS = 300
+
+# Outbox retention (ADR-0013).
+# Normal-class records archived after this many days post-processing.
+OUTBOX_ARCHIVE_WINDOW_DAYS: int = 30
+
+# Aggregate ordering (ADR-0012).
+# Mode A: aggregate types that require serial dispatch (delta semantics).
+# Events for these types go to per-slot Redis Streams processed by a
+# single-concurrency worker. Misclassifying delta→Mode B = silent data corruption.
+SERIAL_DISPATCH_AGGREGATE_TYPES: frozenset[str] = frozenset({
+    "finance.transaction",
+    "finance.balance",
+})
+# Hash sharding for Mode A slots: hash(aggregate_id) % N. Limits Redis Stream
+# proliferation while preserving per-aggregate FIFO within a slot.
+OUTBOX_SERIAL_ROUTING_SLOTS: int = 256
 
 # Chain Completeness SLO (ADR-0017).
 # Records must have acked ProcessedEvent within this many seconds of OutboxRecord creation.

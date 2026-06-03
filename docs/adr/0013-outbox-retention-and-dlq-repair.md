@@ -1,7 +1,7 @@
 # ADR-0013: Outbox Retention Policy & Dead-Letter Repair Semantics
 
 **Date:** 2026-06-03
-**Status:** Proposed
+**Status:** Accepted
 **Author(s):** Platform / Common Infrastructure
 **Deciders:** Platform Team
 

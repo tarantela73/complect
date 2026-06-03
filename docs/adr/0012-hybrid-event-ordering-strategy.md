@@ -1,7 +1,7 @@
 # ADR-0012: Hybrid Event Ordering Strategy for Transactional Outbox
 
 **Date:** 2026-06-03
-**Status:** Proposed
+**Status:** Accepted
 **Author(s):** Platform / Common Infrastructure
 **Deciders:** Platform Team
 

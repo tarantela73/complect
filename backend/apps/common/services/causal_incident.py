@@ -153,7 +153,20 @@ class CausalIncidentClassifier:
                     # Effects observed but diverge from expected → DIVERGENCE.
                     return _make("DIVERGENCE")
 
-        # Priority 6: Ordering violation — blocked on ADR-0012 (aggregate_seq unavailable).
-        # aggregate_seq is None on all nodes until ADR-0012 ships.
+        # Priority 6: Ordering violation — gap in aggregate_seq for the same aggregate (ADR-0012).
+        # aggregate_seq is populated post-ADR-0012; pre-ADR-0012 nodes have None and are skipped.
+        seq_nodes = [n for n in chain.nodes if n.aggregate_seq is not None]
+        if seq_nodes:
+            by_aggregate: dict[tuple, list[int]] = {}
+            for n in seq_nodes:
+                by_aggregate.setdefault((n.aggregate_type, n.aggregate_id), []).append(
+                    n.aggregate_seq
+                )
+            for seqs in by_aggregate.values():
+                if len(seqs) > 1:
+                    sorted_seqs = sorted(seqs)
+                    # Contiguous check: no gap iff max - min + 1 == len.
+                    if sorted_seqs[-1] - sorted_seqs[0] + 1 != len(sorted_seqs):
+                        return _make("ORDERING_VIOLATION")
 
         return None

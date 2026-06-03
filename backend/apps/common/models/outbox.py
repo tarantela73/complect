@@ -36,6 +36,14 @@ class OutboxRecord(models.Model):
         blank=True,
     )
 
+    # Aggregate causal integrity fields (ADR-0012).
+    # aggregate_seq = None means the event's causal position in the aggregate history
+    # is unknown — a data quality gap, not an optional feature.
+    # Set by AggregateSequenceAllocator.allocate() inside the business transaction.
+    aggregate_id = models.UUIDField(null=True, blank=True)
+    aggregate_type = models.CharField(max_length=255, null=True, blank=True)
+    aggregate_seq = models.BigIntegerField(null=True, blank=True)
+
     is_processed = models.BooleanField(
         default=False,
         db_index=True,
@@ -85,6 +93,11 @@ class OutboxRecord(models.Model):
                 fields=["causal_root_id"],
                 name="outbox_causal_root_idx",
                 condition=models.Q(causal_root_id__isnull=False),
+            ),
+            models.Index(
+                fields=["aggregate_type", "aggregate_id", "aggregate_seq"],
+                name="outbox_aggregate_seq_idx",
+                condition=models.Q(aggregate_seq__isnull=False),
             ),
         ]
 
