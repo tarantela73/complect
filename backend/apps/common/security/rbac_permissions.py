@@ -58,6 +58,8 @@ PERMISSIONS: tuple[Permission, ...] = (
     # dlq (reserved for ops/admin)
     Permission("dlq", "read"),
     Permission("dlq", "write"),
+    # dashboard (overview summary — all authenticated roles)
+    Permission("dashboard", "read"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

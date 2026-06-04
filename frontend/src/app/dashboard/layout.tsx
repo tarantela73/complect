@@ -11,9 +11,11 @@ interface NavItem {
   href: string
   label: string
   permission: string
+  exact?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: '/dashboard', label: 'Главная', permission: 'dashboard.read', exact: true },
   { href: '/dashboard/contragents', label: 'Контрагенты', permission: 'contragents.read' },
   { href: '/dashboard/contracts', label: 'Договоры', permission: 'contracts.read' },
   { href: '/dashboard/finance', label: 'Финансы', permission: 'finance.read' },
@@ -24,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
 function NavLink({ item }: { item: NavItem }) {
   const canView = useCan(item.permission)
   const pathname = usePathname()
-  const isActive = pathname.startsWith(item.href)
+  const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
 
   if (!canView) return null
 

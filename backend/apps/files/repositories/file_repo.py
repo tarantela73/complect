@@ -4,7 +4,7 @@ import uuid
 
 import django.utils.timezone as tz
 from django.core.exceptions import PermissionDenied
-from django.db.models import F
+from django.db.models import Count, F
 
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.files.models.file_record import FileRecord, FileStatus
@@ -133,6 +133,19 @@ class FileRepository:
             updated_at=tz.now(),
         )
         return updated == 1
+
+    @staticmethod
+    def get_counts() -> dict:
+        qs = FileRepository.get_queryset()
+        total = qs.count()
+        by_status = {row["status"]: row["cnt"] for row in qs.values("status").annotate(cnt=Count("id"))}
+        return {
+            "total": total,
+            "available": by_status.get(FileStatus.AVAILABLE, 0),
+            "scanning": by_status.get(FileStatus.SCANNING, 0),
+            "quarantined": by_status.get(FileStatus.QUARANTINED, 0),
+            "pending": by_status.get(FileStatus.PENDING_UPLOAD, 0) + by_status.get(FileStatus.UPLOADED, 0),
+        }
 
     @staticmethod
     def soft_delete(file_id: uuid.UUID) -> bool:

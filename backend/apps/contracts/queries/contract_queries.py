@@ -5,6 +5,8 @@ Cursor pagination: WHERE id < cursor ORDER BY id DESC (ADR rule 4.11).
 import uuid
 from typing import Optional
 
+from django.db.models import Count
+
 from apps.contracts.models.contract import Contract
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.contract_dto import ContractResponseSchema
@@ -63,3 +65,16 @@ def get_contract_detail(contract_id: uuid.UUID) -> ContractResponseSchema:
     """Raises PermissionDenied if not found or wrong tenant."""
     contract = ContractRepository.get_by_id(contract_id)
     return _to_dto(contract)
+
+
+def get_contract_counts() -> dict:
+    qs = ContractRepository.get_queryset()
+    total = qs.count()
+    by_status = {row["status"]: row["cnt"] for row in qs.values("status").annotate(cnt=Count("id"))}
+    return {
+        "total": total,
+        "draft": by_status.get("DRAFT", 0),
+        "active": by_status.get("ACTIVE", 0),
+        "legal_hold": by_status.get("LEGAL_HOLD", 0),
+        "closed": by_status.get("CLOSED", 0),
+    }

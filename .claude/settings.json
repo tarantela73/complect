@@ -117,7 +117,19 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[p for p in d['paths'] if 'attach' in p]; print\\(paths\\)\")",
       "Bash(git -C /home/sever/projects/Complect diff --stat HEAD)",
       "Bash(npx tsc *)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(xargs cat -n)",
+      "Bash(npm run *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([k for k in d.get\\('paths',{}\\) if 'dashboard' in k]\\)\")",
+      "Bash(curl -s --max-time 5 http://localhost:8000/api/v1/openapi.json)",
+      "Bash(curl -s --max-time 5 http://localhost:8010/api/v1/openapi.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[k for k in d.get\\('paths',{}\\) if 'dashboard' in k]; print\\('dashboard paths:', paths\\); schemas=[k for k in d.get\\('components',{}\\).get\\('schemas',{}\\) if 'Dashboard' in k or 'dashboard' in k]; print\\('dashboard schemas:', schemas\\)\")",
+      "Bash(curl -s --max-time 8 http://localhost:8010/api/v1/openapi.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[k for k in d.get\\('paths',{}\\) if 'dashboard' in k]; print\\('dashboard paths:', paths\\)\")",
+      "Bash(curl -s --max-time 10 http://localhost:8000/api/v1/openapi.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[k for k in d.get\\('paths',{}\\) if 'dashboard' in k]; schemas=[k for k in d.get\\('components',{}\\).get\\('schemas',{}\\) if 'Dashboard' in k]; print\\('paths:', paths\\); print\\('schemas:', schemas\\)\")",
+      "Bash(curl -v --max-time 10 http://localhost:8000/api/v1/openapi.json)",
+      "Bash(curl -v --max-time 5 http://localhost:8010/api/v1/openapi.json)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

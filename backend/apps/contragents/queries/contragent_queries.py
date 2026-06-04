@@ -7,6 +7,10 @@ from apps.common.tenancy.context_core import get_tenant_id
 from apps.contragents.models.contragent import Contragent, PersonProfile
 
 
+def get_contragent_count() -> int:
+    return _contragent_qs().count()
+
+
 def _contragent_qs():
     tenant_id = get_tenant_id()
     return Contragent.objects.filter(tenant_id=tenant_id, is_deleted=False)
