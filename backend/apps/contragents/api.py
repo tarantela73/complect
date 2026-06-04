@@ -9,6 +9,7 @@ from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
+from apps.common.cache.dashboard_cache import invalidate_dashboard
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contragents.models.contragent import Contragent, ContragentType
 from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
@@ -75,6 +76,8 @@ def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
             contragent_type=body.contragent_type,
         )
         contragent.save()
+        _tid = tenant_id
+        transaction.on_commit(lambda t=_tid: invalidate_dashboard(t))
 
     return 201, ContragentResponse(
         id=contragent.id,
@@ -102,6 +105,8 @@ def update_contragent(request: HttpRequest, contragent_id: uuid.UUID, body: Cont
         contragent.name = body.name
         contragent.version += 1
         contragent.save(update_fields=["name", "version", "updated_at"])
+        _tid = tenant_id
+        transaction.on_commit(lambda t=_tid: invalidate_dashboard(t))
 
     return 200, get_contragent_detail(contragent_id)
 
@@ -125,6 +130,8 @@ def delete_contragent(request: HttpRequest, contragent_id: uuid.UUID):
         contragent.deleted_at = datetime.now(UTC)
         contragent.version += 1
         contragent.save(update_fields=["is_deleted", "deleted_at", "version", "updated_at"])
+        _tid = tenant_id
+        transaction.on_commit(lambda t=_tid: invalidate_dashboard(t))
 
     return 204, None
 

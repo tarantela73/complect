@@ -19,6 +19,7 @@ import structlog
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+from apps.common.cache.dashboard_cache import invalidate_dashboard
 from apps.common.events.files import FileAvailableEvent, FileQuarantinedEvent, FileUploadedEvent
 from apps.common.services.consumer_base import (
     BaseDomainConsumer,
@@ -135,6 +136,7 @@ class FilesConsumer(BaseDomainConsumer):
                 transaction.on_commit(
                     lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
                 )
+                transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.info(
                     "files_consumer_file_quarantined",
                     file_id=str(file_id),
@@ -160,6 +162,7 @@ class FilesConsumer(BaseDomainConsumer):
                         file_id=fid, tenant_id=tid
                     )
                 )
+                transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.warning(
                     "files_consumer_scan_deferred_cb",
                     file_id=str(file_id),
@@ -180,6 +183,7 @@ class FilesConsumer(BaseDomainConsumer):
                 transaction.on_commit(
                     lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
                 )
+                transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.warning(
                     "files_consumer_scan_error_quarantined",
                     file_id=str(file_id),
@@ -199,6 +203,7 @@ class FilesConsumer(BaseDomainConsumer):
                 transaction.on_commit(
                     lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "AVAILABLE", tid)
                 )
+                transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.info(
                     "files_consumer_file_available",
                     file_id=str(file_id),

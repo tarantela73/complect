@@ -5,6 +5,7 @@ import uuid
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
+from apps.common.cache.dashboard_cache import invalidate_dashboard
 from apps.common.events.files import FileUploadedEvent
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.tenancy.context_core import get_tenant_id
@@ -67,6 +68,8 @@ class UploadCompleteService:
                     checksum_sha256=request.checksum_sha256,
                 )
             )
+            _tid = tenant_id
+            transaction.on_commit(lambda t=_tid: invalidate_dashboard(t))
 
         # Refresh from DB so the caller gets the updated status.
         return FileRepository.get_by_id(file_id)

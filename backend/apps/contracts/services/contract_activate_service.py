@@ -3,6 +3,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.common.cache.dashboard_cache import invalidate_dashboard
 from apps.common.events.contracts import ContractActivatedEvent
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.tenancy.context_core import get_context
@@ -36,3 +37,5 @@ class ContractActivateService:
                 user_id=ctx.user_id,
             )
             TransactionalOutboxService.push_to_outbox(event)
+            _tid = ctx.tenant_id
+            transaction.on_commit(lambda t=_tid: invalidate_dashboard(t))
