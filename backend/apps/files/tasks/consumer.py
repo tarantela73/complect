@@ -12,6 +12,7 @@ Emission contract: exactly one of files.FileAvailable | files.FileQuarantined
 """
 from __future__ import annotations
 
+import time
 import uuid
 
 import structlog
@@ -52,6 +53,9 @@ class FilesConsumer(BaseDomainConsumer):
     def __init__(self, scan_engine: ScanEngine | None = None) -> None:
         super().__init__()
         self.scan_engine: ScanEngine = scan_engine or StubScanEngine()
+        self._total_scan_ms: float = 0.0
+        self._total_transition_ms: float = 0.0
+        self._total_cycle_ms: float = 0.0
 
     def process(self, event: StreamEvent) -> None:
         from django.db import transaction
@@ -83,8 +87,14 @@ class FilesConsumer(BaseDomainConsumer):
             return
 
         record = FileRepository.get_by_id(file_id)
-        result = self.scan_engine.scan(record)
 
+        t0_cycle = time.perf_counter()
+
+        t0_scan = time.perf_counter()
+        result = self.scan_engine.scan(record)
+        self._total_scan_ms += (time.perf_counter() - t0_scan) * 1000
+
+        t0_transition = time.perf_counter()
         with transaction.atomic():
             if result == ScanResult.INFECTED:
                 FileRepository.mark_quarantined(file_id, reason="virus_detected")
@@ -134,6 +144,25 @@ class FilesConsumer(BaseDomainConsumer):
                     "files_consumer_file_available",
                     file_id=str(file_id),
                     consumer=self.consumer_name,
+                )
+
+        self._total_transition_ms += (time.perf_counter() - t0_transition) * 1000
+        self._total_cycle_ms += (time.perf_counter() - t0_cycle) * 1000
+
+    def run_batch(self, batch_size: int = 100) -> int:
+        self._total_scan_ms = 0.0
+        self._total_transition_ms = 0.0
+        self._total_cycle_ms = 0.0
+        try:
+            return super().run_batch(batch_size)
+        finally:
+            if self._total_cycle_ms:
+                logger.info(
+                    "files_consumer_batch_metrics",
+                    consumer=self.consumer_name,
+                    scan_ms=round(self._total_scan_ms, 2),
+                    transition_ms=round(self._total_transition_ms, 2),
+                    cycle_ms=round(self._total_cycle_ms, 2),
                 )
 
     def _verify_emission(self, event: StreamEvent) -> None:
