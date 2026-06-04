@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
+import { isWsConnected, WS_FALLBACK_POLL_MS } from './realtime'
 import type { components } from './generated/schema'
 
 export type FileRecord = components['schemas']['FileDetailResponse']
@@ -62,8 +63,11 @@ export function useFile(id: string) {
       if (error) throw new Error(apiMsg(error, 'Файл не найден'))
       return data
     },
-    refetchInterval: (query) =>
-      query.state.data && TRANSIENT_STATUSES.has(query.state.data.status) ? 3000 : false,
+    refetchInterval: (query) => {
+      if (!query.state.data || !TRANSIENT_STATUSES.has(query.state.data.status)) return false
+      // WS active → 30s safety fallback; WS down → 3s aggressive polling
+      return isWsConnected() ? WS_FALLBACK_POLL_MS : 3000
+    },
   })
 }
 

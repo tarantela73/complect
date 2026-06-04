@@ -16,6 +16,8 @@ import time
 import uuid
 
 import structlog
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 from apps.common.events.files import FileAvailableEvent, FileQuarantinedEvent, FileUploadedEvent
 from apps.common.services.consumer_base import (
@@ -37,6 +39,26 @@ logger = structlog.get_logger(__name__)
 _SCAN_OUTCOME_TYPES = frozenset(
     {FileAvailableEvent.EVENT_TYPE, FileQuarantinedEvent.EVENT_TYPE}
 )
+
+_WS_GROUP = "files.tenant.{tenant_id}"
+
+
+def _broadcast_file_status(file_id: uuid.UUID, status: str, tenant_id: uuid.UUID) -> None:
+    """Fanout file status change to all WebSocket clients of the tenant."""
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            _WS_GROUP.format(tenant_id=tenant_id),
+            {
+                "type": "files_file_status_changed",
+                "file_id": str(file_id),
+                "status": status,
+            },
+        )
+    except Exception as exc:
+        logger.warning("ws_broadcast_failed", file_id=str(file_id), status=status, error=str(exc))
 
 
 class FilesConsumer(BaseDomainConsumer):
@@ -97,6 +119,7 @@ class FilesConsumer(BaseDomainConsumer):
         self._total_scan_ms += (time.perf_counter() - t0_scan) * 1000
 
         t0_transition = time.perf_counter()
+        _fid, _tid = file_id, event.tenant_id
         with transaction.atomic():
             if result == ScanResult.INFECTED:
                 FileRepository.mark_quarantined(file_id, reason="virus_detected")
@@ -108,6 +131,9 @@ class FilesConsumer(BaseDomainConsumer):
                         object_key=record.object_key,
                         quarantine_reason="virus_detected",
                     )
+                )
+                transaction.on_commit(
+                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
                 )
                 logger.info(
                     "files_consumer_file_quarantined",
@@ -126,8 +152,9 @@ class FilesConsumer(BaseDomainConsumer):
                         quarantine_reason="scan_deferred_cb_open",
                     )
                 )
-                _tid = event.tenant_id
-                _fid = file_id
+                transaction.on_commit(
+                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
+                )
                 transaction.on_commit(
                     lambda fid=_fid, tid=_tid: get_adaptive_scan_policy().push_rescan(
                         file_id=fid, tenant_id=tid
@@ -150,6 +177,9 @@ class FilesConsumer(BaseDomainConsumer):
                         quarantine_reason="scan_error",
                     )
                 )
+                transaction.on_commit(
+                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
+                )
                 logger.warning(
                     "files_consumer_scan_error_quarantined",
                     file_id=str(file_id),
@@ -165,6 +195,9 @@ class FilesConsumer(BaseDomainConsumer):
                         object_key=record.object_key,
                         checksum_sha256=record.checksum_sha256,
                     )
+                )
+                transaction.on_commit(
+                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "AVAILABLE", tid)
                 )
                 logger.info(
                     "files_consumer_file_available",

@@ -115,7 +115,9 @@
       "Bash(PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test)",
       "Bash(curl -s http://localhost:8000/api/v1/openapi.json)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[p for p in d['paths'] if 'attach' in p]; print\\(paths\\)\")",
-      "Bash(git -C /home/sever/projects/Complect diff --stat HEAD)"
+      "Bash(git -C /home/sever/projects/Complect diff --stat HEAD)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

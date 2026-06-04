@@ -13,6 +13,7 @@ import {
   formatFileSize,
   type FileRecord,
 } from '@/shared/api/files'
+import { useFileStatusSocket } from '@/shared/api/realtime'
 import { Button } from '@/shared/ui/button'
 
 function StatusBadge({ status }: { status: string }) {
@@ -76,6 +77,8 @@ function FileRow({
 }
 
 export default function FilesPage() {
+  useFileStatusSocket()
+
   const canCreate = useCan('files.create')
   const canDelete = useCan('files.delete')
 

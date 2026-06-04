@@ -2,6 +2,7 @@ import asyncio
 import json
 import uuid
 
+import jwt
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
@@ -18,14 +19,24 @@ from apps.common.context.propagation.http import extract_http_context
 logger = structlog.get_logger(__name__)
 
 
+def _decode_jwt(token: str) -> dict | None:
+    try:
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return None
+
+
 class ErpRealtimeConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.tenant_id = None
         self.stream_name = None
+        self.files_group = None
         self.is_negotiated = False
         await self.accept()
 
     async def disconnect(self, close_code):
+        if self.files_group is not None:
+            await self.channel_layer.group_discard(self.files_group, self.channel_name)
         logger.info("websocket_disconnected", close_code=close_code)
         clear_context()
 
@@ -70,23 +81,45 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
         raw_headers = {k.decode("utf-8"): v.decode("utf-8") for k, v in self.scope.get("headers", [])}
         ctx_data = extract_http_context(raw_headers)
 
-        if not ctx_data.get("tenant_id"):
-            await self.send(json.dumps({"type": "error", "message": "MISSING_GATEWAY_CONTEXT"}))
-            await self.close(code=4401)
-            return
+        tenant_id_str = ctx_data.get("tenant_id")
+        user_id_str = ctx_data.get("user_id")
 
-        set_tenant_id(uuid.UUID(ctx_data["tenant_id"]))
-        if ctx_data.get("user_id"):
-            set_user_id(uuid.UUID(ctx_data["user_id"]))
+        # Browser clients can't send custom headers — accept JWT from connection_init payload.
+        # Gateway-injected headers take precedence (more trusted).
+        if not tenant_id_str:
+            token = payload.get("token")
+            if not token:
+                await self.send(json.dumps({"type": "error", "message": "MISSING_GATEWAY_CONTEXT"}))
+                await self.close(code=4401)
+                return
+            jwt_payload = _decode_jwt(token)
+            if not jwt_payload:
+                await self.send(json.dumps({"type": "error", "message": "INVALID_TOKEN"}))
+                await self.close(code=4401)
+                return
+            tenant_id_str = jwt_payload.get("tenant_id")
+            user_id_str = jwt_payload.get("user_id")
+            if not tenant_id_str:
+                await self.send(json.dumps({"type": "error", "message": "MISSING_GATEWAY_CONTEXT"}))
+                await self.close(code=4401)
+                return
+
+        set_tenant_id(uuid.UUID(tenant_id_str))
+        if user_id_str:
+            set_user_id(uuid.UUID(user_id_str))
         if ctx_data.get("request_id"):
             set_request_id(uuid.UUID(ctx_data["request_id"]))
         if ctx_data.get("correlation_id"):
             set_correlation_id(uuid.UUID(ctx_data["correlation_id"]))
 
         self.scope["headers_ctx"] = raw_headers
-        self.tenant_id = ctx_data["tenant_id"]
+        self.tenant_id = tenant_id_str
         self.stream_name = f"erp:streams:tenant:{self.tenant_id}"
         self.is_negotiated = True
+
+        # Join channel group for file status fanout
+        self.files_group = f"files.tenant.{self.tenant_id}"
+        await self.channel_layer.group_add(self.files_group, self.channel_name)
 
         negotiated_capabilities = [cap for cap in ["at_least_once", "event_replay"] if cap in capabilities]
 
@@ -130,3 +163,18 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
                         }
                     )
                 )
+
+    async def files_file_status_changed(self, event: dict):
+        """Channel layer handler: broadcasts file status change to the WebSocket client."""
+        await self.send(
+            json.dumps(
+                {
+                    "type": "realtime_event",
+                    "event_type": "file.status_changed",
+                    "payload": {
+                        "file_id": event["file_id"],
+                        "status": event["status"],
+                    },
+                }
+            )
+        )
