@@ -94,6 +94,16 @@ coverage:
 	$(COMPOSE) exec backend pytest --cov=. --cov-report=term-missing
 
 # ============================================
+# FRONTEND
+# ============================================
+
+build-frontend:
+	$(COMPOSE) exec -e NODE_ENV=production frontend sh -c "cd /app && npm run build"
+
+tsc:
+	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit"
+
+# ============================================
 # QUALITY
 # ============================================
 

@@ -47,3 +47,9 @@ class FileDetailResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class FileListResponse(BaseModel):
+    results: list[FileDetailResponse]
+    next_cursor: Optional[str] = None
+    count: int

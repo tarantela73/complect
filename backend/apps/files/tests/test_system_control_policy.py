@@ -26,7 +26,6 @@ from apps.files.services.system_control_policy import (
     get_system_control_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -83,6 +82,7 @@ class TestSystemControlPolicyRules:
     def test_high_rescan_backlog_throttles(self):
         import redis
         from django.conf import settings
+
         from apps.files.services.adaptive_scan_policy import _RESCAN_QUEUE_KEY
 
         r = redis.Redis.from_url(settings.REDIS_CACHE_URL, decode_responses=True)
@@ -116,6 +116,7 @@ class TestSystemControlPolicyRules:
         import redis
         from django.conf import settings
         from django.core.cache import cache
+
         from apps.files.services.adaptive_scan_policy import _RESCAN_QUEUE_KEY
 
         cache.set(_SCAN_MS_EWMA_KEY, 9000.0, timeout=60)  # would trigger REDUCED

@@ -16,9 +16,8 @@ import socket
 import uuid
 from unittest.mock import MagicMock, patch
 
-from django.test import override_settings
-
 import pytest
+from django.test import override_settings
 
 from apps.files.services.clamav_circuit_breaker import _CB_FAILURES_KEY, _CB_OPEN_KEY
 from apps.files.services.clamav_scan_engine import ClamAVScanEngine, get_scan_engine

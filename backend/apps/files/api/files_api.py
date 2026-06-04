@@ -1,16 +1,19 @@
 import uuid
+from typing import Optional
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest
-from ninja import Router
+from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.common.tenancy.context_core import get_context
+from apps.files.queries.file_queries import get_files_page
 from apps.files.repositories.file_repo import FileRepository
 from apps.files.schemas.file_dto import (
     DownloadUrlResponse,
     FileDetailResponse,
+    FileListResponse,
     UploadCompleteRequest,
     UploadInitRequest,
     UploadInitResponse,
@@ -20,6 +23,18 @@ from apps.files.services.upload_complete_service import UploadCompleteService
 from apps.files.services.upload_init_service import UploadInitService
 
 router = Router(tags=["files"])
+
+
+@router.get("/", response={200: FileListResponse, 403: dict})
+@require_permission("read", "files")
+def list_files(
+    request: HttpRequest,
+    cursor: Optional[uuid.UUID] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None),
+):
+    page = get_files_page(cursor=cursor, limit=limit, status=status)
+    return 200, FileListResponse(**page)
 
 
 @router.post("/upload-init", response={201: UploadInitResponse, 400: dict, 403: dict})
@@ -67,6 +82,21 @@ def get_file(request: HttpRequest, file_id: uuid.UUID):
         return 200, FileDetailResponse.model_validate(record)
     except PermissionDenied:
         return 403, make_error_response("FILE_NOT_FOUND", "Файл не найден.")
+
+
+@router.delete("/{file_id}", response={204: None, 403: dict, 422: dict})
+@require_permission("delete", "files")
+def delete_file(request: HttpRequest, file_id: uuid.UUID):
+    try:
+        record = FileRepository.get_by_id(file_id)
+    except PermissionDenied:
+        return 404, make_error_response("FILE_NOT_FOUND", "Файл не найден.")
+    if record.is_legal_hold:
+        return 403, make_error_response("LEGAL_HOLD", "Файл заблокирован юридическим удержанием.")
+    deleted = FileRepository.soft_delete(file_id)
+    if not deleted:
+        return 422, make_error_response("DELETE_FAILED", "Не удалось удалить файл.")
+    return 204, None
 
 
 @router.get(

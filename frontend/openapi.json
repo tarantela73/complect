@@ -1806,6 +1806,86 @@
         }
       }
     },
+    "/api/v1/files/": {
+      "get": {
+        "operationId": "apps_files_api_files_api_list_files",
+        "summary": "List Files",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/files/upload-init": {
       "post": {
         "operationId": "apps_files_api_files_api_upload_init",
@@ -1970,6 +2050,54 @@
           },
           "403": {
             "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      },
+      "delete": {
+        "operationId": "apps_files_api_files_api_delete_file",
+        "summary": "Delete File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
                 "schema": {
@@ -2886,62 +3014,6 @@
         "title": "UpdateLocationRequest",
         "type": "object"
       },
-      "UploadInitResponse": {
-        "properties": {
-          "file_id": {
-            "format": "uuid",
-            "title": "File Id",
-            "type": "string"
-          },
-          "object_key": {
-            "title": "Object Key",
-            "type": "string"
-          },
-          "upload_url": {
-            "title": "Upload Url",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file_id",
-          "object_key",
-          "upload_url",
-          "status"
-        ],
-        "title": "UploadInitResponse",
-        "type": "object"
-      },
-      "UploadInitRequest": {
-        "properties": {
-          "original_name": {
-            "maxLength": 512,
-            "title": "Original Name",
-            "type": "string"
-          },
-          "content_type": {
-            "maxLength": 128,
-            "title": "Content Type",
-            "type": "string"
-          },
-          "size_bytes": {
-            "description": "Размер файла в байтах",
-            "exclusiveMinimum": 0,
-            "title": "Size Bytes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "original_name",
-          "content_type",
-          "size_bytes"
-        ],
-        "title": "UploadInitRequest",
-        "type": "object"
-      },
       "FileDetailResponse": {
         "properties": {
           "id": {
@@ -3024,6 +3096,94 @@
           "updated_at"
         ],
         "title": "FileDetailResponse",
+        "type": "object"
+      },
+      "FileListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FileDetailResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "FileListResponse",
+        "type": "object"
+      },
+      "UploadInitResponse": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "object_key",
+          "upload_url",
+          "status"
+        ],
+        "title": "UploadInitResponse",
+        "type": "object"
+      },
+      "UploadInitRequest": {
+        "properties": {
+          "original_name": {
+            "maxLength": 512,
+            "title": "Original Name",
+            "type": "string"
+          },
+          "content_type": {
+            "maxLength": 128,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "Размер файла в байтах",
+            "exclusiveMinimum": 0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "original_name",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "UploadInitRequest",
         "type": "object"
       },
       "UploadCompleteRequest": {

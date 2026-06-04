@@ -30,8 +30,8 @@ from apps.common.models.outbox import OutboxRecord
 from apps.common.tenancy.context import set_tenant_context
 from apps.files.models.file_record import FileStatus
 from apps.files.repositories.file_repo import FileRepository
-from apps.files.services.adaptive_scan_policy import _RESCAN_QUEUE_KEY
 from apps.files.schemas.file_dto import UploadCompleteRequest, UploadInitRequest
+from apps.files.services.adaptive_scan_policy import _RESCAN_QUEUE_KEY
 from apps.files.services.scan_engine import ScanResult, StubScanEngine
 from apps.files.services.upload_complete_service import UploadCompleteService
 from apps.files.services.upload_init_service import UploadInitService

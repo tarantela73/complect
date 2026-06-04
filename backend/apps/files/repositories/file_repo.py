@@ -133,3 +133,18 @@ class FileRepository:
             updated_at=tz.now(),
         )
         return updated == 1
+
+    @staticmethod
+    def soft_delete(file_id: uuid.UUID) -> bool:
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            is_deleted=False,
+            is_legal_hold=False,
+        ).update(
+            is_deleted=True,
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1

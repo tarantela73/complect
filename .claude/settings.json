@@ -66,13 +66,22 @@
       "Bash(./node_modules/.bin/tsc --noEmit)",
       "Bash(grep -E \"error TS|warning TS|^\\\\s*$\")",
       "Bash(python3 -c ' *)",
-      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('scripts', {}\\), indent=2\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('scripts', {}\\), indent=2\\)\\)\")",
+      "Bash(npx openapi-typescript *)",
+      "Bash(mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/files/\\\\[id\\\\])",
+      "Bash(git stash *)",
+      "Bash(make build-frontend *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/dashboard/files)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/dashboard/files/test-id)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
       "/home/sever/projects/Complect/backend/apps/contracts",
       "/home/sever/projects/Complect/frontend/src/app/(auth)",
-      "/home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]"
+      "/home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]",
+      "/home/sever/projects/Complect/frontend/src/app/dashboard/files"
     ]
   }
 }
