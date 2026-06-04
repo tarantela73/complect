@@ -1,0 +1,8 @@
+.next/
+out/
+node_modules/
+.env.local
+.env.*.local
+*.tsbuildinfo
+next-env.d.ts
+src/shared/api/generated/schema.d.ts

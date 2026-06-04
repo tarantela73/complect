@@ -10,6 +10,24 @@ from django.core.exceptions import PermissionDenied
 from apps.users.models import User
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
+
+
+def _get_user_permissions(user: User) -> list[str]:
+    """Returns user permissions as ["resource.action", ...] codename format."""
+    if not user.tenant_id:
+        return []
+    from apps.common.models.rbac import RoleBinding
+
+    bindings = (
+        RoleBinding.objects.filter(user_id=user.pk, tenant_id=user.tenant_id, is_active=True)
+        .select_related("role")
+        .prefetch_related("role__permissions")
+    )
+    return [
+        f"{perm.resource}.{perm.action}"
+        for binding in bindings
+        for perm in binding.role.permissions.all()
+    ]
 REFRESH_TOKEN_TTL = timedelta(days=7)
 REFRESH_TOKEN_REDIS_PREFIX = "auth:refresh:"
 
@@ -61,9 +79,9 @@ def login(
     username: str,
     password: str,
     device_fingerprint: str = "",
-) -> tuple[Optional[str], Optional[str], bool]:
+) -> tuple[Optional[str], Optional[str], bool, list[str]]:
     """
-    Returns (access_token, refresh_token, mfa_required).
+    Returns (access_token, refresh_token, mfa_required, permissions).
     Raises PermissionDenied on invalid credentials.
     """
     try:
@@ -78,19 +96,19 @@ def login(
         raise PermissionDenied("DEVICE_FINGERPRINT_MISMATCH") from None
 
     if user.mfa_enabled:
-        # Partial token — only enough to proceed to MFA verification
         partial_payload = {
             "user_id": str(user.pk),
             "exp": datetime.now(UTC) + timedelta(minutes=5),
             "type": "mfa_pending",
         }
         partial_token = jwt.encode(partial_payload, settings.SECRET_KEY, algorithm="HS256")
-        return partial_token, None, True
+        return partial_token, None, True, []
 
     access = _make_access_token(user)
     refresh, jti = _make_refresh_token(user)
     _store_refresh_token(redis_client, user.pk, jti)
-    return access, refresh, False
+    permissions = _get_user_permissions(user)
+    return access, refresh, False, permissions
 
 
 def refresh_access_token(redis_client, refresh_token: str) -> str:

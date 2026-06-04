@@ -57,7 +57,7 @@ class TestLogin:
 
     def test_successful_login_returns_tokens(self, redis):
         user = _make_user()
-        access, refresh, mfa_required = login(redis, user.username, "Str0ng!Pass")
+        access, refresh, mfa_required, permissions = login(redis, user.username, "Str0ng!Pass")
 
         assert mfa_required is False
         assert access is not None
@@ -75,7 +75,7 @@ class TestLogin:
 
     def test_mfa_enabled_returns_partial_token(self, redis):
         user = _make_user(mfa_enabled=True)
-        partial, refresh, mfa_required = login(redis, user.username, "Str0ng!Pass")
+        partial, refresh, mfa_required, permissions = login(redis, user.username, "Str0ng!Pass")
 
         assert mfa_required is True
         assert refresh is None
@@ -91,7 +91,7 @@ class TestLogin:
 
     def test_matching_device_fingerprint_succeeds(self, redis):
         user = _make_user(device_fingerprint="fp_ok")
-        access, _, mfa_required = login(redis, user.username, "Str0ng!Pass", device_fingerprint="fp_ok")
+        access, _, mfa_required, _ = login(redis, user.username, "Str0ng!Pass", device_fingerprint="fp_ok")
         assert mfa_required is False
         assert access is not None
 
@@ -100,7 +100,7 @@ class TestLogin:
 class TestRefreshAccessToken:
     def test_valid_refresh_returns_new_access_and_rotates(self, redis):
         user = _make_user()
-        _, refresh, _ = login(redis, user.username, "Str0ng!Pass")
+        _, refresh, _, _ = login(redis, user.username, "Str0ng!Pass")
 
         old_payload = jwt.decode(refresh, settings.SECRET_KEY, algorithms=["HS256"])
         old_jti = old_payload["jti"]
@@ -121,7 +121,7 @@ class TestRefreshAccessToken:
 
     def test_revoked_token_raises(self, redis):
         user = _make_user()
-        _, refresh, _ = login(redis, user.username, "Str0ng!Pass")
+        _, refresh, _, _ = login(redis, user.username, "Str0ng!Pass")
 
         # Первый refresh отзывает старый jti
         refresh_access_token(redis, refresh)
@@ -148,7 +148,7 @@ class TestRefreshAccessToken:
 
     def test_wrong_token_type_raises(self, redis):
         user = _make_user()
-        access, _, _ = login(redis, user.username, "Str0ng!Pass")
+        access, _, _, _ = login(redis, user.username, "Str0ng!Pass")
         with pytest.raises(PermissionDenied, match="REFRESH_TOKEN_INVALID"):
             refresh_access_token(redis, access)
 
@@ -161,7 +161,7 @@ class TestRefreshAccessToken:
 class TestLogout:
     def test_logout_deletes_refresh_token(self, redis):
         user = _make_user()
-        _, refresh, _ = login(redis, user.username, "Str0ng!Pass")
+        _, refresh, _, _ = login(redis, user.username, "Str0ng!Pass")
 
         payload = jwt.decode(refresh, settings.SECRET_KEY, algorithms=["HS256"])
         key = f"{REFRESH_TOKEN_REDIS_PREFIX}{user.pk}:{payload['jti']}"
@@ -176,6 +176,6 @@ class TestLogout:
 
     def test_logout_already_logged_out_is_silent(self, redis):
         user = _make_user()
-        _, refresh, _ = login(redis, user.username, "Str0ng!Pass")
+        _, refresh, _, _ = login(redis, user.username, "Str0ng!Pass")
         logout(redis, refresh)
         logout(redis, refresh)  # повторный — молчит

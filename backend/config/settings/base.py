@@ -45,6 +45,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # MIDDLEWARE
 # ===========================================================================
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "apps.common.middleware.context_isolation.ContextIsolationMiddleware",
     "apps.common.middleware.kill_switch.SreGlobalKillSwitchMiddleware",  

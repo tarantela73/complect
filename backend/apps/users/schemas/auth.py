@@ -15,6 +15,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     mfa_required: bool = False
+    permissions: list[str] = []
 
 
 class RefreshRequest(BaseModel):

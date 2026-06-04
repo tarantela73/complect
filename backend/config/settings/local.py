@@ -102,3 +102,6 @@ REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
 EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_secure_mesh_token_2026")
 
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+CORS_ALLOW_CREDENTIALS = True
+

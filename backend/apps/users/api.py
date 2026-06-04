@@ -34,7 +34,7 @@ class ErrorOut(Schema):
 @router.post("/login", response={200: TokenResponse, 401: dict}, auth=None)
 def login(request: HttpRequest, body: LoginRequest, response: DjangoResponse):
     try:
-        access, refresh, mfa_required = auth_service.login(
+        access, refresh, mfa_required, permissions = auth_service.login(
             redis_client=_redis(),
             username=body.username,
             password=body.password,
@@ -53,7 +53,7 @@ def login(request: HttpRequest, body: LoginRequest, response: DjangoResponse):
             samesite="Strict",
             path="/api/v1/auth/",
         )
-    return 200, TokenResponse(access_token=access, mfa_required=mfa_required)
+    return 200, TokenResponse(access_token=access, mfa_required=mfa_required, permissions=permissions)
 
 
 @router.post("/refresh", response={200: TokenResponse, 401: dict}, auth=None)

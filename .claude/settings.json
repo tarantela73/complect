@@ -56,11 +56,15 @@
       "Bash(mkdir -p /home/sever/projects/Complect/backend/apps/finance/tests)",
       "Bash(touch /home/sever/projects/Complect/backend/apps/finance/tests/__init__.py)",
       "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/home/sever/projects/Complect/backend'\\); import django; import os; os.environ['DJANGO_SETTINGS_MODULE']='config.settings.local'\")",
-      "Bash(docker volume *)"
+      "Bash(docker volume *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('paths:', len\\(d.get\\('paths',{}\\)\\)\\); print\\('version:', d.get\\('info',{}\\).get\\('version','?'\\)\\)\")",
+      "Bash(mkdir -p \\\\ *)",
+      "WebFetch(domain:mcpmarket.com)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
-      "/home/sever/projects/Complect/backend/apps/contracts"
+      "/home/sever/projects/Complect/backend/apps/contracts",
+      "/home/sever/projects/Complect/frontend/src/app/(auth)"
     ]
   }
 }
