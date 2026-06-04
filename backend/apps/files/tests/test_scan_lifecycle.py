@@ -2,17 +2,19 @@
 State machine + FilesConsumer scan pipeline tests.
 
 State machine (FileRepository CAS guards):
-  PENDING_UPLOAD → UPLOADED      (mark_uploaded)
-  UPLOADED       → SCANNING      (mark_scanning)
-  SCANNING       → AVAILABLE     (mark_available)
-  SCANNING       → QUARANTINED   (mark_quarantined)
+  PENDING_UPLOAD → UPLOADED                        (mark_uploaded)
+  UPLOADED       → SCANNING                        (mark_scanning)
+  SCANNING       → AVAILABLE                       (mark_available)
+  SCANNING       → QUARANTINED                     (mark_quarantined)
+  QUARANTINED[scan_deferred_cb_open] → SCANNING    (mark_rescanning — CB recovery)
 
   All other transitions must silently return False (no rows updated).
 
 Consumer pipeline:
-  files.FileUploaded → AVAILABLE  + FileAvailableEvent  (CLEAN)
+  files.FileUploaded → AVAILABLE  + FileAvailableEvent   (CLEAN)
   files.FileUploaded → QUARANTINED + FileQuarantinedEvent (INFECTED)
   files.FileUploaded → QUARANTINED + FileQuarantinedEvent (ERROR)
+  files.FileUploaded → QUARANTINED[scan_deferred_cb_open] + FileQuarantinedEvent (CB_FAST_FAIL)
   Duplicate event discarded (idempotency via ConsumerIdempotencyService).
   Causal emission verified (CausalEmissionMissingError on missing outcome event).
 """
@@ -28,6 +30,7 @@ from apps.common.models.outbox import OutboxRecord
 from apps.common.tenancy.context import set_tenant_context
 from apps.files.models.file_record import FileStatus
 from apps.files.repositories.file_repo import FileRepository
+from apps.files.services.adaptive_scan_policy import _RESCAN_QUEUE_KEY
 from apps.files.schemas.file_dto import UploadCompleteRequest, UploadInitRequest
 from apps.files.services.scan_engine import ScanResult, StubScanEngine
 from apps.files.services.upload_complete_service import UploadCompleteService
@@ -146,6 +149,22 @@ class TestFileStatusMachine:
         assert result is False
         assert FileRepository.get_by_id(file_id).status == FileStatus.AVAILABLE
 
+    def test_quarantined_to_scanning_via_rescanning(self):
+        file_id, _ = _setup_uploaded_file(self.tenant_id, self.actor_id)
+        FileRepository.mark_scanning(file_id)
+        FileRepository.mark_quarantined(file_id, reason="scan_deferred_cb_open")
+        result = FileRepository.mark_rescanning(file_id)
+        assert result is True
+        assert FileRepository.get_by_id(file_id).status == FileStatus.SCANNING
+
+    def test_mark_rescanning_requires_deferred_cb_reason(self):
+        file_id, _ = _setup_uploaded_file(self.tenant_id, self.actor_id)
+        FileRepository.mark_scanning(file_id)
+        FileRepository.mark_quarantined(file_id, reason="virus_detected")
+        result = FileRepository.mark_rescanning(file_id)
+        assert result is False
+        assert FileRepository.get_by_id(file_id).status == FileStatus.QUARANTINED
+
     def test_quarantined_cannot_go_to_available(self):
         file_id, _ = _setup_uploaded_file(self.tenant_id, self.actor_id)
         FileRepository.mark_scanning(file_id)
@@ -215,6 +234,29 @@ class TestFilesConsumerPipeline:
         repo_record = FileRepository.get_by_id(file_id)
         assert repo_record.status == FileStatus.QUARANTINED
         assert repo_record.quarantine_reason == "scan_error"
+
+    def test_cb_fast_fail_quarantines_with_deferred_reason(self):
+        import redis
+        from django.conf import settings
+
+        r = redis.Redis.from_url(settings.REDIS_CACHE_URL, decode_responses=True)
+        r.delete(_RESCAN_QUEUE_KEY)
+
+        file_id, corr = _setup_uploaded_file(self.tenant_id, self.actor_id)
+        record = _make_outbox_for_file(file_id, self.tenant_id, corr)
+
+        engine = MagicMock()
+        engine.scan.return_value = ScanResult.CB_FAST_FAIL
+        FilesConsumer(scan_engine=engine).handle(record)
+
+        repo_record = FileRepository.get_by_id(file_id)
+        assert repo_record.status == FileStatus.QUARANTINED
+        assert repo_record.quarantine_reason == "scan_deferred_cb_open"
+        assert OutboxRecord.objects.filter(
+            correlation_id=corr, event_type="files.FileQuarantined"
+        ).exists()
+
+        r.delete(_RESCAN_QUEUE_KEY)
 
     def test_duplicate_event_is_discarded(self):
         file_id, corr = _setup_uploaded_file(self.tenant_id, self.actor_id)

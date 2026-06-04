@@ -11,6 +11,8 @@ class ScanResult(StrEnum):
     CLEAN = "clean"
     INFECTED = "infected"
     ERROR = "error"
+    # Circuit breaker was OPEN — scan not attempted; file deferred for rescan.
+    CB_FAST_FAIL = "cb_fast_fail"
 
 
 class ScanEngine(Protocol):

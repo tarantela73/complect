@@ -26,6 +26,7 @@ from apps.common.services.consumer_base import (
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.tasks import BaseEnterpriseTask
 from apps.files.repositories.file_repo import FileRepository
+from apps.files.services.adaptive_scan_policy import get_adaptive_scan_policy
 from apps.files.services.clamav_scan_engine import get_scan_engine
 from apps.files.services.scan_engine import ScanEngine, ScanResult, StubScanEngine
 from config.celery import app
@@ -112,8 +113,32 @@ class FilesConsumer(BaseDomainConsumer):
                     file_id=str(file_id),
                     consumer=self.consumer_name,
                 )
+            elif result == ScanResult.CB_FAST_FAIL:
+                # CB open — scan deferred; quarantine now, re-scan when CB recovers.
+                FileRepository.mark_quarantined(file_id, reason="scan_deferred_cb_open")
+                TransactionalOutboxService.push_to_outbox(
+                    FileQuarantinedEvent.create(
+                        correlation_id=event.correlation_id,
+                        file_id=file_id,
+                        tenant_id=event.tenant_id,
+                        object_key=record.object_key,
+                        quarantine_reason="scan_deferred_cb_open",
+                    )
+                )
+                _tid = event.tenant_id
+                _fid = file_id
+                transaction.on_commit(
+                    lambda fid=_fid, tid=_tid: get_adaptive_scan_policy().push_rescan(
+                        file_id=fid, tenant_id=tid
+                    )
+                )
+                logger.warning(
+                    "files_consumer_scan_deferred_cb",
+                    file_id=str(file_id),
+                    consumer=self.consumer_name,
+                )
             elif result == ScanResult.ERROR:
-                # Error during scan: quarantine to avoid stuck SCANNING state.
+                # Scan attempted but failed; quarantine permanently.
                 FileRepository.mark_quarantined(file_id, reason="scan_error")
                 TransactionalOutboxService.push_to_outbox(
                     FileQuarantinedEvent.create(

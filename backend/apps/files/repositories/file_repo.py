@@ -99,6 +99,25 @@ class FileRepository:
         return updated == 1
 
     @staticmethod
+    def mark_rescanning(file_id: uuid.UUID) -> bool:
+        """CAS: QUARANTINED[scan_deferred_cb_open] → SCANNING for CB recovery rescan."""
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            status=FileStatus.QUARANTINED,
+            quarantine_reason="scan_deferred_cb_open",
+            is_deleted=False,
+            is_legal_hold=False,
+        ).update(
+            status=FileStatus.SCANNING,
+            quarantine_reason="",
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1
+
+    @staticmethod
     def mark_quarantined(file_id: uuid.UUID, reason: str, scanned_at=None) -> bool:
         tenant_id = get_tenant_id()
         updated = FileRecord.objects.filter(

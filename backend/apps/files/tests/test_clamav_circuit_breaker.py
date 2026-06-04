@@ -185,7 +185,7 @@ class TestClamAVScanEngineCircuitBreaker:
         engine = ClamAVScanEngine(socket_path="/tmp/test.ctl")
         result = engine.scan(_make_file_record())
 
-        assert result is ScanResult.ERROR
+        assert result is ScanResult.CB_FAST_FAIL
         mock_socket_cls.assert_not_called()
 
     @override_settings(CLAMAV_CB_FAILURE_THRESHOLD=3, CLAMAV_CB_RECOVERY_TTL=60)

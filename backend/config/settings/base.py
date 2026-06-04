@@ -170,6 +170,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60.0,  # every 60 seconds — observability only, no repair
         "options": {"queue": "notifications"},
     },
+    "files-recovery-scanner": {
+        "task": "apps.files.tasks.recovery_scanner.run_files_recovery_scan_task",
+        "schedule": 60.0,  # every 60 seconds; skips internally if CB still open
+        "options": {"queue": "files"},
+    },
 }
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
@@ -309,6 +314,9 @@ FILES_SCAN_ENGINE: str = "STUB"
 # RECOVERY_TTL:      seconds the circuit stays OPEN before probing again.
 CLAMAV_CB_FAILURE_THRESHOLD: int = 5
 CLAMAV_CB_RECOVERY_TTL: int = 60
+
+# Batch size for the CB recovery re-scan task.
+FILES_RECOVERY_SCAN_BATCH_SIZE: int = 50
 
 # ===========================================================================
 # LIVEKIT

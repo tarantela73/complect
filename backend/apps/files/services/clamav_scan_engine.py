@@ -44,7 +44,7 @@ class ClamAVScanEngine:
                 "clamav_circuit_breaker_fast_fail",
                 file_id=str(file_record.id),
             )
-            return ScanResult.ERROR
+            return ScanResult.CB_FAST_FAIL
 
         result = self._scan_via_socket(file_record)
 
