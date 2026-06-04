@@ -7,6 +7,7 @@ from apps.common.events.contracts import ContractClosedEvent
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.contracts.models.contract import ContractStatus
 from apps.contracts.policies.closure_policy import ContractClosurePolicy
+from apps.contracts.repositories.attachment_repo import AttachmentRepository
 from apps.contracts.repositories.contract_repo import ContractRepository
 
 
@@ -24,11 +25,7 @@ class ContractClosureService:
             # 1. Чтение строки с блокировкой FOR UPDATE на уровне репозитория [4.7 isolation policy]
             contract = ContractRepository.get_by_id_for_update(contract_id)
 
-            # Имитация проверки статуса прикрепленных файлов (в реальном коде запрос к DocumentRepository)
-            # Файл должен иметь stage == DocumentStage.READY в нашем FSM [5.4]
-            has_ready_documents = True
-
-            # 2. Передача чистой сущности в Policy Layer для проверки бизнес-правил
+            has_ready_documents = bool(AttachmentRepository.list_file_ids(contract_id))
             ContractClosurePolicy.verify_closure_eligibility(contract, has_ready_documents)
 
             # 3. Атомарный CAS-апдейт через репозиторий с инкрементом версии

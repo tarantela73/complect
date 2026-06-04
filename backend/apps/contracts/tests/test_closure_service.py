@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 
 from apps.common.models.outbox import OutboxRecord
 from apps.common.tenancy.context import set_tenant_context
+from apps.contracts.models.attachment import ContractAttachment
 from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.services.contract_closure import ContractClosureService
@@ -34,9 +35,13 @@ class TestContractClosureServiceSuite:
 
     def test_cannot_close_contract_with_debt(self):
         """[CASE 1: DEBT BLOCKER] Проверяет блокировку закрытия при наличии задолженности."""
-        # Договор на 100 000 руб (10 000 000 копеек), оплачено только 50 000 руб
         contract = self._create_test_contract(ContractStatus.ACTIVE, 10000000, 5000000)
-
+        ContractAttachment.objects.create(
+            contract=contract,
+            file_id=uuid.uuid4(),
+            attached_by=self.user_id,
+            tenant_id=self.tenant_id,
+        )
         with pytest.raises(ValidationError, match="обнаружена непогашенная дебиторская задолженность"):
             ContractClosureService.execute_contract_closure(contract.id, self.user_id, self.correlation_id)
 
@@ -54,19 +59,28 @@ class TestContractClosureServiceSuite:
         with pytest.raises(ValidationError, match="Договор уже имеет статус 'Закрыт'"):
             ContractClosureService.execute_contract_closure(contract.id, self.user_id, self.correlation_id)
 
+    def test_cannot_close_contract_without_attachments(self):
+        """[CASE 5: NO ATTACHMENTS BLOCKER] Договор без вложений нельзя закрыть."""
+        contract = self._create_test_contract(ContractStatus.ACTIVE, 500000, 500000)
+        with pytest.raises(ValidationError, match="валидные файлы"):
+            ContractClosureService.execute_contract_closure(contract.id, self.user_id, self.correlation_id)
+
     def test_successful_closure_mutates_status_and_emits_outbox_event(self):
         """[CASE 4-5: SUCCESS CONTOUR] Проверяет перевод статуса и генерацию Outbox записи."""
         contract = self._create_test_contract(ContractStatus.ACTIVE, 500000, 500000)
+        ContractAttachment.objects.create(
+            contract=contract,
+            file_id=uuid.uuid4(),
+            attached_by=self.user_id,
+            tenant_id=self.tenant_id,
+        )
 
-        # Выполняем успешное закрытие полностью оплаченного договора
         ContractClosureService.execute_contract_closure(contract.id, self.user_id, self.correlation_id)
 
-        # Проверяем мутацию стейта в СУБД через свежий запрос к репозиторию
         updated_contract = ContractRepository.get_by_id(contract.id)
         assert updated_contract.status == ContractStatus.CLOSED
-        assert updated_contract.version == 2  # OCC инкремент прошел успешно
+        assert updated_contract.version == 2
 
-        # Проверяем, что в Transactional Outbox упала персистентная запись события [4.3]
         outbox_event = OutboxRecord.objects.filter(correlation_id=self.correlation_id).first()
         assert outbox_event is not None
         assert outbox_event.event_type == "contracts.ContractClosed"

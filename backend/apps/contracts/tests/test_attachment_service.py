@@ -127,6 +127,45 @@ class TestAttachmentServiceAttach:
                 tenant_id=self.tenant_id,
             )
 
+    def test_attach_to_closed_contract_raises(self):
+        self.contract.status = ContractStatus.CLOSED
+        self.contract.save()
+        file_id = uuid.uuid4()
+        svc = AttachmentService(_mock_file_service(file_id=file_id, tenant_id=self.tenant_id))
+        with pytest.raises(ValidationError, match="статусе CLOSED"):
+            svc.attach(
+                contract_id=self.contract.id,
+                file_id=file_id,
+                actor_id=self.actor_id,
+                tenant_id=self.tenant_id,
+            )
+
+    def test_attach_to_legal_hold_status_raises(self):
+        self.contract.status = ContractStatus.LEGAL_HOLD
+        self.contract.save()
+        file_id = uuid.uuid4()
+        svc = AttachmentService(_mock_file_service(file_id=file_id, tenant_id=self.tenant_id))
+        with pytest.raises(ValidationError, match="статусе LEGAL_HOLD"):
+            svc.attach(
+                contract_id=self.contract.id,
+                file_id=file_id,
+                actor_id=self.actor_id,
+                tenant_id=self.tenant_id,
+            )
+
+    def test_attach_to_legal_hold_flag_raises(self):
+        self.contract.is_legal_hold = True
+        self.contract.save()
+        file_id = uuid.uuid4()
+        svc = AttachmentService(_mock_file_service(file_id=file_id, tenant_id=self.tenant_id))
+        with pytest.raises(ValidationError, match="Прикрепление файла невозможно"):
+            svc.attach(
+                contract_id=self.contract.id,
+                file_id=file_id,
+                actor_id=self.actor_id,
+                tenant_id=self.tenant_id,
+            )
+
     def test_attach_to_nonexistent_contract_raises(self):
         file_id = uuid.uuid4()
         svc = AttachmentService(_mock_file_service(file_id=file_id, tenant_id=self.tenant_id))
@@ -200,6 +239,33 @@ class TestAttachmentServiceDetach:
                 file_id=uuid.uuid4(),
                 actor_id=self.actor_id,
             )
+
+    def test_detach_from_closed_contract_raises(self):
+        file_id = uuid.uuid4()
+        self._attach(file_id)
+        self.contract.status = ContractStatus.CLOSED
+        self.contract.save()
+        svc = AttachmentService(MagicMock())
+        with pytest.raises(ValidationError, match="договор закрыт"):
+            svc.detach(contract_id=self.contract.id, file_id=file_id, actor_id=self.actor_id)
+
+    def test_detach_from_contract_legal_hold_flag_raises(self):
+        file_id = uuid.uuid4()
+        self._attach(file_id)
+        self.contract.is_legal_hold = True
+        self.contract.save()
+        svc = AttachmentService(MagicMock())
+        with pytest.raises(PermissionDenied, match="CONTRACT_LEGAL_HOLD"):
+            svc.detach(contract_id=self.contract.id, file_id=file_id, actor_id=self.actor_id)
+
+    def test_detach_from_legal_hold_status_raises(self):
+        file_id = uuid.uuid4()
+        self._attach(file_id)
+        self.contract.status = ContractStatus.LEGAL_HOLD
+        self.contract.save()
+        svc = AttachmentService(MagicMock())
+        with pytest.raises(PermissionDenied, match="CONTRACT_LEGAL_HOLD"):
+            svc.detach(contract_id=self.contract.id, file_id=file_id, actor_id=self.actor_id)
 
     def test_detach_legal_hold_raises(self):
         file_id = uuid.uuid4()

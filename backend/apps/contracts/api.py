@@ -188,4 +188,8 @@ def detach_file(request: HttpRequest, contract_id: uuid.UUID, file_id: uuid.UUID
         code = str(exc)
         if code == "ATTACHMENT_LEGAL_HOLD":
             return 422, make_error_response("LEGAL_HOLD", "Вложение заблокировано юридическим удержанием.")
+        if code == "CONTRACT_LEGAL_HOLD":
+            return 403, make_error_response("LEGAL_HOLD", "Договор заблокирован юридическим удержанием.")
         return 403, make_error_response("ATTACHMENT_NOT_FOUND", "Вложение не найдено.")
+    except ValidationError as exc:
+        return 422, make_error_response("CONTRACT_IMMUTABLE", str(exc))

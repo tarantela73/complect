@@ -40,12 +40,23 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
   )
 }
 
-function AttachmentsSection({ contractId, canWrite }: { contractId: string; canWrite: boolean }) {
+const MUTABLE_CONTRACT_STATUSES = new Set(['DRAFT', 'ACTIVE'])
+
+function AttachmentsSection({
+  contractId,
+  contractStatus,
+  canWrite,
+}: {
+  contractId: string
+  contractStatus: string
+  canWrite: boolean
+}) {
   const [showPicker, setShowPicker] = useState(false)
   const [attachError, setAttachError] = useState('')
 
   const { data: attachments, isLoading } = useContractAttachments(contractId)
   const { data: files } = useFiles({ status: 'AVAILABLE', limit: 100 })
+  const isMutable = MUTABLE_CONTRACT_STATUSES.has(contractStatus)
   const attachMutation = useAttachFile(contractId)
   const detachMutation = useDetachFile(contractId)
 
@@ -71,7 +82,7 @@ function AttachmentsSection({ contractId, canWrite }: { contractId: string; canW
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Вложения</h2>
-        {canWrite && (
+        {canWrite && isMutable && (
           <Button
             variant="outline"
             size="sm"
@@ -156,7 +167,7 @@ function AttachmentsSection({ contractId, canWrite }: { contractId: string; canW
                         Скачать
                       </a>
                     )}
-                    {canWrite && (
+                    {canWrite && isMutable && (
                       <button
                         onClick={() => handleDetach(a.file_id, a.name)}
                         className="text-xs text-destructive hover:underline"
@@ -181,6 +192,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const canWrite = useCan('contracts.write')
 
   const { data, isLoading, isError, error } = useContract(id)
+  const { data: attachments } = useContractAttachments(id)
   const activateMutation = useActivateContract()
   const closeMutation = useCloseContract()
 
@@ -207,6 +219,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const isDraft = data.status === 'DRAFT'
   const isActive = data.status === 'ACTIVE'
   const isMutable = isDraft || isActive
+  const hasAttachments = (attachments?.results.length ?? 0) > 0
 
   const handleActivate = () => {
     if (!confirm(`Активировать договор «${data.title}»?`)) return
@@ -260,6 +273,8 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
                 variant="destructive"
                 size="sm"
                 loading={closeMutation.isPending}
+                disabled={!hasAttachments}
+                title={!hasAttachments ? 'Прикрепите хотя бы один файл перед закрытием' : undefined}
                 onClick={handleClose}
               >
                 Закрыть
@@ -281,7 +296,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         <Row label="ID" value={data.id} mono />
       </dl>
 
-      <AttachmentsSection contractId={id} canWrite={canWrite} />
+      <AttachmentsSection contractId={id} contractStatus={data.status} canWrite={canWrite} />
     </div>
   )
 }

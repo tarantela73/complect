@@ -129,7 +129,12 @@
       "Bash(curl -s --max-time 10 http://localhost:8000/api/v1/openapi.json)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[k for k in d.get\\('paths',{}\\) if 'dashboard' in k]; schemas=[k for k in d.get\\('components',{}\\).get\\('schemas',{}\\) if 'Dashboard' in k]; print\\('paths:', paths\\); print\\('schemas:', schemas\\)\")",
       "Bash(curl -v --max-time 10 http://localhost:8000/api/v1/openapi.json)",
-      "Bash(curl -v --max-time 5 http://localhost:8010/api/v1/openapi.json)"
+      "Bash(curl -v --max-time 5 http://localhost:8010/api/v1/openapi.json)",
+      "Bash(curl -s -X POST http://localhost:8010/api/v1/auth/login/ -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login/ -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\"}')",
+      "Bash(curl -sv -X POST http://localhost:8000/api/v1/auth/login/ -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\"}')",
+      "Bash(kill %1)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
