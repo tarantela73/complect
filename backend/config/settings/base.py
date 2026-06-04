@@ -304,6 +304,12 @@ FILES_PRESIGNED_DOWNLOAD_TTL: int = 3600  # 1 hr
 # ScanEngine selector: "STUB" (dev/test) or "CLAMAV" (production).
 FILES_SCAN_ENGINE: str = "STUB"
 
+# Circuit breaker thresholds for ClamAV unix socket.
+# FAILURE_THRESHOLD: consecutive ERROR results before opening the circuit.
+# RECOVERY_TTL:      seconds the circuit stays OPEN before probing again.
+CLAMAV_CB_FAILURE_THRESHOLD: int = 5
+CLAMAV_CB_RECOVERY_TTL: int = 60
+
 # ===========================================================================
 # LIVEKIT
 # ===========================================================================

@@ -18,8 +18,23 @@ from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
+import pytest
+
+from apps.files.services.clamav_circuit_breaker import _CB_FAILURES_KEY, _CB_OPEN_KEY
 from apps.files.services.clamav_scan_engine import ClamAVScanEngine, get_scan_engine
 from apps.files.services.scan_engine import ScanResult, StubScanEngine
+
+
+@pytest.fixture(autouse=True)
+def clear_cb_state():
+    from django.core.cache import cache
+
+    cache.delete(_CB_OPEN_KEY)
+    cache.delete(_CB_FAILURES_KEY)
+    yield
+    cache.delete(_CB_OPEN_KEY)
+    cache.delete(_CB_FAILURES_KEY)
+
 
 # ---------------------------------------------------------------------------
 # Helpers

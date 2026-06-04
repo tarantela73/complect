@@ -21,6 +21,11 @@ class ClamAVScanEngine:
     ScanResult.ERROR which the consumer maps to QUARANTINED — files
     never stay stuck in SCANNING state (rule: ERROR → QUARANTINED).
 
+    Circuit breaker: after CLAMAV_CB_FAILURE_THRESHOLD consecutive errors,
+    scan() returns ERROR immediately (no socket I/O) until the circuit
+    recovers after CLAMAV_CB_RECOVERY_TTL seconds. Prevents 120 s × N
+    worker timeout storms when clamd is unreachable.
+
     Protocol: send object_key over unix socket, read CLAMD response.
     INSTREAM byte-streaming is wired when the S3 read-path is available.
     """
@@ -31,6 +36,26 @@ class ClamAVScanEngine:
         self.socket_path: str = socket_path or settings.CLAMAV_SOCKET_PATH
 
     def scan(self, file_record: FileRecord) -> ScanResult:
+        from apps.files.services.clamav_circuit_breaker import get_circuit_breaker
+
+        breaker = get_circuit_breaker()
+        if breaker.is_open():
+            logger.warning(
+                "clamav_circuit_breaker_fast_fail",
+                file_id=str(file_record.id),
+            )
+            return ScanResult.ERROR
+
+        result = self._scan_via_socket(file_record)
+
+        if result == ScanResult.ERROR:
+            breaker.record_failure()
+        else:
+            breaker.record_success()
+
+        return result
+
+    def _scan_via_socket(self, file_record: FileRecord) -> ScanResult:
         from django.conf import settings
 
         timeout = getattr(settings, "CLAMAV_SCAN_TIMEOUT_MS", 120_000) / 1000
