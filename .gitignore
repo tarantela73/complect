@@ -158,6 +158,8 @@ temp/
 screenshots/
 playwright-report/
 test-results/
+.playwright-mcp
+.playwright-mcp/
 
 # =========================================================
 # JUPYTER
@@ -185,4 +187,4 @@ CLAUDE.md
 .claude/
 .claude_session*
 
-.playwright-mcp
+

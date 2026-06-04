@@ -1,0 +1,16 @@
+_format_version: "3.0"
+
+services:
+  - name: backend
+    url: http://backend:8010
+    routes:
+      - name: all-routes
+        paths:
+          - /
+        strip_path: false
+    plugins:
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Gateway-Token:complect_internal_secure_mesh_token_2026"
