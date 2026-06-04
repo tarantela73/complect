@@ -55,6 +55,8 @@ def require_permission(action: str, resource: str) -> Callable:
             )
             return func(request, *args, **kwargs)
 
+        wrapper._rbac_action = action
+        wrapper._rbac_resource = resource
         return wrapper
 
     return decorator
