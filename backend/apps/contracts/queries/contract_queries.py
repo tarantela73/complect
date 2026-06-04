@@ -3,11 +3,13 @@ CQRS Query Side — read-only projections, no business logic, no writes.
 Cursor pagination: WHERE id < cursor ORDER BY id DESC (ADR rule 4.11).
 """
 import uuid
+from datetime import timedelta
 from typing import Optional
 
 from django.db.models import Count
+from django.utils import timezone
 
-from apps.contracts.models.contract import Contract
+from apps.contracts.models.contract import Contract, ContractStatus
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.contract_dto import ContractResponseSchema
 
@@ -78,3 +80,12 @@ def get_contract_counts() -> dict:
         "legal_hold": by_status.get("LEGAL_HOLD", 0),
         "closed": by_status.get("CLOSED", 0),
     }
+
+
+def get_stuck_drafts_count(threshold_days: int = 30) -> int:
+    cutoff = timezone.now() - timedelta(days=threshold_days)
+    return (
+        ContractRepository.get_queryset()
+        .filter(status=ContractStatus.DRAFT, created_at__lt=cutoff)
+        .count()
+    )

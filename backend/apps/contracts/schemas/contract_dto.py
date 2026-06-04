@@ -49,3 +49,17 @@ class ContractListResponse(BaseModel):
 
 class ContractCloseRequest(BaseModel):
     pass
+
+
+class ContractEventLogEntrySchema(BaseModel):
+    event_id: uuid.UUID
+    event_type: str
+    label: str
+    occurred_at: str
+    user_id: Optional[uuid.UUID] = None
+    correlation_id: uuid.UUID
+
+
+class ContractEventLogResponse(BaseModel):
+    results: list[ContractEventLogEntrySchema]
+    count: int

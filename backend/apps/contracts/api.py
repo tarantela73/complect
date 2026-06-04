@@ -10,10 +10,12 @@ from apps.common.api.permissions import require_permission
 from apps.contracts.models.contract import ContractStatus
 from apps.contracts.queries.attachment_queries import get_attachments_list
 from apps.contracts.queries.contract_queries import get_contract_detail, get_contracts_page
+from apps.contracts.queries.event_log_queries import get_contract_event_log
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.attachment_dto import AttachFileRequest, AttachmentListResponse
 from apps.contracts.schemas.contract_dto import (
     ContractCreateRequestSchema,
+    ContractEventLogResponse,
     ContractListResponse,
     ContractResponseSchema,
     ContractUpdateSchema,
@@ -123,6 +125,23 @@ def close_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
     except ValidationError as exc:
         return 400, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
+
+
+# ── Contract Event Log ────────────────────────────────────────────────────────
+
+@router.get(
+    "/{contract_id}/events/",
+    response={200: ContractEventLogResponse, 403: dict},
+    tags=["contracts"],
+)
+@require_permission("read", "contracts")
+def list_contract_events(request: HttpRequest, contract_id: uuid.UUID):
+    try:
+        ContractRepository.get_by_id(contract_id)
+    except PermissionDenied:
+        return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    tenant_id = request.jwt_tenant_id  # type: ignore[attr-defined]
+    return 200, get_contract_event_log(contract_id, tenant_id)
 
 
 # ── Attachments ───────────────────────────────────────────────────────────────

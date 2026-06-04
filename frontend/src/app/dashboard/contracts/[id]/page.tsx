@@ -17,6 +17,7 @@ import {
   useDetachFile,
   type Attachment,
 } from '@/shared/api/attachments'
+import { useContractEvents, type ContractEventLogEntry } from '@/shared/api/contracts'
 import { useFiles, FILE_STATUS_LABELS, FILE_STATUS_COLORS, formatFileSize } from '@/shared/api/files'
 import { Button } from '@/shared/ui/button'
 
@@ -41,6 +42,38 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
 }
 
 const MUTABLE_CONTRACT_STATUSES = new Set(['DRAFT', 'ACTIVE'])
+
+const EVENT_COLORS: Record<string, string> = {
+  'contracts.ContractCreated': 'bg-blue-500',
+  'contracts.ContractActivated': 'bg-green-500',
+  'contracts.ContractClosed': 'bg-slate-400',
+}
+
+function EventTimeline({ contractId }: { contractId: string }) {
+  const { data, isLoading } = useContractEvents(contractId)
+
+  if (isLoading) return null
+  if (!data || data.count === 0) return null
+
+  return (
+    <div className="mt-6">
+      <h2 className="mb-3 text-sm font-semibold">История</h2>
+      <ol className="relative border-l border-border ml-2">
+        {data.results.map((entry: ContractEventLogEntry) => (
+          <li key={entry.event_id} className="mb-4 ml-4">
+            <span
+              className={`absolute -left-1.5 mt-1 h-3 w-3 rounded-full border border-background ${EVENT_COLORS[entry.event_type] ?? 'bg-muted-foreground'}`}
+            />
+            <p className="text-sm font-medium">{entry.label}</p>
+            <p className="text-xs text-muted-foreground">
+              {new Date(entry.occurred_at).toLocaleString('ru-RU')}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
 
 function AttachmentsSection({
   contractId,
@@ -297,6 +330,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
       </dl>
 
       <AttachmentsSection contractId={id} contractStatus={data.status} canWrite={canWrite} />
+      <EventTimeline contractId={id} />
     </div>
   )
 }

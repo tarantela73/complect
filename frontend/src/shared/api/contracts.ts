@@ -6,6 +6,8 @@ export type Contract = components['schemas']['ContractResponseSchema']
 export type ContractList = components['schemas']['ContractListResponse']
 export type ContractCreateRequest = components['schemas']['ContractCreateRequestSchema']
 export type ContractUpdateRequest = components['schemas']['ContractUpdateSchema']
+export type ContractEventLogEntry = components['schemas']['ContractEventLogEntrySchema']
+export type ContractEventLogResponse = components['schemas']['ContractEventLogResponse']
 
 export const CONTRACT_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Черновик',
@@ -35,6 +37,7 @@ export const contractKeys = {
   list: (params: Record<string, unknown>) => [...contractKeys.lists(), params] as const,
   details: () => [...contractKeys.all, 'detail'] as const,
   detail: (id: string) => [...contractKeys.details(), id] as const,
+  events: (id: string) => [...contractKeys.all, 'events', id] as const,
 }
 
 export function useContracts(params?: {
@@ -122,6 +125,20 @@ export function useActivateContract() {
       qc.setQueryData(contractKeys.detail(id), updated)
       qc.invalidateQueries({ queryKey: contractKeys.lists() })
     },
+  })
+}
+
+export function useContractEvents(id: string) {
+  return useQuery({
+    queryKey: contractKeys.events(id),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET('/api/v1/contracts/{contract_id}/events/', {
+        params: { path: { contract_id: id } },
+      })
+      if (error) throw new Error('Ошибка загрузки истории')
+      return data as ContractEventLogResponse
+    },
+    enabled: !!id,
   })
 }
 

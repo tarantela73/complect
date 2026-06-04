@@ -96,6 +96,43 @@ export default function DashboardPage() {
             href="/dashboard/contragents"
           />
         )}
+
+        {data && (
+          <StatCard
+            label="Система"
+            value={data.operational.outbox_failed > 0 ? 'Требует внимания' : 'В норме'}
+            sub={
+              <>
+                {data.operational.stuck_drafts > 0 && (
+                  <Pill
+                    label="Черновики > 30 дней"
+                    count={data.operational.stuck_drafts}
+                    color="text-yellow-600 dark:text-yellow-400"
+                  />
+                )}
+                {data.operational.outbox_pending > 0 && (
+                  <Pill
+                    label="Событий в очереди"
+                    count={data.operational.outbox_pending}
+                    color="text-muted-foreground"
+                  />
+                )}
+                {data.operational.outbox_failed > 0 && (
+                  <Pill
+                    label="Ошибок доставки"
+                    count={data.operational.outbox_failed}
+                    color="text-red-600 dark:text-red-400"
+                  />
+                )}
+                {data.operational.stuck_drafts === 0 &&
+                  data.operational.outbox_pending === 0 &&
+                  data.operational.outbox_failed === 0 && (
+                    <Pill label="Нет проблем" count={0} color="text-green-600 dark:text-green-400" />
+                  )}
+              </>
+            }
+          />
+        )}
       </div>
     </div>
   )

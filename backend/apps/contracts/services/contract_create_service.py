@@ -3,6 +3,9 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.common.events.contracts import ContractCreatedEvent
+from apps.common.services.outbox_service import TransactionalOutboxService
+from apps.common.tenancy.context_core import get_context
 from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.contract_dto import ContractCreateRequestSchema, ContractResponseSchema
@@ -21,6 +24,8 @@ class ContractCreateService:
                 f"Допустимые значения: {', '.join(ResourceSupplyType.values)}"
             )
 
+        ctx = get_context()
+
         with transaction.atomic():
             contract = Contract(
                 id=uuid.uuid4(),
@@ -32,6 +37,14 @@ class ContractCreateService:
                 status=ContractStatus.DRAFT,
             )
             ContractRepository.create(contract)
+
+            event = ContractCreatedEvent.create(
+                correlation_id=ctx.correlation_id,
+                contract_id=contract.id,
+                user_id=ctx.user_id,
+                contract_number=contract.contract_number,
+            )
+            TransactionalOutboxService.push_to_outbox(event)
 
         return ContractResponseSchema(
             id=contract.id,

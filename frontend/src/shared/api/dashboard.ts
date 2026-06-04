@@ -3,6 +3,7 @@ import { apiClient } from './client'
 import type { components } from './generated/schema'
 
 export type DashboardSummary = components['schemas']['DashboardSummarySchema']
+export type OperationalCounts = components['schemas']['OperationalCountsSchema']
 
 type ApiErrorBody = { error?: { message?: string } }
 const apiMsg = (error: unknown, fallback: string) =>
