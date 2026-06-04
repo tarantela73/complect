@@ -55,7 +55,8 @@
       "Bash(git clone *)",
       "Bash(mkdir -p /home/sever/projects/Complect/backend/apps/finance/tests)",
       "Bash(touch /home/sever/projects/Complect/backend/apps/finance/tests/__init__.py)",
-      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/home/sever/projects/Complect/backend'\\); import django; import os; os.environ['DJANGO_SETTINGS_MODULE']='config.settings.local'\")"
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/home/sever/projects/Complect/backend'\\); import django; import os; os.environ['DJANGO_SETTINGS_MODULE']='config.settings.local'\")",
+      "Bash(docker volume *)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

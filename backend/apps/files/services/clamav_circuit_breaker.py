@@ -6,6 +6,8 @@ logger = structlog.get_logger(__name__)
 
 _CB_OPEN_KEY = "clamav:cb:open"
 _CB_FAILURES_KEY = "clamav:cb:failures"
+# Sliding-window open-event counter consumed by SystemControlPolicy.
+_CB_OPEN_EVENTS_KEY = "clamav:cb:open_events"
 
 
 class ClamAVCircuitBreaker:
@@ -66,10 +68,16 @@ class ClamAVCircuitBreaker:
         if failures >= self.failure_threshold:
             cache.set(_CB_OPEN_KEY, 1, timeout=self.recovery_ttl)
             cache.delete(_CB_FAILURES_KEY)
+            # Track open-event rate for SystemControlPolicy.
+            from django.conf import settings
+            _window = getattr(settings, "FILES_CONTROL_CB_RATE_WINDOW_SECONDS", 300)
+            open_events = (cache.get(_CB_OPEN_EVENTS_KEY) or 0) + 1
+            cache.set(_CB_OPEN_EVENTS_KEY, open_events, timeout=_window)
             logger.error(
                 "clamav_circuit_breaker_opened",
                 failure_threshold=self.failure_threshold,
                 recovery_ttl_s=self.recovery_ttl,
+                open_events_in_window=open_events,
             )
         else:
             logger.warning(

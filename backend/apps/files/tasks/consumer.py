@@ -29,6 +29,7 @@ from apps.files.repositories.file_repo import FileRepository
 from apps.files.services.adaptive_scan_policy import get_adaptive_scan_policy
 from apps.files.services.clamav_scan_engine import get_scan_engine
 from apps.files.services.scan_engine import ScanEngine, ScanResult, StubScanEngine
+from apps.files.services.system_control_policy import get_system_control_policy
 from config.celery import app
 
 logger = structlog.get_logger(__name__)
@@ -178,8 +179,10 @@ class FilesConsumer(BaseDomainConsumer):
         self._total_scan_ms = 0.0
         self._total_transition_ms = 0.0
         self._total_cycle_ms = 0.0
+        _picked_up = 0
         try:
-            return super().run_batch(batch_size)
+            _picked_up = super().run_batch(batch_size)
+            return _picked_up
         finally:
             if self._total_cycle_ms:
                 logger.info(
@@ -189,6 +192,10 @@ class FilesConsumer(BaseDomainConsumer):
                     transition_ms=round(self._total_transition_ms, 2),
                     cycle_ms=round(self._total_cycle_ms, 2),
                 )
+                if _picked_up > 0:
+                    get_system_control_policy().record_scan_latency(
+                        self._total_scan_ms / _picked_up
+                    )
 
     def _verify_emission(self, event: StreamEvent) -> None:
         """
@@ -226,5 +233,7 @@ def run_files_consumer_task() -> None:
     STRICT mode: no fence check needed — each file is an independent aggregate.
     Queue: files (low priority, see Celery topology rule 4.15).
     ScanEngine is selected by FILES_SCAN_ENGINE setting: STUB (dev) or CLAMAV (prod).
+    Batch size is controlled by SystemControlPolicy (adaptive, Redis-backed).
     """
-    FilesConsumer(scan_engine=get_scan_engine()).run_batch()
+    batch_size = get_system_control_policy().get_batch_size()
+    FilesConsumer(scan_engine=get_scan_engine()).run_batch(batch_size)

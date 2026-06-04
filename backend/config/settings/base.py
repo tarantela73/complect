@@ -175,6 +175,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60.0,  # every 60 seconds; skips internally if CB still open
         "options": {"queue": "files"},
     },
+    "files-system-control-policy": {
+        "task": "apps.files.tasks.policy_evaluator.run_system_control_policy_task",
+        "schedule": 30.0,  # every 30 seconds; self-healing via PARAM_TTL on batch_size key
+        "options": {"queue": "files"},
+    },
 }
 
 # Tunable per-environment; dispatcher marks records permanently failed after this many retries.
@@ -317,6 +322,18 @@ CLAMAV_CB_RECOVERY_TTL: int = 60
 
 # Batch size for the CB recovery re-scan task.
 FILES_RECOVERY_SCAN_BATCH_SIZE: int = 50
+
+# System control policy — adaptive batch sizing.
+FILES_CONTROL_BATCH_SIZE_DEFAULT: int = 100    # nominal
+FILES_CONTROL_BATCH_SIZE_REDUCED: int = 25     # scan latency elevated
+FILES_CONTROL_BATCH_SIZE_THROTTLED: int = 10   # CB rate or backlog high
+FILES_CONTROL_CB_RATE_THRESHOLD: int = 3       # CB opens in window before throttle
+FILES_CONTROL_CB_RATE_WINDOW_SECONDS: int = 300
+FILES_CONTROL_SCAN_LATENCY_THRESHOLD_MS: float = 5000.0  # per-file ms EWMA
+FILES_CONTROL_BACKLOG_THROTTLE_THRESHOLD: int = 100
+FILES_CONTROL_SCAN_EWMA_ALPHA: float = 0.3     # α for scan_ms EWMA
+FILES_CONTROL_SCAN_EWMA_TTL: int = 600         # EWMA key TTL (10 min)
+FILES_CONTROL_PARAM_TTL: int = 120             # batch_size key TTL; expires → default
 
 # ===========================================================================
 # LIVEKIT
