@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import uuid
+
+import django.utils.timezone as tz
+from django.core.exceptions import PermissionDenied
+from django.db.models import F
+
+from apps.common.tenancy.context_core import get_tenant_id
+from apps.files.models.file_record import FileRecord, FileStatus
+
+
+class FileRepository:
+    @staticmethod
+    def get_queryset():
+        tenant_id = get_tenant_id()
+        return FileRecord.objects.filter(tenant_id=tenant_id, is_deleted=False)
+
+    @classmethod
+    def get_by_id(cls, file_id: uuid.UUID) -> FileRecord:
+        record = cls.get_queryset().filter(id=file_id).first()
+        if not record:
+            raise PermissionDenied("Файл не найден или недоступен для текущего тенанта.")
+        return record
+
+    @staticmethod
+    def create_pending(
+        *,
+        file_id: uuid.UUID,
+        object_key: str,
+        original_name: str,
+        content_type: str,
+        size_bytes: int,
+        uploaded_by: uuid.UUID,
+        storage_provider: str,
+    ) -> FileRecord:
+        tenant_id = get_tenant_id()
+        record = FileRecord(
+            id=file_id,
+            tenant_id=tenant_id,
+            object_key=object_key,
+            original_name=original_name,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            checksum_sha256="",
+            storage_provider=storage_provider,
+            status=FileStatus.PENDING_UPLOAD,
+            uploaded_by=uploaded_by,
+        )
+        record.save()
+        return record
+
+    @staticmethod
+    def mark_uploaded(file_id: uuid.UUID, checksum_sha256: str) -> bool:
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            status=FileStatus.PENDING_UPLOAD,
+            is_deleted=False,
+            is_legal_hold=False,
+        ).update(
+            status=FileStatus.UPLOADED,
+            checksum_sha256=checksum_sha256,
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1
+
+    @staticmethod
+    def mark_scanning(file_id: uuid.UUID) -> bool:
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            status=FileStatus.UPLOADED,
+            is_deleted=False,
+        ).update(
+            status=FileStatus.SCANNING,
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1
+
+    @staticmethod
+    def mark_available(file_id: uuid.UUID, scanned_at=None) -> bool:
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            status=FileStatus.SCANNING,
+            is_deleted=False,
+        ).update(
+            status=FileStatus.AVAILABLE,
+            scanned_at=scanned_at or tz.now(),
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1
+
+    @staticmethod
+    def mark_quarantined(file_id: uuid.UUID, reason: str, scanned_at=None) -> bool:
+        tenant_id = get_tenant_id()
+        updated = FileRecord.objects.filter(
+            id=file_id,
+            tenant_id=tenant_id,
+            status=FileStatus.SCANNING,
+            is_deleted=False,
+        ).update(
+            status=FileStatus.QUARANTINED,
+            quarantine_reason=reason,
+            scanned_at=scanned_at or tz.now(),
+            version=F("version") + 1,
+            updated_at=tz.now(),
+        )
+        return updated == 1
