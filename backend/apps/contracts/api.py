@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
+from apps.common.api.permissions import require_permission
 from apps.contracts.queries.contract_queries import get_contract_detail, get_contracts_page
 from apps.contracts.schemas.contract_dto import (
     ContractCreateRequestSchema,
@@ -18,7 +19,8 @@ from apps.contracts.services.contract_create_service import ContractCreateServic
 router = Router(tags=["contracts"])
 
 
-@router.get("/", response={200: ContractListResponse})
+@router.get("/", response={200: ContractListResponse, 403: dict})
+@require_permission("read", "contracts")
 def list_contracts(
     request: HttpRequest,
     cursor: Optional[uuid.UUID] = Query(None),
@@ -31,6 +33,7 @@ def list_contracts(
 
 
 @router.get("/{contract_id}/", response={200: ContractResponseSchema, 403: dict})
+@require_permission("read", "contracts")
 def get_contract(request: HttpRequest, contract_id: uuid.UUID):
     try:
         return 200, get_contract_detail(contract_id)
@@ -38,7 +41,8 @@ def get_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
 
 
-@router.post("/", response={201: ContractResponseSchema, 400: dict, 409: dict})
+@router.post("/", response={201: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
+@require_permission("create", "contracts")
 def create_contract(request: HttpRequest, body: ContractCreateRequestSchema):
     try:
         result = ContractCreateService.execute(body)
@@ -48,6 +52,7 @@ def create_contract(request: HttpRequest, body: ContractCreateRequestSchema):
 
 
 @router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
+@require_permission("write", "contracts")
 def close_contract(request: HttpRequest, contract_id: uuid.UUID):
     from apps.common.tenancy.context_core import get_context
 

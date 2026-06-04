@@ -1,5 +1,6 @@
 from django.http import HttpRequest, JsonResponse
-from ninja.errors import AuthenticationError, ValidationError as NinjaValidationError
+from ninja.errors import AuthenticationError
+from ninja.errors import ValidationError as NinjaValidationError
 
 
 def _ctx_ids() -> tuple[str | None, str | None]:
@@ -47,6 +48,16 @@ def ninja_auth_error_handler(request: HttpRequest, exc: AuthenticationError):
             message="Не аутентифицирован.",
         ),
         status=401,
+    )
+
+
+def ninja_permission_denied_handler(request: HttpRequest, exc: Exception):
+    return JsonResponse(
+        make_error_response(
+            code="FORBIDDEN",
+            message="Доступ запрещён.",
+        ),
+        status=403,
     )
 
 

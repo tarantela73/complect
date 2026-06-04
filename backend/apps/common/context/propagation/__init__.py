@@ -5,7 +5,10 @@ from typing import Any, Dict
 from apps.common.context.core import set_correlation_id, set_request_id, set_tenant_id, set_user_id
 
 
-def apply_propagation_context(raw_headers: Dict[str, Any]) -> bool:
+def apply_propagation_context(
+    raw_headers: Dict[str, Any],
+) -> tuple[bool, uuid.UUID | None, uuid.UUID | None]:
+    """Return (success, user_uuid, tenant_uuid). On failure returns (False, None, None)."""
     tenant_id = raw_headers.get("x-ctx-tenant-id") or raw_headers.get("X-Tenant-ID")
     user_id = raw_headers.get("x-ctx-user-id") or raw_headers.get("X-User-ID")
     request_id = raw_headers.get("x-ctx-request-id") or raw_headers.get("X-Request-ID")
@@ -13,7 +16,7 @@ def apply_propagation_context(raw_headers: Dict[str, Any]) -> bool:
 
     # Отсутствие обязательных заголовков → 401
     if not tenant_id or not user_id:
-        return False
+        return False, None, None
 
     tenant_str = str(tenant_id).strip()
     user_str = str(user_id).strip()
@@ -41,4 +44,4 @@ def apply_propagation_context(raw_headers: Dict[str, Any]) -> bool:
     set_user_id(u_uuid)
     set_request_id(r_uuid)
     set_correlation_id(c_uuid)
-    return True
+    return True, u_uuid, t_uuid

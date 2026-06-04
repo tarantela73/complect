@@ -1,7 +1,12 @@
+from django.core.exceptions import PermissionDenied
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, ValidationError
 
-from apps.common.api.errors import ninja_auth_error_handler, ninja_validation_error_handler
+from apps.common.api.errors import (
+    ninja_auth_error_handler,
+    ninja_permission_denied_handler,
+    ninja_validation_error_handler,
+)
 
 api = NinjaAPI(
     title="ERP Комплект API",
@@ -12,3 +17,4 @@ api = NinjaAPI(
 
 api.add_exception_handler(ValidationError, ninja_validation_error_handler)
 api.add_exception_handler(AuthenticationError, ninja_auth_error_handler)
+api.add_exception_handler(PermissionDenied, ninja_permission_denied_handler)

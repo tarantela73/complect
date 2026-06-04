@@ -7,6 +7,7 @@ from django.http import HttpRequest
 from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
+from apps.common.api.permissions import require_permission
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contragents.models.contragent import Contragent, ContragentType
 from apps.contragents.policies.validation_matrix import ContragentValidationPolicy
@@ -27,7 +28,8 @@ from apps.contragents.services.registration import ContragentRegistrationService
 router = Router(tags=["contragents"])
 
 
-@router.get("/", response={200: ContragentListResponse})
+@router.get("/", response={200: ContragentListResponse, 403: dict})
+@require_permission("read", "contragents")
 def list_contragents(
     request: HttpRequest,
     cursor: Optional[uuid.UUID] = Query(None),  # noqa: B008
@@ -39,7 +41,8 @@ def list_contragents(
     return 200, result
 
 
-@router.get("/{contragent_id}/", response={200: ContragentResponse, 404: dict})
+@router.get("/{contragent_id}/", response={200: ContragentResponse, 403: dict, 404: dict})
+@require_permission("read", "contragents")
 def get_contragent(request: HttpRequest, contragent_id: uuid.UUID):
     result = get_contragent_detail(contragent_id)
     if result is None:
@@ -47,7 +50,8 @@ def get_contragent(request: HttpRequest, contragent_id: uuid.UUID):
     return 200, result
 
 
-@router.post("/", response={201: ContragentResponse, 400: dict, 409: dict})
+@router.post("/", response={201: ContragentResponse, 400: dict, 403: dict, 409: dict})
+@require_permission("create", "contragents")
 def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
     try:
         if body.contragent_type not in ContragentType.values:
@@ -78,7 +82,8 @@ def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
     )
 
 
-@router.get("/{contragent_id}/persons/", response={200: PersonListResponse, 404: dict})
+@router.get("/{contragent_id}/persons/", response={200: PersonListResponse, 403: dict, 404: dict})
+@require_permission("read", "contragents")
 def list_persons(request: HttpRequest, contragent_id: uuid.UUID):
     if get_contragent_detail(contragent_id) is None:
         return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
@@ -87,6 +92,7 @@ def list_persons(request: HttpRequest, contragent_id: uuid.UUID):
 
 
 @router.post("/{contragent_id}/persons/", response={201: dict, 400: dict, 403: dict, 404: dict})
+@require_permission("write", "contragents")
 def create_person(request: HttpRequest, contragent_id: uuid.UUID, body: PersonCreateRequest):
     if get_contragent_detail(contragent_id) is None:
         return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")

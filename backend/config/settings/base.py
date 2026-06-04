@@ -261,6 +261,16 @@ POSTGRES_REPLICA_ENABLED = True
 POSTGRES_REPLICA_MAX_LAG = 1.0
 
 # ===========================================================================
+# RBAC
+# ===========================================================================
+# OFF       — bypass all checks (use during initial rollout or in tests that don't need RBAC)
+# LOG_ONLY  — evaluate and log denials, never block (default; safe for gradual rollout)
+# ENFORCE   — raise PermissionDenied on denial
+RBAC_ENFORCEMENT_MODE = "LOG_ONLY"
+# Per-user permission set cache TTL in seconds. Short enough for security, long for perf.
+RBAC_POLICY_CACHE_TTL = 60
+
+# ===========================================================================
 # AUDIT / RETENTION
 # ===========================================================================
 AUDIT_RETENTION_DAYS = 3650

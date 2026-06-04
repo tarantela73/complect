@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
+from apps.common.api.permissions import require_permission
 from apps.common.tenancy.context_core import get_context
 from apps.finance.queries.transaction_queries import get_transactions_page
 from apps.finance.schemas.transaction_dto import (
@@ -18,7 +19,8 @@ from apps.finance.services.transaction_posting import TransactionPostingService
 router = Router(tags=["finance"])
 
 
-@router.get("/transactions/", response={200: TransactionListResponse})
+@router.get("/transactions/", response={200: TransactionListResponse, 403: dict})
+@require_permission("read", "finance")
 def list_transactions(
     request: HttpRequest,
     cursor: Optional[uuid.UUID] = Query(None),  # noqa: B008
@@ -38,6 +40,7 @@ def list_transactions(
 
 
 @router.post("/transactions/", response={201: TransactionResponse, 400: dict, 403: dict})
+@require_permission("create", "finance")
 def post_transaction(request: HttpRequest, body: TransactionPostRequest):
     try:
         ctx = get_context()
@@ -66,6 +69,7 @@ def post_transaction(request: HttpRequest, body: TransactionPostRequest):
     "/transactions/{tx_id}/reverse/",
     response={200: TransactionResponse, 403: dict},
 )
+@require_permission("write", "finance")
 def reverse_transaction(request: HttpRequest, tx_id: uuid.UUID):
     try:
         ctx = get_context()

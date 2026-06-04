@@ -55,7 +55,7 @@ class AsgiTenantEnforcementMiddleware:
             if path.startswith(self.CONTEXT_FREE_PREFIXES):
                 return self.get_response(request)
 
-            success = apply_propagation_context(request.headers)
+            success, user_uuid, tenant_uuid = apply_propagation_context(request.headers)
 
             if not success:
                 return JsonResponse(
@@ -65,6 +65,11 @@ class AsgiTenantEnforcementMiddleware:
                     ),
                     status=401,
                 )
+
+            # Make identity available to require_permission regardless of auth path.
+            # JWT Bearer sets these in JWTAuth.authenticate(); gateway sets them here.
+            request.jwt_user_id = user_uuid
+            request.jwt_tenant_id = tenant_uuid
 
             ContextGuard.validate_consistency()
             return self.get_response(request)

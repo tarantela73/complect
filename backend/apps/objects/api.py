@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
+from apps.common.api.permissions import require_permission
 from apps.objects.queries.object_queries import (
     get_object_detail,
     get_objects_geojson,
@@ -39,7 +40,8 @@ def _parse_bbox(bbox: Optional[str]) -> Optional[tuple[float, float, float, floa
         return None
 
 
-@router.get("/", response={200: SupplyObjectListResponse})
+@router.get("/", response={200: SupplyObjectListResponse, 403: dict})
+@require_permission("read", "objects")
 def list_objects(
     request: HttpRequest,
     cursor: Optional[uuid.UUID] = Query(None),
@@ -60,7 +62,8 @@ def list_objects(
     return 200, result
 
 
-@router.get("/geojson/", response={200: FeatureCollectionSchema})
+@router.get("/geojson/", response={200: FeatureCollectionSchema, 403: dict})
+@require_permission("read", "objects")
 def objects_geojson(
     request: HttpRequest,
     contract_id: Optional[uuid.UUID] = Query(None),
@@ -71,6 +74,7 @@ def objects_geojson(
 
 
 @router.get("/{object_id}/", response={200: FeatureSchema, 403: dict})
+@require_permission("read", "objects")
 def get_object(request: HttpRequest, object_id: uuid.UUID):
     try:
         return 200, get_object_detail(object_id)
@@ -78,7 +82,8 @@ def get_object(request: HttpRequest, object_id: uuid.UUID):
         return 403, make_error_response("OBJECT_NOT_FOUND", "Объект не найден.")
 
 
-@router.post("/", response={201: FeatureSchema, 400: dict})
+@router.post("/", response={201: FeatureSchema, 400: dict, 403: dict})
+@require_permission("create", "objects")
 def create_object(request: HttpRequest, body: SupplyObjectCreateRequest):
     try:
         obj = ObjectCreateService.execute(body)
@@ -88,6 +93,7 @@ def create_object(request: HttpRequest, body: SupplyObjectCreateRequest):
 
 
 @router.patch("/{object_id}/location/", response={204: None, 400: dict, 403: dict})
+@require_permission("write", "objects")
 def update_location(request: HttpRequest, object_id: uuid.UUID, body: UpdateLocationRequest):
     try:
         ObjectLocationService.update_location(object_id, body)
@@ -97,6 +103,7 @@ def update_location(request: HttpRequest, object_id: uuid.UUID, body: UpdateLoca
 
 
 @router.delete("/{object_id}/", response={204: None, 403: dict})
+@require_permission("delete", "objects")
 def delete_object(request: HttpRequest, object_id: uuid.UUID):
     try:
         ObjectDeleteService.soft_delete(object_id)
