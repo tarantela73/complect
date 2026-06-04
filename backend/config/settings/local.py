@@ -104,4 +104,16 @@ EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "idempotency-key",
+]
 

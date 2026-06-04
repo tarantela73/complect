@@ -74,7 +74,10 @@ export function useCreateContract() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (body: ContractCreateRequest) => {
-      const { data, error, response } = await apiClient.POST('/api/v1/contracts/', { body })
+      const { data, error, response } = await apiClient.POST('/api/v1/contracts/', {
+        body,
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      })
       if (response.status === 400 || error) {
         throw new Error(apiMsg(error, 'Ошибка создания'))
       }
@@ -90,7 +93,7 @@ export function useUpdateContract(id: string) {
     mutationFn: async (body: ContractUpdateRequest) => {
       const { data, error, response } = await apiClient.PATCH(
         '/api/v1/contracts/{contract_id}/',
-        { params: { path: { contract_id: id } }, body },
+        { params: { path: { contract_id: id } }, body, headers: { 'Idempotency-Key': crypto.randomUUID() } },
       )
       if (response.status === 422) throw new Error(apiMsg(error, 'Редактирование недоступно'))
       if (error) throw new Error('Ошибка обновления')
@@ -109,7 +112,7 @@ export function useActivateContract() {
     mutationFn: async (id: string) => {
       const { data, error, response } = await apiClient.POST(
         '/api/v1/contracts/{contract_id}/activate/',
-        { params: { path: { contract_id: id } } },
+        { params: { path: { contract_id: id } }, headers: { 'Idempotency-Key': crypto.randomUUID() } },
       )
       if (response.status === 422) throw new Error(apiMsg(error, 'Активация невозможна'))
       if (error) throw new Error('Ошибка активации')
@@ -128,7 +131,7 @@ export function useCloseContract() {
     mutationFn: async (id: string) => {
       const { data, error, response } = await apiClient.POST(
         '/api/v1/contracts/{contract_id}/close/',
-        { params: { path: { contract_id: id } } },
+        { params: { path: { contract_id: id } }, headers: { 'Idempotency-Key': crypto.randomUUID() } },
       )
       if (response.status === 400) throw new Error(apiMsg(error, 'Закрытие невозможно'))
       if (error) throw new Error('Ошибка закрытия')

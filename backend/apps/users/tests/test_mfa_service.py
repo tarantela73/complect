@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
 from apps.users.models import User
-from apps.users.services.auth_service import REFRESH_TOKEN_REDIS_PREFIX
+from apps.users.services.auth_service import REFRESH_TOKEN_REDIS_PREFIX, _pk_to_uuid4
 from apps.users.services.mfa_service import (
     confirm_totp_setup,
     setup_totp,
@@ -106,7 +106,7 @@ class TestVerifyMfaAndIssueTokens:
 
         access_payload = jwt.decode(access, settings.SECRET_KEY, algorithms=["HS256"])
         assert access_payload["type"] == "access"
-        assert access_payload["user_id"] == str(user.pk)
+        assert access_payload["user_id"] == _pk_to_uuid4(user.pk)
 
         refresh_payload = jwt.decode(refresh, settings.SECRET_KEY, algorithms=["HS256"])
         jti = refresh_payload["jti"]

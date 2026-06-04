@@ -12,12 +12,12 @@ export function useIsAuthenticated(): boolean {
 
 export function useCan(permission: string): boolean {
   const permissions = useAuthStore((s) => s.permissions)
-  return permissions.includes(permission)
+  return (permissions ?? []).includes(permission)
 }
 
 export function useCanAny(permissions: string[]): boolean {
   const stored = useAuthStore((s) => s.permissions)
-  return permissions.some((p) => stored.includes(p))
+  return permissions.some((p) => (stored ?? []).includes(p))
 }
 
 export function useCurrentUser() {

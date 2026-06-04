@@ -10,6 +10,13 @@ from django.core.exceptions import PermissionDenied
 from apps.users.models import User
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
+REFRESH_TOKEN_TTL = timedelta(days=7)
+REFRESH_TOKEN_REDIS_PREFIX = "auth:refresh:"
+
+
+def _pk_to_uuid4(pk: int) -> str:
+    """Encode integer pk as deterministic UUID v4 (version=4, variant=RFC4122 bits set)."""
+    return str(uuid.UUID(int=0x00000000000040008000000000000000 | (pk & 0xFFFFFFFFFFFF)))
 
 
 def _get_user_permissions(user: User) -> list[str]:
@@ -19,7 +26,7 @@ def _get_user_permissions(user: User) -> list[str]:
     from apps.common.models.rbac import RoleBinding
 
     bindings = (
-        RoleBinding.objects.filter(user_id=user.pk, tenant_id=user.tenant_id, is_active=True)
+        RoleBinding.objects.filter(user_id=_pk_to_uuid4(user.pk), tenant_id=user.tenant_id, is_active=True)
         .select_related("role")
         .prefetch_related("role__permissions")
     )
@@ -28,14 +35,12 @@ def _get_user_permissions(user: User) -> list[str]:
         for binding in bindings
         for perm in binding.role.permissions.all()
     ]
-REFRESH_TOKEN_TTL = timedelta(days=7)
-REFRESH_TOKEN_REDIS_PREFIX = "auth:refresh:"
 
 
 def _make_access_token(user: User) -> str:
     now = datetime.now(UTC)
     payload = {
-        "user_id": str(user.pk),
+        "user_id": _pk_to_uuid4(user.pk),
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
         "username": user.username,
         "iat": now,

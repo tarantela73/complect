@@ -64,7 +64,10 @@ export function useCreateContragent() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (body: ContragentCreateRequest) => {
-      const { data, error, response } = await apiClient.POST('/api/v1/contragents/', { body })
+      const { data, error, response } = await apiClient.POST('/api/v1/contragents/', {
+        body,
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      })
       if (response.status === 400 || error) {
         throw new Error(apiMsg(error, 'Ошибка создания'))
       }
@@ -80,7 +83,7 @@ export function useUpdateContragent(id: string) {
     mutationFn: async (body: ContragentUpdateRequest) => {
       const { data, error, response } = await apiClient.PATCH(
         '/api/v1/contragents/{contragent_id}/',
-        { params: { path: { contragent_id: id } }, body },
+        { params: { path: { contragent_id: id } }, body, headers: { 'Idempotency-Key': crypto.randomUUID() } },
       )
       if (response.status === 422) throw new Error(apiMsg(error, 'Бизнес-правило нарушено'))
       if (error) throw new Error('Ошибка обновления')
@@ -99,7 +102,7 @@ export function useDeleteContragent() {
     mutationFn: async (id: string) => {
       const { error, response } = await apiClient.DELETE(
         '/api/v1/contragents/{contragent_id}/',
-        { params: { path: { contragent_id: id } } },
+        { params: { path: { contragent_id: id } }, headers: { 'Idempotency-Key': crypto.randomUUID() } },
       )
       if (response.status === 422) throw new Error(apiMsg(error, 'Удаление заблокировано'))
       if (response.status !== 204 && error) throw new Error('Ошибка удаления')

@@ -44,7 +44,7 @@ export default function LoginPage() {
         return
       }
 
-      setAccessToken(data.access_token, data.permissions)
+      setAccessToken(data.access_token, data.permissions ?? [])
       router.push('/dashboard')
     } catch (err) {
       const code = (err as Error & { code?: string }).code

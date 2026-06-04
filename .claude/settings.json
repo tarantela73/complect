@@ -91,14 +91,28 @@
       "Bash(curl -s http://localhost:8010/health/)",
       "mcp__playwright__browser_fill_form",
       "mcp__playwright__browser_click",
-      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\",\"device_fingerprint\":\"\"}')"
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\",\"device_fingerprint\":\"\"}')",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(xargs cat)",
+      "Bash(xargs ls -la)",
+      "Bash(grep -v \"imported\\\\|^$\")",
+      "Bash(echo \"test file for QA browser testing\" > /tmp/test_qa.txt && echo \"created\")",
+      "mcp__playwright__browser_file_upload",
+      "Bash(echo \"test file for QA browser testing\" > /home/sever/projects/Complect/test_qa.txt && echo \"created\")",
+      "mcp__playwright__browser_wait_for",
+      "Bash(curl -s -X OPTIONS http://localhost:8010/api/v1/files/upload-init -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: idempotency-key,content-type,authorization' -v)",
+      "Bash(curl -s -X OPTIONS http://localhost:8000/api/v1/files/upload-init -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: idempotency-key,content-type,authorization' -v)",
+      "mcp__playwright__browser_handle_dialog"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
       "/home/sever/projects/Complect/backend/apps/contracts",
       "/home/sever/projects/Complect/frontend/src/app/(auth)",
       "/home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]",
-      "/home/sever/projects/Complect/frontend/src/app/dashboard/files"
+      "/home/sever/projects/Complect/frontend/src/app/dashboard/files",
+      "/tmp",
+      "/home/sever/projects/Complect"
     ]
   }
 }

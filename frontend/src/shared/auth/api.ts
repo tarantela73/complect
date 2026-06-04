@@ -14,7 +14,7 @@ export interface RefreshResponse {
   permissions: string[]
 }
 
-const BASE = env.NEXT_PUBLIC_API_URL
+const BASE = `${env.NEXT_PUBLIC_API_URL}/api/v1`
 
 async function parseResponse<T>(res: Response): Promise<T> {
   const body = await res.json()

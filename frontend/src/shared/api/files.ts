@@ -85,6 +85,7 @@ export function useUploadFile() {
           content_type: file.type || 'application/octet-stream',
           size_bytes: file.size,
         },
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
       })
       if (initErr) throw new Error(apiMsg(initErr, 'Ошибка инициализации загрузки'))
 
@@ -104,6 +105,7 @@ export function useUploadFile() {
         {
           params: { path: { file_id: init.file_id } },
           body: { checksum_sha256: checksum },
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
         },
       )
       if (completeErr) throw new Error(apiMsg(completeErr, 'Ошибка подтверждения загрузки'))
@@ -122,6 +124,7 @@ export function useDeleteFile() {
     mutationFn: async (id: string) => {
       const { error } = await apiClient.DELETE('/api/v1/files/{file_id}', {
         params: { path: { file_id: id } },
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
       })
       if (error) throw new Error(apiMsg(error, 'Ошибка удаления файла'))
     },

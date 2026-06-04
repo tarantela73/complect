@@ -9,6 +9,7 @@ from django.core.exceptions import PermissionDenied
 from apps.users.models import User
 from apps.users.services.auth_service import (
     REFRESH_TOKEN_REDIS_PREFIX,
+    _pk_to_uuid4,
     login,
     logout,
     refresh_access_token,
@@ -65,7 +66,7 @@ class TestLogin:
 
         access_payload = jwt.decode(access, settings.SECRET_KEY, algorithms=["HS256"])
         assert access_payload["type"] == "access"
-        assert access_payload["user_id"] == str(user.pk)
+        assert access_payload["user_id"] == _pk_to_uuid4(user.pk)
 
         refresh_payload = jwt.decode(refresh, settings.SECRET_KEY, algorithms=["HS256"])
         assert refresh_payload["type"] == "refresh"

@@ -14,3 +14,27 @@ services:
           add:
             headers:
               - "X-Gateway-Token:complect_internal_secure_mesh_token_2026"
+      - name: pre-function
+        config:
+          access:
+            - |
+              local auth = kong.request.get_header("Authorization")
+              if auth and auth:sub(1, 7) == "Bearer " then
+                local token = auth:sub(8)
+                local parts = {}
+                for part in token:gmatch("[^.]+") do
+                  parts[#parts + 1] = part
+                end
+                if #parts == 3 then
+                  local payload = parts[2]
+                  local pad = #payload % 4
+                  if pad > 0 then payload = payload .. string.rep("=", 4 - pad) end
+                  local decoded = ngx.decode_base64(payload)
+                  if decoded then
+                    local user_id = decoded:match('"user_id"%s*:%s*"([^"]+)"')
+                    local tenant_id = decoded:match('"tenant_id"%s*:%s*"([^"]+)"')
+                    if user_id then kong.service.request.set_header("X-User-ID", user_id) end
+                    if tenant_id then kong.service.request.set_header("X-Tenant-ID", tenant_id) end
+                  end
+                end
+              end
