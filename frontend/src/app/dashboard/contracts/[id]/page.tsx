@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCan } from '@/shared/auth/hooks'
@@ -11,6 +11,13 @@ import {
   CONTRACT_STATUS_LABELS,
   RESOURCE_TYPE_LABELS,
 } from '@/shared/api/contracts'
+import {
+  useContractAttachments,
+  useAttachFile,
+  useDetachFile,
+  type Attachment,
+} from '@/shared/api/attachments'
+import { useFiles, FILE_STATUS_LABELS, FILE_STATUS_COLORS, formatFileSize } from '@/shared/api/files'
 import { Button } from '@/shared/ui/button'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -29,6 +36,141 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
     <div className="flex px-4 py-3 gap-4">
       <dt className="w-44 shrink-0 text-sm font-medium text-muted-foreground">{label}</dt>
       <dd className={`text-sm flex-1 ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
+    </div>
+  )
+}
+
+function AttachmentsSection({ contractId, canWrite }: { contractId: string; canWrite: boolean }) {
+  const [showPicker, setShowPicker] = useState(false)
+  const [attachError, setAttachError] = useState('')
+
+  const { data: attachments, isLoading } = useContractAttachments(contractId)
+  const { data: files } = useFiles({ status: 'AVAILABLE', limit: 100 })
+  const attachMutation = useAttachFile(contractId)
+  const detachMutation = useDetachFile(contractId)
+
+  const attachedIds = new Set(attachments?.results.map((a) => a.file_id) ?? [])
+  const availableToAttach = files?.results.filter((f) => !attachedIds.has(f.id)) ?? []
+
+  const handleAttach = (fileId: string) => {
+    setAttachError('')
+    attachMutation.mutate(fileId, {
+      onSuccess: () => setShowPicker(false),
+      onError: (e) => setAttachError(e.message),
+    })
+  }
+
+  const handleDetach = (fileId: string, name: string) => {
+    if (!confirm(`Открепить файл «${name}»?`)) return
+    detachMutation.mutate(fileId, {
+      onError: (e) => alert(e.message),
+    })
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Вложения</h2>
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setShowPicker((v) => !v); setAttachError('') }}
+          >
+            {showPicker ? 'Отмена' : 'Прикрепить файл'}
+          </Button>
+        )}
+      </div>
+
+      {showPicker && (
+        <div className="mb-3 rounded-md border border-border bg-muted/30 p-3">
+          {attachError && <p className="mb-2 text-xs text-destructive">{attachError}</p>}
+          {availableToAttach.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Нет доступных файлов. Загрузите файл в разделе{' '}
+              <Link href="/dashboard/files" className="underline">Файлы</Link>.
+            </p>
+          ) : (
+            <ul className="space-y-1 max-h-48 overflow-y-auto">
+              {availableToAttach.map((f) => (
+                <li key={f.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate">{f.original_name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(f.size_bytes)}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={attachMutation.isPending}
+                    onClick={() => handleAttach(f.id)}
+                  >
+                    Прикрепить
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Загрузка вложений...</p>
+      ) : attachments?.results.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Вложений нет</p>
+      ) : (
+        <div className="rounded-md border border-border overflow-hidden">
+          <table className="w-full">
+            <tbody>
+              {attachments?.results.map((a: Attachment) => (
+                <tr key={a.file_id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-3 py-2 text-sm truncate max-w-xs">
+                    {a.download_url ? (
+                      <a
+                        href={a.download_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline text-foreground"
+                      >
+                        {a.name}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">{a.name}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground text-right">
+                    {formatFileSize(a.size_bytes)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${FILE_STATUS_COLORS[a.status] ?? 'bg-muted text-muted-foreground'}`}
+                    >
+                      {FILE_STATUS_LABELS[a.status] ?? a.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {a.download_url && (
+                      <a
+                        href={a.download_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline mr-3"
+                      >
+                        Скачать
+                      </a>
+                    )}
+                    {canWrite && (
+                      <button
+                        onClick={() => handleDetach(a.file_id, a.name)}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Открепить
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -138,6 +280,8 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         />
         <Row label="ID" value={data.id} mono />
       </dl>
+
+      <AttachmentsSection contractId={id} canWrite={canWrite} />
     </div>
   )
 }

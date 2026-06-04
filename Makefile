@@ -103,6 +103,9 @@ build-frontend:
 tsc:
 	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit"
 
+test-e2e:
+	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm install --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
+
 # ============================================
 # QUALITY
 # ============================================

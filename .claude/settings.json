@@ -103,7 +103,19 @@
       "mcp__playwright__browser_wait_for",
       "Bash(curl -s -X OPTIONS http://localhost:8010/api/v1/files/upload-init -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: idempotency-key,content-type,authorization' -v)",
       "Bash(curl -s -X OPTIONS http://localhost:8000/api/v1/files/upload-init -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: idempotency-key,content-type,authorization' -v)",
-      "mcp__playwright__browser_handle_dialog"
+      "mcp__playwright__browser_handle_dialog",
+      "Bash(/home/sever/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome --version)",
+      "Bash(npm list *)",
+      "Bash(npx playwright *)",
+      "Bash(PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --save-dev @playwright/test@1.49.1)",
+      "Bash(PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test --list)",
+      "Bash(python3 -c \"import json,sys; c=json.load\\(sys.stdin\\); s=c['services'].get\\('frontend',{}\\); print\\(json.dumps\\(s.get\\('volumes',[]\\), indent=2\\)\\)\")",
+      "Bash(rm /home/sever/projects/Complect/frontend/playwright.config.ts)",
+      "Bash(PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install)",
+      "Bash(PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test)",
+      "Bash(curl -s http://localhost:8000/api/v1/openapi.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); paths=[p for p in d['paths'] if 'attach' in p]; print\\(paths\\)\")",
+      "Bash(git -C /home/sever/projects/Complect diff --stat HEAD)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
@@ -112,7 +124,8 @@
       "/home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]",
       "/home/sever/projects/Complect/frontend/src/app/dashboard/files",
       "/tmp",
-      "/home/sever/projects/Complect"
+      "/home/sever/projects/Complect",
+      "/home/sever/projects/Complect/frontend"
     ]
   }
 }
