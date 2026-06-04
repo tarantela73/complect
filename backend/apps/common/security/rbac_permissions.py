@@ -49,6 +49,11 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("users", "read"),
     Permission("users", "create"),
     Permission("users", "write"),
+    # files
+    Permission("files", "read"),
+    Permission("files", "create"),
+    Permission("files", "delete"),
+    Permission("files", "download"),
     # dlq (reserved for ops/admin)
     Permission("dlq", "read"),
     Permission("dlq", "write"),

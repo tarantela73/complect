@@ -34,6 +34,7 @@ LOCAL_APPS = [
     "apps.contragents",
     "apps.finance",
     "apps.objects",
+    "apps.files",
     "apps.realtime",
     "apps.integration",
 ]
