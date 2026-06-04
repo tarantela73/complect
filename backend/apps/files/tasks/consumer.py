@@ -25,6 +25,7 @@ from apps.common.services.consumer_base import (
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.tasks import BaseEnterpriseTask
 from apps.files.repositories.file_repo import FileRepository
+from apps.files.services.clamav_scan_engine import get_scan_engine
 from apps.files.services.scan_engine import ScanEngine, ScanResult, StubScanEngine
 from config.celery import app
 
@@ -170,5 +171,6 @@ def run_files_consumer_task() -> None:
 
     STRICT mode: no fence check needed — each file is an independent aggregate.
     Queue: files (low priority, see Celery topology rule 4.15).
+    ScanEngine is selected by FILES_SCAN_ENGINE setting: STUB (dev) or CLAMAV (prod).
     """
-    FilesConsumer().run_batch()
+    FilesConsumer(scan_engine=get_scan_engine()).run_batch()

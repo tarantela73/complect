@@ -24,6 +24,13 @@ class UploadCompleteRequest(BaseModel):
     checksum_sha256: str = Field(..., min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
 
 
+class DownloadUrlResponse(BaseModel):
+    file_id: uuid.UUID
+    download_url: str
+    expires_in: int
+    object_key: str
+
+
 class FileDetailResponse(BaseModel):
     id: uuid.UUID
     object_key: str

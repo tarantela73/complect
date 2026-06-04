@@ -11,11 +11,13 @@ from apps.common.api.permissions import require_permission
 from apps.common.tenancy.context_core import get_context
 from apps.files.repositories.file_repo import FileRepository
 from apps.files.schemas.file_dto import (
+    DownloadUrlResponse,
     FileDetailResponse,
     UploadCompleteRequest,
     UploadInitRequest,
     UploadInitResponse,
 )
+from apps.files.services.download_service import DownloadService
 from apps.files.services.upload_complete_service import UploadCompleteService
 from apps.files.services.upload_init_service import UploadInitService
 
@@ -65,5 +67,25 @@ def get_file(request: HttpRequest, file_id: uuid.UUID):
     try:
         record = FileRepository.get_by_id(file_id)
         return 200, FileDetailResponse.model_validate(record)
+    except PermissionDenied:
+        return 403, make_error_response("FILE_NOT_FOUND", "Файл не найден.")
+
+
+@router.get(
+    "/{file_id}/download-url",
+    response={200: DownloadUrlResponse, 403: dict, 422: dict},
+)
+@require_permission("download", "files")
+def get_download_url(request: HttpRequest, file_id: uuid.UUID):
+    try:
+        result = DownloadService.get_download_url(file_id=file_id)
+        return 200, DownloadUrlResponse(
+            file_id=result.file_id,
+            download_url=result.download_url,
+            expires_in=result.expires_in,
+            object_key=result.object_key,
+        )
+    except ValidationError as exc:
+        return 422, make_error_response("FILE_NOT_DOWNLOADABLE", str(exc))
     except PermissionDenied:
         return 403, make_error_response("FILE_NOT_FOUND", "Файл не найден.")

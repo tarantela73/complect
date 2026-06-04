@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -10,6 +11,7 @@ from apps.common.tenancy.context_core import get_tenant_id
 from apps.files.models.file_record import StorageProvider
 from apps.files.repositories.file_repo import FileRepository
 from apps.files.schemas.file_dto import UploadInitRequest
+from apps.files.services.storage_backend import StorageBackend, get_storage_backend
 
 _MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB hard cap
 
@@ -27,8 +29,7 @@ class UploadInitService:
     [COMMAND SIDE] Initialises an upload slot.
 
     Creates FileRecord(PENDING_UPLOAD) inside a transaction and returns a
-    presigned upload URL. The URL is a stub until the S3 adapter is wired;
-    callers must treat upload_url as opaque and follow it verbatim.
+    presigned PUT URL from the configured StorageBackend.
     """
 
     @staticmethod
@@ -36,6 +37,7 @@ class UploadInitService:
         *,
         actor_id: uuid.UUID,
         request: UploadInitRequest,
+        storage: StorageBackend | None = None,
     ) -> UploadInitResult:
         if request.size_bytes > _MAX_FILE_SIZE:
             raise ValidationError(
@@ -60,8 +62,14 @@ class UploadInitService:
                 storage_provider=StorageProvider.S3,
             )
 
-        # Stub URL: replaced by S3PresignedUrlAdapter in the next iteration.
-        upload_url = f"/stub/upload/{object_key}"
+        _storage = storage or get_storage_backend()
+        ttl: int = getattr(settings, "FILES_PRESIGNED_UPLOAD_TTL", 900)
+        upload_url = _storage.generate_upload_url(
+            object_key=object_key,
+            content_type=request.content_type,
+            size_bytes=request.size_bytes,
+            expires_in=ttl,
+        )
 
         return UploadInitResult(
             file_id=file_id,

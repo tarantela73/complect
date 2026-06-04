@@ -285,8 +285,24 @@ AUDIT_LOG_HASH_ALGORITHM = "sha256"
 CLAMAV_HOST = "clamav"
 CLAMAV_PORT = 3310
 CLAMAV_TIMEOUT = 120
+# Unix socket path mounted from the ClamAV container (docker-compose: /var/run/clamav).
+CLAMAV_SOCKET_PATH: str = "/var/run/clamav/clamd.ctl"
+# Hard timeout for a single scan I/O round-trip. Timeout → ScanResult.ERROR → QUARANTINED.
+CLAMAV_SCAN_TIMEOUT_MS: int = 120_000
+
 S3_QUARANTINE_BUCKET = "complect-quarantine"
 S3_PRODUCTION_BUCKET = "complect-production"
+
+# StorageBackend selector: "STUB" (dev/test) or "S3" (production).
+FILES_STORAGE_BACKEND: str = "STUB"
+AWS_S3_BUCKET_NAME: str = S3_PRODUCTION_BUCKET
+AWS_S3_REGION_NAME: str = "us-east-1"
+# Presigned URL TTLs (seconds). Presigned PUT must complete before upload TTL expires.
+FILES_PRESIGNED_UPLOAD_TTL: int = 900    # 15 min
+FILES_PRESIGNED_DOWNLOAD_TTL: int = 3600  # 1 hr
+
+# ScanEngine selector: "STUB" (dev/test) or "CLAMAV" (production).
+FILES_SCAN_ENGINE: str = "STUB"
 
 # ===========================================================================
 # LIVEKIT
