@@ -7,12 +7,16 @@ from ninja import Query, Router
 
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
+from apps.contracts.models.contract import ContractStatus
 from apps.contracts.queries.contract_queries import get_contract_detail, get_contracts_page
+from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.contract_dto import (
     ContractCreateRequestSchema,
     ContractListResponse,
     ContractResponseSchema,
+    ContractUpdateSchema,
 )
+from apps.contracts.services.contract_activate_service import ContractActivateService
 from apps.contracts.services.contract_closure import ContractClosureService
 from apps.contracts.services.contract_create_service import ContractCreateService
 
@@ -49,6 +53,52 @@ def create_contract(request: HttpRequest, body: ContractCreateRequestSchema):
         return 201, result
     except ValidationError as exc:
         return 400, make_error_response("VALIDATION_ERROR", str(exc))
+
+
+@router.patch(
+    "/{contract_id}/",
+    response={200: ContractResponseSchema, 400: dict, 403: dict, 404: dict, 409: dict, 422: dict},
+)
+@require_permission("write", "contracts")
+def update_contract(request: HttpRequest, contract_id: uuid.UUID, body: ContractUpdateSchema):
+    try:
+        contract = ContractRepository.get_by_id_for_update(contract_id)
+    except PermissionDenied:
+        return 404, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+
+    if contract.is_legal_hold:
+        return 403, make_error_response("LEGAL_HOLD", "Договор заблокирован юридическим удержанием.")
+
+    if contract.status != ContractStatus.DRAFT:
+        return 422, make_error_response(
+            "INVALID_STATUS",
+            f"Редактирование доступно только в статусе DRAFT. Текущий статус: {contract.status}.",
+        )
+
+    updates = {}
+    if body.title is not None:
+        updates["title"] = body.title
+    if body.total_amount is not None:
+        updates["total_amount"] = body.total_amount
+
+    if updates:
+        success = ContractRepository.atomic_compare_and_swap(contract, **updates)
+        if not success:
+            return 409, make_error_response("OCC_CONFLICT", "Коллизия одновременной модификации. Повторите запрос.")
+
+    return 200, get_contract_detail(contract_id)
+
+
+@router.post("/{contract_id}/activate/", response={200: ContractResponseSchema, 400: dict, 403: dict, 422: dict})
+@require_permission("write", "contracts")
+def activate_contract(request: HttpRequest, contract_id: uuid.UUID):
+    try:
+        ContractActivateService.execute(contract_id)
+        return 200, get_contract_detail(contract_id)
+    except PermissionDenied:
+        return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    except ValidationError as exc:
+        return 422, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
 
 
 @router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict})

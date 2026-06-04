@@ -20,6 +20,7 @@ def _to_dto(contract: Contract) -> ContractResponseSchema:
         total_amount=contract.total_amount,
         paid_amount=contract.paid_amount,
         remaining_amount=contract.total_amount - contract.paid_amount,
+        created_at=contract.created_at,
     )
 
 
