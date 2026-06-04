@@ -61,6 +61,7 @@ def _contragent_to_dict(c: Contragent) -> dict:
         "name": c.name,
         "inn": c.inn,
         "contragent_type": c.contragent_type,
+        "created_at": c.created_at,
     }
 
 

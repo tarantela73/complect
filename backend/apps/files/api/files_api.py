@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import uuid
 
 from django.core.exceptions import PermissionDenied, ValidationError

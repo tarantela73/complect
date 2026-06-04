@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from typing import Optional
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -20,6 +21,7 @@ from apps.contragents.schemas.contragent_dto import (
     ContragentCreateRequest,
     ContragentListResponse,
     ContragentResponse,
+    ContragentUpdateRequest,
     PersonCreateRequest,
     PersonListResponse,
 )
@@ -80,6 +82,51 @@ def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
         inn=contragent.inn,
         contragent_type=contragent.contragent_type,
     )
+
+
+@router.patch("/{contragent_id}/", response={200: ContragentResponse, 400: dict, 403: dict, 404: dict, 422: dict})
+@require_permission("write", "contragents")
+def update_contragent(request: HttpRequest, contragent_id: uuid.UUID, body: ContragentUpdateRequest):
+    tenant_id = get_tenant_id()
+    try:
+        contragent = Contragent.objects.select_for_update().get(
+            id=contragent_id, tenant_id=tenant_id, is_deleted=False
+        )
+    except Contragent.DoesNotExist:
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
+
+    if contragent.is_legal_hold:
+        return 422, make_error_response("LEGAL_HOLD", "Изменение заблокировано: юридическое удержание.")
+
+    with transaction.atomic():
+        contragent.name = body.name
+        contragent.version += 1
+        contragent.save(update_fields=["name", "version", "updated_at"])
+
+    return 200, get_contragent_detail(contragent_id)
+
+
+@router.delete("/{contragent_id}/", response={204: None, 403: dict, 404: dict, 422: dict})
+@require_permission("delete", "contragents")
+def delete_contragent(request: HttpRequest, contragent_id: uuid.UUID):
+    tenant_id = get_tenant_id()
+    try:
+        contragent = Contragent.objects.select_for_update().get(
+            id=contragent_id, tenant_id=tenant_id, is_deleted=False
+        )
+    except Contragent.DoesNotExist:
+        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
+
+    if contragent.is_legal_hold:
+        return 422, make_error_response("LEGAL_HOLD", "Удаление заблокировано: юридическое удержание.")
+
+    with transaction.atomic():
+        contragent.is_deleted = True
+        contragent.deleted_at = datetime.now(UTC)
+        contragent.version += 1
+        contragent.save(update_fields=["is_deleted", "deleted_at", "version", "updated_at"])
+
+    return 204, None
 
 
 @router.get("/{contragent_id}/persons/", response={200: PersonListResponse, 403: dict, 404: dict})

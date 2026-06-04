@@ -45,6 +45,7 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("contragents", "read"),
     Permission("contragents", "create"),
     Permission("contragents", "write"),
+    Permission("contragents", "delete"),
     # users (auth endpoints — not yet decorated, reserved for future)
     Permission("users", "read"),
     Permission("users", "create"),

@@ -59,12 +59,18 @@
       "Bash(docker volume *)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('paths:', len\\(d.get\\('paths',{}\\)\\)\\); print\\('version:', d.get\\('info',{}\\).get\\('version','?'\\)\\)\")",
       "Bash(mkdir -p \\\\ *)",
-      "WebFetch(domain:mcpmarket.com)"
+      "WebFetch(domain:mcpmarket.com)",
+      "Bash(docker cp *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts', {}\\).get\\('generate:api', 'NOT FOUND'\\)\\)\")",
+      "Bash(mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/contragents/create && mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]/edit)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(grep -E \"error TS|warning TS|^\\\\s*$\")"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
       "/home/sever/projects/Complect/backend/apps/contracts",
-      "/home/sever/projects/Complect/frontend/src/app/(auth)"
+      "/home/sever/projects/Complect/frontend/src/app/(auth)",
+      "/home/sever/projects/Complect/frontend/src/app/dashboard/contragents/[id]"
     ]
   }
 }

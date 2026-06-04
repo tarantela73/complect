@@ -1,13 +1,11 @@
-import type { ConfigFile } from '@rtk-query/codegen-openapi'
-
-// используется только как документация — генерация через package.json scripts:
-// npm run generate:api
+// Генерация TypeScript типов — через package.json scripts:
+// npm run generate:api    (требует запущенный бэкенд на :8000)
 //
-// Для CI: сначала экспортировать схему с бэкенда:
-//   docker compose -f docker-compose.dev.yml exec backend python manage.py export_openapi > openapi.json
-//   openapi-typescript openapi.json -o src/shared/api/generated/schema.d.ts
+// Для CI без запущенного бэкенда:
+//   docker compose -f docker-compose.dev.yml exec backend python manage.py export_openapi --output openapi.json
+//   npx openapi-typescript openapi.json -o src/shared/api/generated/schema.d.ts
 
 export default {
   schemaFile: 'http://localhost:8000/api/v1/openapi.json',
   outputFile: 'src/shared/api/generated/schema.d.ts',
-} satisfies ConfigFile
+}

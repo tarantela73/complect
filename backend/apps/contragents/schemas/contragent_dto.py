@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -10,11 +11,16 @@ class ContragentCreateRequest(BaseModel):
     contragent_type: str = Field(description="LEGAL_ENTITY, ENTREPRENEUR, INDIVIDUAL")
 
 
+class ContragentUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
 class ContragentResponse(BaseModel):
     id: uuid.UUID
     name: str
     inn: str
     contragent_type: str
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
