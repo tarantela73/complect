@@ -185,3 +185,4 @@ CLAUDE.md
 .claude/
 .claude_session*
 
+.playwright-mcp
