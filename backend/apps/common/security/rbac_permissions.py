@@ -62,6 +62,8 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("dashboard", "read"),
     # notifications (in-app notification feed — all authenticated roles)
     Permission("notifications", "read"),
+    # ops (platform runtime observability — platform admin only)
+    Permission("ops", "read"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

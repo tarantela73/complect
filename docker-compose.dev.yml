@@ -194,6 +194,7 @@ services:
       - db_root_password
     environment:
       PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"
@@ -262,6 +263,7 @@ services:
       - db_root_password
     environment:
       PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"
@@ -287,7 +289,7 @@ services:
       CLAMAV_PORT: 3310
     networks:
       - erp_network
-    command: celery -A config worker --loglevel=info
+    command: celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention -c 4
 
     depends_on:
       postgres_primary:
@@ -307,6 +309,7 @@ services:
       - ./backend:/app
     environment:
       PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
       ENVIRONMENT: local
       DJANGO_SETTINGS_MODULE: config.settings.local
       DEBUG: "true"

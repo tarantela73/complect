@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/files', label: 'Файлы', permission: 'files.read' },
   { href: '/dashboard/objects', label: 'Объекты', permission: 'objects.read' },
   { href: '/dashboard/notifications', label: 'Уведомления', permission: 'notifications.read' },
+  { href: '/dashboard/ops', label: 'Ops Console', permission: 'ops.read' },
 ]
 
 function NotificationBell() {

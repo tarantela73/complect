@@ -150,6 +150,18 @@ CELERY_TASK_QUEUES = (
     Queue("retention",     Exchange("retention"),      routing_key="retention"),
 )
 CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_IMPORTS = (
+    "apps.common.tasks.outbox_dispatcher",
+    "apps.common.tasks.chain_completeness_monitor",
+    "apps.common.tasks.causal_pair_monitor",
+    "apps.common.tasks.retention_manager",
+    "apps.contracts.tasks.consumer",
+    "apps.finance.tasks.consumer",
+    "apps.files.tasks.consumer",
+    "apps.files.tasks.policy_evaluator",
+    "apps.files.tasks.recovery_scanner",
+    "apps.notifications.consumer.notifications_consumer",
+)
 
 # rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
 CELERY_BEAT_SCHEDULE = {

@@ -147,7 +147,15 @@
       "Bash(docker rm *)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts', {}\\), indent=2\\)\\)\")",
       "mcp__playwright__browser_type",
-      "mcp__playwright__browser_run_code_unsafe"
+      "mcp__playwright__browser_run_code_unsafe",
+      "Bash(sort -t_ -k1,1)",
+      "Bash(echo \"exit: $?\")",
+      "mcp__playwright__browser_evaluate",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\": \"testadmin\", \"password\": \"TestAdmin123!\"}')",
+      "Bash(curl -sv -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -H 'Referer: http://localhost:3000/login' -d '{\"username\": \"testadmin\", \"password\": \"TestAdmin123!\"}')",
+      "Bash(curl -sv -X POST http://localhost:8010/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\": \"testadmin\", \"password\": \"TestAdmin123!\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/health/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"TestAdmin123!\"}')"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

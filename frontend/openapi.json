@@ -1,1 +1,4208 @@
-{"openapi": "3.1.0", "info": {"title": "ERP \u041a\u043e\u043c\u043f\u043b\u0435\u043a\u0442 API", "version": "1.0.0", "description": ""}, "paths": {"/api/v1/auth/login": {"post": {"operationId": "apps_users_api_login", "summary": "Login", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TokenResponse"}}}}, "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["auth"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/LoginRequest"}}}, "required": true}}}, "/api/v1/auth/refresh": {"post": {"operationId": "apps_users_api_refresh", "summary": "Refresh", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TokenResponse"}}}}, "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["auth"], "requestBody": {"content": {"application/json": {"schema": {"anyOf": [{"$ref": "#/components/schemas/RefreshRequest"}, {"type": "null"}]}}}, "required": false}}}, "/api/v1/auth/logout": {"post": {"operationId": "apps_users_api_logout", "summary": "Logout", "parameters": [], "responses": {"204": {"description": "No Content"}}, "tags": ["auth"]}}, "/api/v1/auth/mfa/verify": {"post": {"operationId": "apps_users_api_mfa_verify", "summary": "Mfa Verify", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TokenResponse"}}}}, "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["auth"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/MFAVerifyRequest"}}}, "required": true}}}, "/api/v1/auth/mfa/setup": {"post": {"operationId": "apps_users_api_mfa_setup", "summary": "Mfa Setup", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MFASetupResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["auth"], "security": [{"JWTAuth": []}]}}, "/api/v1/auth/mfa/confirm": {"post": {"operationId": "apps_users_api_mfa_confirm", "summary": "Mfa Confirm", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MFAStatusResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["auth"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/MFAVerifyRequest"}}}, "required": true}, "security": [{"JWTAuth": []}]}}, "/api/v1/dashboard/": {"get": {"operationId": "apps_common_api_dashboard_get_dashboard_summary", "summary": "Get Dashboard Summary", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DashboardSummarySchema"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["dashboard"]}}, "/api/v1/contracts/": {"get": {"operationId": "apps_contracts_api_list_contracts", "summary": "List Contracts", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}, {"in": "query", "name": "status", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Status"}, "required": false}, {"in": "query", "name": "resource_type", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Resource Type"}, "required": false}, {"in": "query", "name": "q", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Q"}, "required": false}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"]}, "post": {"operationId": "apps_contracts_api_create_contract", "summary": "Create Contract", "parameters": [], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractResponseSchema"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "409": {"description": "Conflict", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractCreateRequestSchema"}}}, "required": true}}}, "/api/v1/contracts/{contract_id}/": {"get": {"operationId": "apps_contracts_api_get_contract", "summary": "Get Contract", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractResponseSchema"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"]}, "patch": {"operationId": "apps_contracts_api_update_contract", "summary": "Update Contract", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractResponseSchema"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "409": {"description": "Conflict", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractUpdateSchema"}}}, "required": true}}}, "/api/v1/contracts/{contract_id}/activate/": {"post": {"operationId": "apps_contracts_api_activate_contract", "summary": "Activate Contract", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractResponseSchema"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"]}}, "/api/v1/contracts/{contract_id}/close/": {"post": {"operationId": "apps_contracts_api_close_contract", "summary": "Close Contract", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractResponseSchema"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "409": {"description": "Conflict", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"]}}, "/api/v1/contracts/{contract_id}/events/": {"get": {"operationId": "apps_contracts_api_list_contract_events", "summary": "List Contract Events", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContractEventLogResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contracts"]}}, "/api/v1/contracts/{contract_id}/attachments/": {"get": {"operationId": "apps_contracts_api_list_attachments", "summary": "List Attachments", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AttachmentListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["attachments"]}, "post": {"operationId": "apps_contracts_api_attach_file", "summary": "Attach File", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["attachments"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/AttachFileRequest"}}}, "required": true}}}, "/api/v1/contracts/{contract_id}/attachments/{file_id}/": {"delete": {"operationId": "apps_contracts_api_detach_file", "summary": "Detach File", "parameters": [{"in": "path", "name": "contract_id", "schema": {"format": "uuid", "title": "Contract Id", "type": "string"}, "required": true}, {"in": "path", "name": "file_id", "schema": {"format": "uuid", "title": "File Id", "type": "string"}, "required": true}], "responses": {"204": {"description": "No Content"}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["attachments"]}}, "/api/v1/contragents/": {"get": {"operationId": "apps_contragents_api_list_contragents", "summary": "List Contragents", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}, {"in": "query", "name": "contragent_type", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Contragent Type"}, "required": false}, {"in": "query", "name": "inn", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Inn"}, "required": false}, {"in": "query", "name": "q", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Q"}, "required": false}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"]}, "post": {"operationId": "apps_contragents_api_create_contragent", "summary": "Create Contragent", "parameters": [], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "409": {"description": "Conflict", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentCreateRequest"}}}, "required": true}}}, "/api/v1/contragents/{contragent_id}/": {"get": {"operationId": "apps_contragents_api_get_contragent", "summary": "Get Contragent", "parameters": [{"in": "path", "name": "contragent_id", "schema": {"format": "uuid", "title": "Contragent Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"]}, "patch": {"operationId": "apps_contragents_api_update_contragent", "summary": "Update Contragent", "parameters": [{"in": "path", "name": "contragent_id", "schema": {"format": "uuid", "title": "Contragent Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContragentUpdateRequest"}}}, "required": true}}, "delete": {"operationId": "apps_contragents_api_delete_contragent", "summary": "Delete Contragent", "parameters": [{"in": "path", "name": "contragent_id", "schema": {"format": "uuid", "title": "Contragent Id", "type": "string"}, "required": true}], "responses": {"204": {"description": "No Content"}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"]}}, "/api/v1/contragents/{contragent_id}/persons/": {"get": {"operationId": "apps_contragents_api_list_persons", "summary": "List Persons", "parameters": [{"in": "path", "name": "contragent_id", "schema": {"format": "uuid", "title": "Contragent Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PersonListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"]}, "post": {"operationId": "apps_contragents_api_create_person", "summary": "Create Person", "parameters": [{"in": "path", "name": "contragent_id", "schema": {"format": "uuid", "title": "Contragent Id", "type": "string"}, "required": true}], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["contragents"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/PersonCreateRequest"}}}, "required": true}}}, "/api/v1/finance/transactions/": {"get": {"operationId": "apps_finance_api_list_transactions", "summary": "List Transactions", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}, {"in": "query", "name": "contract_id", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contract Id"}, "required": false}, {"in": "query", "name": "status", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Status"}, "required": false}, {"in": "query", "name": "transaction_type", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Transaction Type"}, "required": false}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TransactionListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["finance"]}, "post": {"operationId": "apps_finance_api_post_transaction", "summary": "Post Transaction", "parameters": [], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TransactionResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["finance"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/TransactionPostRequest"}}}, "required": true}}}, "/api/v1/finance/transactions/{tx_id}/reverse/": {"post": {"operationId": "apps_finance_api_reverse_transaction", "summary": "Reverse Transaction", "parameters": [{"in": "path", "name": "tx_id", "schema": {"format": "uuid", "title": "Tx Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TransactionResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["finance"]}}, "/api/v1/objects/": {"get": {"operationId": "apps_objects_api_list_objects", "summary": "List Objects", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}, {"in": "query", "name": "object_type", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Object Type"}, "required": false}, {"in": "query", "name": "resource_type", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Resource Type"}, "required": false}, {"in": "query", "name": "contract_id", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contract Id"}, "required": false}, {"in": "query", "name": "bbox", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "description": "lon_min,lat_min,lon_max,lat_max", "title": "Bbox"}, "required": false, "description": "lon_min,lat_min,lon_max,lat_max"}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SupplyObjectListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"]}, "post": {"operationId": "apps_objects_api_create_object", "summary": "Create Object", "parameters": [], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureSchema"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/SupplyObjectCreateRequest"}}}, "required": true}}}, "/api/v1/objects/geojson/": {"get": {"operationId": "apps_objects_api_objects_geojson", "summary": "Objects Geojson", "parameters": [{"in": "query", "name": "contract_id", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contract Id"}, "required": false}, {"in": "query", "name": "bbox", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "description": "lon_min,lat_min,lon_max,lat_max", "title": "Bbox"}, "required": false, "description": "lon_min,lat_min,lon_max,lat_max"}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureCollectionSchema"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"]}}, "/api/v1/objects/{object_id}/": {"get": {"operationId": "apps_objects_api_get_object", "summary": "Get Object", "parameters": [{"in": "path", "name": "object_id", "schema": {"format": "uuid", "title": "Object Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureSchema"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"]}, "delete": {"operationId": "apps_objects_api_delete_object", "summary": "Delete Object", "parameters": [{"in": "path", "name": "object_id", "schema": {"format": "uuid", "title": "Object Id", "type": "string"}, "required": true}], "responses": {"204": {"description": "No Content"}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"]}}, "/api/v1/objects/{object_id}/location/": {"patch": {"operationId": "apps_objects_api_update_location", "summary": "Update Location", "parameters": [{"in": "path", "name": "object_id", "schema": {"format": "uuid", "title": "Object Id", "type": "string"}, "required": true}], "responses": {"204": {"description": "No Content"}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["objects"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateLocationRequest"}}}, "required": true}}}, "/api/v1/files/": {"get": {"operationId": "apps_files_api_files_api_list_files", "summary": "List Files", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}, {"in": "query", "name": "status", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Status"}, "required": false}, {"in": "query", "name": "q", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Q"}, "required": false}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FileListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"]}}, "/api/v1/files/upload-init": {"post": {"operationId": "apps_files_api_files_api_upload_init", "summary": "Upload Init", "parameters": [], "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadInitResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadInitRequest"}}}, "required": true}}}, "/api/v1/files/{file_id}/complete": {"post": {"operationId": "apps_files_api_files_api_upload_complete", "summary": "Upload Complete", "parameters": [{"in": "path", "name": "file_id", "schema": {"format": "uuid", "title": "File Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FileDetailResponse"}}}}, "400": {"description": "Bad Request", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "409": {"description": "Conflict", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadCompleteRequest"}}}, "required": true}}}, "/api/v1/files/{file_id}": {"get": {"operationId": "apps_files_api_files_api_get_file", "summary": "Get File", "parameters": [{"in": "path", "name": "file_id", "schema": {"format": "uuid", "title": "File Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FileDetailResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"]}, "delete": {"operationId": "apps_files_api_files_api_delete_file", "summary": "Delete File", "parameters": [{"in": "path", "name": "file_id", "schema": {"format": "uuid", "title": "File Id", "type": "string"}, "required": true}], "responses": {"204": {"description": "No Content"}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"]}}, "/api/v1/files/{file_id}/download-url": {"get": {"operationId": "apps_files_api_files_api_get_download_url", "summary": "Get Download Url", "parameters": [{"in": "path", "name": "file_id", "schema": {"format": "uuid", "title": "File Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DownloadUrlResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "422": {"description": "Unprocessable Entity", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["files"]}}, "/api/v1/notifications/": {"get": {"operationId": "apps_notifications_api_list_notifications", "summary": "List Notifications", "parameters": [{"in": "query", "name": "cursor", "schema": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Cursor"}, "required": false}, {"in": "query", "name": "limit", "schema": {"default": 20, "maximum": 100, "minimum": 1, "title": "Limit", "type": "integer"}, "required": false}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NotificationListResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["notifications"]}}, "/api/v1/notifications/unread-count/": {"get": {"operationId": "apps_notifications_api_unread_count", "summary": "Unread Count", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UnreadCountResponse"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["notifications"]}}, "/api/v1/notifications/{notif_id}/read/": {"post": {"operationId": "apps_notifications_api_mark_read", "summary": "Mark Read", "parameters": [{"in": "path", "name": "notif_id", "schema": {"format": "uuid", "title": "Notif Id", "type": "string"}, "required": true}], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "404": {"description": "Not Found", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["notifications"]}}, "/api/v1/notifications/read-all/": {"post": {"operationId": "apps_notifications_api_mark_all_read", "summary": "Mark All Read", "parameters": [], "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}, "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"additionalProperties": true, "title": "Response", "type": "object"}}}}}, "tags": ["notifications"]}}}, "components": {"schemas": {"TokenResponse": {"properties": {"access_token": {"title": "Access Token", "type": "string"}, "token_type": {"default": "bearer", "title": "Token Type", "type": "string"}, "mfa_required": {"default": false, "title": "Mfa Required", "type": "boolean"}, "permissions": {"default": [], "items": {"type": "string"}, "title": "Permissions", "type": "array"}}, "required": ["access_token"], "title": "TokenResponse", "type": "object"}, "LoginRequest": {"properties": {"username": {"maxLength": 150, "minLength": 1, "title": "Username", "type": "string"}, "password": {"minLength": 1, "title": "Password", "type": "string"}, "device_fingerprint": {"default": "", "maxLength": 128, "title": "Device Fingerprint", "type": "string"}}, "required": ["username", "password"], "title": "LoginRequest", "type": "object"}, "RefreshRequest": {"properties": {"refresh_token": {"title": "Refresh Token", "type": "string"}}, "required": ["refresh_token"], "title": "RefreshRequest", "type": "object"}, "MFAVerifyRequest": {"properties": {"totp_code": {"maxLength": 6, "minLength": 6, "title": "Totp Code", "type": "string"}}, "required": ["totp_code"], "title": "MFAVerifyRequest", "type": "object"}, "MFASetupResponse": {"properties": {"secret": {"title": "Secret", "type": "string"}, "otpauth_url": {"title": "Otpauth Url", "type": "string"}}, "required": ["secret", "otpauth_url"], "title": "MFASetupResponse", "type": "object"}, "MFAStatusResponse": {"properties": {"mfa_enabled": {"title": "Mfa Enabled", "type": "boolean"}}, "required": ["mfa_enabled"], "title": "MFAStatusResponse", "type": "object"}, "ContractCountsSchema": {"properties": {"total": {"title": "Total", "type": "integer"}, "draft": {"title": "Draft", "type": "integer"}, "active": {"title": "Active", "type": "integer"}, "legal_hold": {"title": "Legal Hold", "type": "integer"}, "closed": {"title": "Closed", "type": "integer"}}, "required": ["total", "draft", "active", "legal_hold", "closed"], "title": "ContractCountsSchema", "type": "object"}, "DashboardSummarySchema": {"properties": {"contracts": {"$ref": "#/components/schemas/ContractCountsSchema"}, "files": {"$ref": "#/components/schemas/FileCountsSchema"}, "contragents_total": {"title": "Contragents Total", "type": "integer"}, "operational": {"$ref": "#/components/schemas/OperationalCountsSchema"}}, "required": ["contracts", "files", "contragents_total", "operational"], "title": "DashboardSummarySchema", "type": "object"}, "FileCountsSchema": {"properties": {"total": {"title": "Total", "type": "integer"}, "available": {"title": "Available", "type": "integer"}, "scanning": {"title": "Scanning", "type": "integer"}, "quarantined": {"title": "Quarantined", "type": "integer"}, "pending": {"title": "Pending", "type": "integer"}}, "required": ["total", "available", "scanning", "quarantined", "pending"], "title": "FileCountsSchema", "type": "object"}, "OperationalCountsSchema": {"properties": {"stuck_drafts": {"title": "Stuck Drafts", "type": "integer"}, "outbox_pending": {"title": "Outbox Pending", "type": "integer"}, "outbox_failed": {"title": "Outbox Failed", "type": "integer"}}, "required": ["stuck_drafts", "outbox_pending", "outbox_failed"], "title": "OperationalCountsSchema", "type": "object"}, "ContractListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/ContractResponseSchema"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "ContractListResponse", "type": "object"}, "ContractResponseSchema": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "contract_number": {"title": "Contract Number", "type": "string"}, "title": {"title": "Title", "type": "string"}, "status": {"title": "Status", "type": "string"}, "resource_type": {"title": "Resource Type", "type": "string"}, "total_amount": {"title": "Total Amount", "type": "integer"}, "paid_amount": {"title": "Paid Amount", "type": "integer"}, "remaining_amount": {"default": 0, "title": "Remaining Amount", "type": "integer"}, "created_at": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}], "title": "Created At"}}, "required": ["id", "contract_number", "title", "status", "resource_type", "total_amount", "paid_amount"], "title": "ContractResponseSchema", "type": "object"}, "ContractCreateRequestSchema": {"properties": {"contract_number": {"maxLength": 100, "title": "Contract Number", "type": "string"}, "title": {"maxLength": 255, "title": "Title", "type": "string"}, "resource_type": {"description": "ELECTRICITY, GAS, WATER, HEAT, OTHER", "title": "Resource Type", "type": "string"}, "total_amount": {"description": "\u041e\u0431\u0449\u0430\u044f \u0441\u0443\u043c\u043c\u0430 \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430 \u0432 \u043a\u043e\u043f\u0435\u0439\u043a\u0430\u0445", "exclusiveMinimum": 0, "title": "Total Amount", "type": "integer"}}, "required": ["contract_number", "title", "resource_type", "total_amount"], "title": "ContractCreateRequestSchema", "type": "object"}, "ContractUpdateSchema": {"properties": {"title": {"anyOf": [{"maxLength": 255, "type": "string"}, {"type": "null"}], "title": "Title"}, "total_amount": {"anyOf": [{"exclusiveMinimum": 0, "type": "integer"}, {"type": "null"}], "description": "\u041e\u0431\u0449\u0430\u044f \u0441\u0443\u043c\u043c\u0430 \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430 \u0432 \u043a\u043e\u043f\u0435\u0439\u043a\u0430\u0445", "title": "Total Amount"}}, "title": "ContractUpdateSchema", "type": "object"}, "ContractEventLogEntrySchema": {"properties": {"event_id": {"format": "uuid", "title": "Event Id", "type": "string"}, "event_type": {"title": "Event Type", "type": "string"}, "label": {"title": "Label", "type": "string"}, "occurred_at": {"title": "Occurred At", "type": "string"}, "user_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "User Id"}, "correlation_id": {"format": "uuid", "title": "Correlation Id", "type": "string"}}, "required": ["event_id", "event_type", "label", "occurred_at", "correlation_id"], "title": "ContractEventLogEntrySchema", "type": "object"}, "ContractEventLogResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/ContractEventLogEntrySchema"}, "title": "Results", "type": "array"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "ContractEventLogResponse", "type": "object"}, "AttachmentListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/AttachmentResponse"}, "title": "Results", "type": "array"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "AttachmentListResponse", "type": "object"}, "AttachmentResponse": {"properties": {"file_id": {"format": "uuid", "title": "File Id", "type": "string"}, "name": {"title": "Name", "type": "string"}, "size_bytes": {"title": "Size Bytes", "type": "integer"}, "status": {"title": "Status", "type": "string"}, "download_url": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Download Url"}, "attached_by": {"format": "uuid", "title": "Attached By", "type": "string"}, "attached_at": {"format": "date-time", "title": "Attached At", "type": "string"}}, "required": ["file_id", "name", "size_bytes", "status", "attached_by", "attached_at"], "title": "AttachmentResponse", "type": "object"}, "AttachFileRequest": {"properties": {"file_id": {"format": "uuid", "title": "File Id", "type": "string"}}, "required": ["file_id"], "title": "AttachFileRequest", "type": "object"}, "ContragentListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/ContragentResponse"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "ContragentListResponse", "type": "object"}, "ContragentResponse": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "name": {"title": "Name", "type": "string"}, "inn": {"title": "Inn", "type": "string"}, "contragent_type": {"title": "Contragent Type", "type": "string"}, "created_at": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}], "title": "Created At"}}, "required": ["id", "name", "inn", "contragent_type"], "title": "ContragentResponse", "type": "object"}, "ContragentCreateRequest": {"properties": {"name": {"maxLength": 255, "minLength": 1, "title": "Name", "type": "string"}, "inn": {"maxLength": 12, "minLength": 10, "title": "Inn", "type": "string"}, "contragent_type": {"description": "LEGAL_ENTITY, ENTREPRENEUR, INDIVIDUAL", "title": "Contragent Type", "type": "string"}}, "required": ["name", "inn", "contragent_type"], "title": "ContragentCreateRequest", "type": "object"}, "ContragentUpdateRequest": {"properties": {"name": {"maxLength": 255, "minLength": 1, "title": "Name", "type": "string"}}, "required": ["name"], "title": "ContragentUpdateRequest", "type": "object"}, "PersonListResponse": {"properties": {"results": {"items": {"additionalProperties": true, "type": "object"}, "title": "Results", "type": "array"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "PersonListResponse", "type": "object"}, "PersonCreateRequest": {"properties": {"first_name": {"maxLength": 100, "minLength": 1, "title": "First Name", "type": "string"}, "last_name": {"maxLength": 100, "minLength": 1, "title": "Last Name", "type": "string"}, "middle_name": {"default": "", "maxLength": 100, "title": "Middle Name", "type": "string"}, "passport": {"description": "\u0421\u0435\u0440\u0438\u044f \u0438 \u043d\u043e\u043c\u0435\u0440 \u043f\u0430\u0441\u043f\u043e\u0440\u0442\u0430", "maxLength": 20, "minLength": 9, "title": "Passport", "type": "string"}, "snils": {"description": "\u0421\u041d\u0418\u041b\u0421", "maxLength": 14, "minLength": 11, "title": "Snils", "type": "string"}, "phone": {"description": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u0432 \u0444\u043e\u0440\u043c\u0430\u0442\u0435 +79991234567", "maxLength": 15, "minLength": 10, "title": "Phone", "type": "string"}}, "required": ["first_name", "last_name", "passport", "snils", "phone"], "title": "PersonCreateRequest", "type": "object"}, "TransactionListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/TransactionResponse"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "TransactionListResponse", "type": "object"}, "TransactionResponse": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "contract_id": {"format": "uuid", "title": "Contract Id", "type": "string"}, "transaction_type": {"title": "Transaction Type", "type": "string"}, "status": {"title": "Status", "type": "string"}, "amount": {"title": "Amount", "type": "integer"}, "amount_rub": {"default": 0.0, "title": "Amount Rub", "type": "number"}, "external_ref": {"title": "External Ref", "type": "string"}}, "required": ["id", "contract_id", "transaction_type", "status", "amount", "external_ref"], "title": "TransactionResponse", "type": "object"}, "TransactionPostRequest": {"properties": {"contract_id": {"format": "uuid", "title": "Contract Id", "type": "string"}, "amount": {"description": "\u0421\u0443\u043c\u043c\u0430 \u0432 \u043a\u043e\u043f\u0435\u0439\u043a\u0430\u0445", "exclusiveMinimum": 0, "title": "Amount", "type": "integer"}, "transaction_type": {"default": "PAYMENT", "description": "PAYMENT, REFUND, CORRECTION", "title": "Transaction Type", "type": "string"}, "external_ref": {"default": "", "maxLength": 255, "title": "External Ref", "type": "string"}}, "required": ["contract_id", "amount"], "title": "TransactionPostRequest", "type": "object"}, "FeatureSchema": {"properties": {"type": {"const": "Feature", "default": "Feature", "title": "Type", "type": "string"}, "geometry": {"anyOf": [{"$ref": "#/components/schemas/PointGeometry"}, {"type": "null"}]}, "properties": {"$ref": "#/components/schemas/SupplyObjectProperties"}}, "required": ["properties"], "title": "FeatureSchema", "type": "object"}, "PointGeometry": {"properties": {"type": {"const": "Point", "default": "Point", "title": "Type", "type": "string"}, "coordinates": {"items": {"type": "number"}, "title": "Coordinates", "type": "array"}}, "required": ["coordinates"], "title": "PointGeometry", "type": "object"}, "SupplyObjectListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/FeatureSchema"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "SupplyObjectListResponse", "type": "object"}, "SupplyObjectProperties": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "name": {"title": "Name", "type": "string"}, "address": {"title": "Address", "type": "string"}, "object_type": {"title": "Object Type", "type": "string"}, "resource_type": {"title": "Resource Type", "type": "string"}, "contract_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contract Id"}, "contragent_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contragent Id"}}, "required": ["id", "name", "address", "object_type", "resource_type"], "title": "SupplyObjectProperties", "type": "object"}, "SupplyObjectCreateRequest": {"properties": {"name": {"maxLength": 255, "title": "Name", "type": "string"}, "address": {"default": "", "maxLength": 500, "title": "Address", "type": "string"}, "object_type": {"description": "BUILDING, GRS, PIPELINE, SUBSTATION, RESERVOIR, HEATING_POINT, OTHER", "title": "Object Type", "type": "string"}, "resource_type": {"description": "ELECTRICITY, GAS, WATER, HEAT, OTHER", "title": "Resource Type", "type": "string"}, "contract_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contract Id"}, "contragent_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Contragent Id"}, "longitude": {"anyOf": [{"maximum": 180, "minimum": -180, "type": "number"}, {"type": "null"}], "title": "Longitude"}, "latitude": {"anyOf": [{"maximum": 90, "minimum": -90, "type": "number"}, {"type": "null"}], "title": "Latitude"}}, "required": ["name", "object_type", "resource_type"], "title": "SupplyObjectCreateRequest", "type": "object"}, "FeatureCollectionSchema": {"properties": {"type": {"const": "FeatureCollection", "default": "FeatureCollection", "title": "Type", "type": "string"}, "features": {"items": {"$ref": "#/components/schemas/FeatureSchema"}, "title": "Features", "type": "array"}}, "required": ["features"], "title": "FeatureCollectionSchema", "type": "object"}, "UpdateLocationRequest": {"properties": {"longitude": {"maximum": 180, "minimum": -180, "title": "Longitude", "type": "number"}, "latitude": {"maximum": 90, "minimum": -90, "title": "Latitude", "type": "number"}}, "required": ["longitude", "latitude"], "title": "UpdateLocationRequest", "type": "object"}, "FileDetailResponse": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "object_key": {"title": "Object Key", "type": "string"}, "original_name": {"title": "Original Name", "type": "string"}, "content_type": {"title": "Content Type", "type": "string"}, "size_bytes": {"title": "Size Bytes", "type": "integer"}, "checksum_sha256": {"title": "Checksum Sha256", "type": "string"}, "storage_provider": {"title": "Storage Provider", "type": "string"}, "status": {"title": "Status", "type": "string"}, "uploaded_by": {"format": "uuid", "title": "Uploaded By", "type": "string"}, "scanned_at": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}], "title": "Scanned At"}, "quarantine_reason": {"title": "Quarantine Reason", "type": "string"}, "created_at": {"format": "date-time", "title": "Created At", "type": "string"}, "updated_at": {"format": "date-time", "title": "Updated At", "type": "string"}}, "required": ["id", "object_key", "original_name", "content_type", "size_bytes", "checksum_sha256", "storage_provider", "status", "uploaded_by", "quarantine_reason", "created_at", "updated_at"], "title": "FileDetailResponse", "type": "object"}, "FileListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/FileDetailResponse"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "FileListResponse", "type": "object"}, "UploadInitResponse": {"properties": {"file_id": {"format": "uuid", "title": "File Id", "type": "string"}, "object_key": {"title": "Object Key", "type": "string"}, "upload_url": {"title": "Upload Url", "type": "string"}, "status": {"title": "Status", "type": "string"}}, "required": ["file_id", "object_key", "upload_url", "status"], "title": "UploadInitResponse", "type": "object"}, "UploadInitRequest": {"properties": {"original_name": {"maxLength": 512, "title": "Original Name", "type": "string"}, "content_type": {"maxLength": 128, "title": "Content Type", "type": "string"}, "size_bytes": {"description": "\u0420\u0430\u0437\u043c\u0435\u0440 \u0444\u0430\u0439\u043b\u0430 \u0432 \u0431\u0430\u0439\u0442\u0430\u0445", "exclusiveMinimum": 0, "title": "Size Bytes", "type": "integer"}}, "required": ["original_name", "content_type", "size_bytes"], "title": "UploadInitRequest", "type": "object"}, "UploadCompleteRequest": {"properties": {"checksum_sha256": {"maxLength": 64, "minLength": 64, "pattern": "^[0-9a-f]{64}$", "title": "Checksum Sha256", "type": "string"}}, "required": ["checksum_sha256"], "title": "UploadCompleteRequest", "type": "object"}, "DownloadUrlResponse": {"properties": {"file_id": {"format": "uuid", "title": "File Id", "type": "string"}, "download_url": {"title": "Download Url", "type": "string"}, "expires_in": {"title": "Expires In", "type": "integer"}, "object_key": {"title": "Object Key", "type": "string"}}, "required": ["file_id", "download_url", "expires_in", "object_key"], "title": "DownloadUrlResponse", "type": "object"}, "NotificationListResponse": {"properties": {"results": {"items": {"$ref": "#/components/schemas/NotificationSchema"}, "title": "Results", "type": "array"}, "next_cursor": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "title": "Next Cursor"}, "count": {"title": "Count", "type": "integer"}}, "required": ["results", "count"], "title": "NotificationListResponse", "type": "object"}, "NotificationSchema": {"properties": {"id": {"format": "uuid", "title": "Id", "type": "string"}, "title": {"title": "Title", "type": "string"}, "body": {"title": "Body", "type": "string"}, "event_type": {"title": "Event Type", "type": "string"}, "is_read": {"title": "Is Read", "type": "boolean"}, "created_at": {"format": "date-time", "title": "Created At", "type": "string"}}, "required": ["id", "title", "body", "event_type", "is_read", "created_at"], "title": "NotificationSchema", "type": "object"}, "UnreadCountResponse": {"properties": {"count": {"title": "Count", "type": "integer"}}, "required": ["count"], "title": "UnreadCountResponse", "type": "object"}}, "securitySchemes": {"JWTAuth": {"type": "http", "scheme": "bearer"}}}, "servers": []}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ERP Комплект API",
+    "version": "1.0.0",
+    "description": ""
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "apps_users_api_login",
+        "summary": "Login",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "apps_users_api_refresh",
+        "summary": "Refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "required": false
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "apps_users_api_logout",
+        "summary": "Logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "operationId": "apps_users_api_mfa_verify",
+        "summary": "Mfa Verify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MFAVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/auth/mfa/setup": {
+      "post": {
+        "operationId": "apps_users_api_mfa_setup",
+        "summary": "Mfa Setup",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFASetupResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "JWTAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/confirm": {
+      "post": {
+        "operationId": "apps_users_api_mfa_confirm",
+        "summary": "Mfa Confirm",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MFAVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "JWTAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/": {
+      "get": {
+        "operationId": "apps_common_api_dashboard_get_dashboard_summary",
+        "summary": "Get Dashboard Summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummarySchema"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/v1/contracts/": {
+      "get": {
+        "operationId": "apps_contracts_api_list_contracts",
+        "summary": "List Contracts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "resource_type",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource Type"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ]
+      },
+      "post": {
+        "operationId": "apps_contracts_api_create_contract",
+        "summary": "Create Contract",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponseSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractCreateRequestSchema"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/": {
+      "get": {
+        "operationId": "apps_contracts_api_get_contract",
+        "summary": "Get Contract",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponseSchema"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ]
+      },
+      "patch": {
+        "operationId": "apps_contracts_api_update_contract",
+        "summary": "Update Contract",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponseSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/activate/": {
+      "post": {
+        "operationId": "apps_contracts_api_activate_contract",
+        "summary": "Activate Contract",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponseSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/api/v1/contracts/{contract_id}/close/": {
+      "post": {
+        "operationId": "apps_contracts_api_close_contract",
+        "summary": "Close Contract",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponseSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/api/v1/contracts/{contract_id}/events/": {
+      "get": {
+        "operationId": "apps_contracts_api_list_contract_events",
+        "summary": "List Contract Events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractEventLogResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/api/v1/contracts/{contract_id}/attachments/": {
+      "get": {
+        "operationId": "apps_contracts_api_list_attachments",
+        "summary": "List Attachments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attachments"
+        ]
+      },
+      "post": {
+        "operationId": "apps_contracts_api_attach_file",
+        "summary": "Attach File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attachments"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachFileRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/attachments/{file_id}/": {
+      "delete": {
+        "operationId": "apps_contracts_api_detach_file",
+        "summary": "Detach File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attachments"
+        ]
+      }
+    },
+    "/api/v1/contragents/": {
+      "get": {
+        "operationId": "apps_contragents_api_list_contragents",
+        "summary": "List Contragents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "contragent_type",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contragent Type"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "inn",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Inn"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContragentListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ]
+      },
+      "post": {
+        "operationId": "apps_contragents_api_create_contragent",
+        "summary": "Create Contragent",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContragentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContragentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/contragents/{contragent_id}/": {
+      "get": {
+        "operationId": "apps_contragents_api_get_contragent",
+        "summary": "Get Contragent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contragent_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contragent Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContragentResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ]
+      },
+      "patch": {
+        "operationId": "apps_contragents_api_update_contragent",
+        "summary": "Update Contragent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contragent_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contragent Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContragentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContragentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "operationId": "apps_contragents_api_delete_contragent",
+        "summary": "Delete Contragent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contragent_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contragent Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ]
+      }
+    },
+    "/api/v1/contragents/{contragent_id}/persons/": {
+      "get": {
+        "operationId": "apps_contragents_api_list_persons",
+        "summary": "List Persons",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contragent_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contragent Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ]
+      },
+      "post": {
+        "operationId": "apps_contragents_api_create_person",
+        "summary": "Create Person",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contragent_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Contragent Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "contragents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonCreateRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/finance/transactions/": {
+      "get": {
+        "operationId": "apps_finance_api_list_transactions",
+        "summary": "List Transactions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "contract_id",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "transaction_type",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transaction Type"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "finance"
+        ]
+      },
+      "post": {
+        "operationId": "apps_finance_api_post_transaction",
+        "summary": "Post Transaction",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "finance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionPostRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/finance/transactions/{tx_id}/reverse/": {
+      "post": {
+        "operationId": "apps_finance_api_reverse_transaction",
+        "summary": "Reverse Transaction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Tx Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/v1/objects/": {
+      "get": {
+        "operationId": "apps_objects_api_list_objects",
+        "summary": "List Objects",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "object_type",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Object Type"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "resource_type",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource Type"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "contract_id",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "bbox",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "lon_min,lat_min,lon_max,lat_max",
+              "title": "Bbox"
+            },
+            "required": false,
+            "description": "lon_min,lat_min,lon_max,lat_max"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplyObjectListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ]
+      },
+      "post": {
+        "operationId": "apps_objects_api_create_object",
+        "summary": "Create Object",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplyObjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/objects/geojson/": {
+      "get": {
+        "operationId": "apps_objects_api_objects_geojson",
+        "summary": "Objects Geojson",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "contract_id",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "bbox",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "lon_min,lat_min,lon_max,lat_max",
+              "title": "Bbox"
+            },
+            "required": false,
+            "description": "lon_min,lat_min,lon_max,lat_max"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureCollectionSchema"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/v1/objects/{object_id}/": {
+      "get": {
+        "operationId": "apps_objects_api_get_object",
+        "summary": "Get Object",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Object Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureSchema"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ]
+      },
+      "delete": {
+        "operationId": "apps_objects_api_delete_object",
+        "summary": "Delete Object",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Object Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/v1/objects/{object_id}/location/": {
+      "patch": {
+        "operationId": "apps_objects_api_update_location",
+        "summary": "Update Location",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Object Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "objects"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/files/": {
+      "get": {
+        "operationId": "apps_files_api_files_api_list_files",
+        "summary": "List Files",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/upload-init": {
+      "post": {
+        "operationId": "apps_files_api_files_api_upload_init",
+        "summary": "Upload Init",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadInitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadInitRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/complete": {
+      "post": {
+        "operationId": "apps_files_api_files_api_upload_complete",
+        "summary": "Upload Complete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "get": {
+        "operationId": "apps_files_api_files_api_get_file",
+        "summary": "Get File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      },
+      "delete": {
+        "operationId": "apps_files_api_files_api_delete_file",
+        "summary": "Delete File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/download-url": {
+      "get": {
+        "operationId": "apps_files_api_files_api_get_download_url",
+        "summary": "Get Download Url",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/notifications/": {
+      "get": {
+        "operationId": "apps_notifications_api_list_notifications",
+        "summary": "List Notifications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/unread-count/": {
+      "get": {
+        "operationId": "apps_notifications_api_unread_count",
+        "summary": "Unread Count",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCountResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{notif_id}/read/": {
+      "post": {
+        "operationId": "apps_notifications_api_mark_read",
+        "summary": "Mark Read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notif_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Notif Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all/": {
+      "post": {
+        "operationId": "apps_notifications_api_mark_all_read",
+        "summary": "Mark All Read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/ops/": {
+      "get": {
+        "operationId": "apps_common_api_ops_get_ops_snapshot",
+        "summary": "Get Ops Snapshot",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsSnapshot"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ops"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          },
+          "mfa_required": {
+            "default": false,
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "permissions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          },
+          "password": {
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "device_fingerprint": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Device Fingerprint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest",
+        "type": "object"
+      },
+      "MFAVerifyRequest": {
+        "properties": {
+          "totp_code": {
+            "maxLength": 6,
+            "minLength": 6,
+            "title": "Totp Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "totp_code"
+        ],
+        "title": "MFAVerifyRequest",
+        "type": "object"
+      },
+      "MFASetupResponse": {
+        "properties": {
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "otpauth_url": {
+            "title": "Otpauth Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauth_url"
+        ],
+        "title": "MFASetupResponse",
+        "type": "object"
+      },
+      "MFAStatusResponse": {
+        "properties": {
+          "mfa_enabled": {
+            "title": "Mfa Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mfa_enabled"
+        ],
+        "title": "MFAStatusResponse",
+        "type": "object"
+      },
+      "ContractCountsSchema": {
+        "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "draft": {
+            "title": "Draft",
+            "type": "integer"
+          },
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "legal_hold": {
+            "title": "Legal Hold",
+            "type": "integer"
+          },
+          "closed": {
+            "title": "Closed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "draft",
+          "active",
+          "legal_hold",
+          "closed"
+        ],
+        "title": "ContractCountsSchema",
+        "type": "object"
+      },
+      "DashboardSummarySchema": {
+        "properties": {
+          "contracts": {
+            "$ref": "#/components/schemas/ContractCountsSchema"
+          },
+          "files": {
+            "$ref": "#/components/schemas/FileCountsSchema"
+          },
+          "contragents_total": {
+            "title": "Contragents Total",
+            "type": "integer"
+          },
+          "operational": {
+            "$ref": "#/components/schemas/OperationalCountsSchema"
+          }
+        },
+        "required": [
+          "contracts",
+          "files",
+          "contragents_total",
+          "operational"
+        ],
+        "title": "DashboardSummarySchema",
+        "type": "object"
+      },
+      "FileCountsSchema": {
+        "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "scanning": {
+            "title": "Scanning",
+            "type": "integer"
+          },
+          "quarantined": {
+            "title": "Quarantined",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "available",
+          "scanning",
+          "quarantined",
+          "pending"
+        ],
+        "title": "FileCountsSchema",
+        "type": "object"
+      },
+      "OperationalCountsSchema": {
+        "properties": {
+          "stuck_drafts": {
+            "title": "Stuck Drafts",
+            "type": "integer"
+          },
+          "outbox_pending": {
+            "title": "Outbox Pending",
+            "type": "integer"
+          },
+          "outbox_failed": {
+            "title": "Outbox Failed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stuck_drafts",
+          "outbox_pending",
+          "outbox_failed"
+        ],
+        "title": "OperationalCountsSchema",
+        "type": "object"
+      },
+      "ContractListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ContractResponseSchema"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ContractListResponse",
+        "type": "object"
+      },
+      "ContractResponseSchema": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "contract_number": {
+            "title": "Contract Number",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "integer"
+          },
+          "paid_amount": {
+            "title": "Paid Amount",
+            "type": "integer"
+          },
+          "remaining_amount": {
+            "default": 0,
+            "title": "Remaining Amount",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "required": [
+          "id",
+          "contract_number",
+          "title",
+          "status",
+          "resource_type",
+          "total_amount",
+          "paid_amount"
+        ],
+        "title": "ContractResponseSchema",
+        "type": "object"
+      },
+      "ContractCreateRequestSchema": {
+        "properties": {
+          "contract_number": {
+            "maxLength": 100,
+            "title": "Contract Number",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "ELECTRICITY, GAS, WATER, HEAT, OTHER",
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "total_amount": {
+            "description": "Общая сумма договора в копейках",
+            "exclusiveMinimum": 0,
+            "title": "Total Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contract_number",
+          "title",
+          "resource_type",
+          "total_amount"
+        ],
+        "title": "ContractCreateRequestSchema",
+        "type": "object"
+      },
+      "ContractUpdateSchema": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Общая сумма договора в копейках",
+            "title": "Total Amount"
+          }
+        },
+        "title": "ContractUpdateSchema",
+        "type": "object"
+      },
+      "ContractEventLogEntrySchema": {
+        "properties": {
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "title": "Correlation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "label",
+          "occurred_at",
+          "correlation_id"
+        ],
+        "title": "ContractEventLogEntrySchema",
+        "type": "object"
+      },
+      "ContractEventLogResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ContractEventLogEntrySchema"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ContractEventLogResponse",
+        "type": "object"
+      },
+      "AttachmentListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "AttachmentListResponse",
+        "type": "object"
+      },
+      "AttachmentResponse": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "attached_by": {
+            "format": "uuid",
+            "title": "Attached By",
+            "type": "string"
+          },
+          "attached_at": {
+            "format": "date-time",
+            "title": "Attached At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "name",
+          "size_bytes",
+          "status",
+          "attached_by",
+          "attached_at"
+        ],
+        "title": "AttachmentResponse",
+        "type": "object"
+      },
+      "AttachFileRequest": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "AttachFileRequest",
+        "type": "object"
+      },
+      "ContragentListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ContragentResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ContragentListResponse",
+        "type": "object"
+      },
+      "ContragentResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "inn": {
+            "title": "Inn",
+            "type": "string"
+          },
+          "contragent_type": {
+            "title": "Contragent Type",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "inn",
+          "contragent_type"
+        ],
+        "title": "ContragentResponse",
+        "type": "object"
+      },
+      "ContragentCreateRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "inn": {
+            "maxLength": 12,
+            "minLength": 10,
+            "title": "Inn",
+            "type": "string"
+          },
+          "contragent_type": {
+            "description": "LEGAL_ENTITY, ENTREPRENEUR, INDIVIDUAL",
+            "title": "Contragent Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "inn",
+          "contragent_type"
+        ],
+        "title": "ContragentCreateRequest",
+        "type": "object"
+      },
+      "ContragentUpdateRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ContragentUpdateRequest",
+        "type": "object"
+      },
+      "PersonListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "PersonListResponse",
+        "type": "object"
+      },
+      "PersonCreateRequest": {
+        "properties": {
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "middle_name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Middle Name",
+            "type": "string"
+          },
+          "passport": {
+            "description": "Серия и номер паспорта",
+            "maxLength": 20,
+            "minLength": 9,
+            "title": "Passport",
+            "type": "string"
+          },
+          "snils": {
+            "description": "СНИЛС",
+            "maxLength": 14,
+            "minLength": 11,
+            "title": "Snils",
+            "type": "string"
+          },
+          "phone": {
+            "description": "Телефон в формате +79991234567",
+            "maxLength": 15,
+            "minLength": 10,
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "passport",
+          "snils",
+          "phone"
+        ],
+        "title": "PersonCreateRequest",
+        "type": "object"
+      },
+      "TransactionListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "TransactionListResponse",
+        "type": "object"
+      },
+      "TransactionResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "contract_id": {
+            "format": "uuid",
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "transaction_type": {
+            "title": "Transaction Type",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "amount_rub": {
+            "default": 0.0,
+            "title": "Amount Rub",
+            "type": "number"
+          },
+          "external_ref": {
+            "title": "External Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contract_id",
+          "transaction_type",
+          "status",
+          "amount",
+          "external_ref"
+        ],
+        "title": "TransactionResponse",
+        "type": "object"
+      },
+      "TransactionPostRequest": {
+        "properties": {
+          "contract_id": {
+            "format": "uuid",
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "amount": {
+            "description": "Сумма в копейках",
+            "exclusiveMinimum": 0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "transaction_type": {
+            "default": "PAYMENT",
+            "description": "PAYMENT, REFUND, CORRECTION",
+            "title": "Transaction Type",
+            "type": "string"
+          },
+          "external_ref": {
+            "default": "",
+            "maxLength": 255,
+            "title": "External Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_id",
+          "amount"
+        ],
+        "title": "TransactionPostRequest",
+        "type": "object"
+      },
+      "FeatureSchema": {
+        "properties": {
+          "type": {
+            "const": "Feature",
+            "default": "Feature",
+            "title": "Type",
+            "type": "string"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointGeometry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/SupplyObjectProperties"
+          }
+        },
+        "required": [
+          "properties"
+        ],
+        "title": "FeatureSchema",
+        "type": "object"
+      },
+      "PointGeometry": {
+        "properties": {
+          "type": {
+            "const": "Point",
+            "default": "Point",
+            "title": "Type",
+            "type": "string"
+          },
+          "coordinates": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Coordinates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "coordinates"
+        ],
+        "title": "PointGeometry",
+        "type": "object"
+      },
+      "SupplyObjectListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureSchema"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "SupplyObjectListResponse",
+        "type": "object"
+      },
+      "SupplyObjectProperties": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "object_type": {
+            "title": "Object Type",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "contragent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contragent Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "address",
+          "object_type",
+          "resource_type"
+        ],
+        "title": "SupplyObjectProperties",
+        "type": "object"
+      },
+      "SupplyObjectCreateRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "title": "Name",
+            "type": "string"
+          },
+          "address": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Address",
+            "type": "string"
+          },
+          "object_type": {
+            "description": "BUILDING, GRS, PIPELINE, SUBSTATION, RESERVOIR, HEATING_POINT, OTHER",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "ELECTRICITY, GAS, WATER, HEAT, OTHER",
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "contragent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contragent Id"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180,
+                "minimum": -180,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90,
+                "minimum": -90,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          }
+        },
+        "required": [
+          "name",
+          "object_type",
+          "resource_type"
+        ],
+        "title": "SupplyObjectCreateRequest",
+        "type": "object"
+      },
+      "FeatureCollectionSchema": {
+        "properties": {
+          "type": {
+            "const": "FeatureCollection",
+            "default": "FeatureCollection",
+            "title": "Type",
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureSchema"
+            },
+            "title": "Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "features"
+        ],
+        "title": "FeatureCollectionSchema",
+        "type": "object"
+      },
+      "UpdateLocationRequest": {
+        "properties": {
+          "longitude": {
+            "maximum": 180,
+            "minimum": -180,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "latitude": {
+            "maximum": 90,
+            "minimum": -90,
+            "title": "Latitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "longitude",
+          "latitude"
+        ],
+        "title": "UpdateLocationRequest",
+        "type": "object"
+      },
+      "FileDetailResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "original_name": {
+            "title": "Original Name",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "checksum_sha256": {
+            "title": "Checksum Sha256",
+            "type": "string"
+          },
+          "storage_provider": {
+            "title": "Storage Provider",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "uploaded_by": {
+            "format": "uuid",
+            "title": "Uploaded By",
+            "type": "string"
+          },
+          "scanned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scanned At"
+          },
+          "quarantine_reason": {
+            "title": "Quarantine Reason",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "object_key",
+          "original_name",
+          "content_type",
+          "size_bytes",
+          "checksum_sha256",
+          "storage_provider",
+          "status",
+          "uploaded_by",
+          "quarantine_reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FileDetailResponse",
+        "type": "object"
+      },
+      "FileListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FileDetailResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "FileListResponse",
+        "type": "object"
+      },
+      "UploadInitResponse": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "object_key",
+          "upload_url",
+          "status"
+        ],
+        "title": "UploadInitResponse",
+        "type": "object"
+      },
+      "UploadInitRequest": {
+        "properties": {
+          "original_name": {
+            "maxLength": 512,
+            "title": "Original Name",
+            "type": "string"
+          },
+          "content_type": {
+            "maxLength": 128,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "Размер файла в байтах",
+            "exclusiveMinimum": 0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "original_name",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "UploadInitRequest",
+        "type": "object"
+      },
+      "UploadCompleteRequest": {
+        "properties": {
+          "checksum_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Checksum Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checksum_sha256"
+        ],
+        "title": "UploadCompleteRequest",
+        "type": "object"
+      },
+      "DownloadUrlResponse": {
+        "properties": {
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "download_url",
+          "expires_in",
+          "object_key"
+        ],
+        "title": "DownloadUrlResponse",
+        "type": "object"
+      },
+      "NotificationListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationSchema"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "NotificationListResponse",
+        "type": "object"
+      },
+      "NotificationSchema": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "is_read": {
+            "title": "Is Read",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "body",
+          "event_type",
+          "is_read",
+          "created_at"
+        ],
+        "title": "NotificationSchema",
+        "type": "object"
+      },
+      "UnreadCountResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "UnreadCountResponse",
+        "type": "object"
+      },
+      "OpsSnapshot": {
+        "properties": {
+          "outbox": {
+            "$ref": "#/components/schemas/OutboxStats"
+          },
+          "celery": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Celery",
+            "type": "object"
+          },
+          "circuit_breakers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Circuit Breakers",
+            "type": "object"
+          },
+          "dlq": {
+            "title": "Dlq",
+            "type": "integer"
+          },
+          "ws_connections": {
+            "title": "Ws Connections",
+            "type": "integer"
+          },
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outbox",
+          "celery",
+          "circuit_breakers",
+          "dlq",
+          "ws_connections",
+          "collected_at"
+        ],
+        "title": "OpsSnapshot",
+        "type": "object"
+      },
+      "OutboxStats": {
+        "properties": {
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "failed_permanently": {
+            "title": "Failed Permanently",
+            "type": "integer"
+          },
+          "lag_seconds_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds P95"
+          }
+        },
+        "required": [
+          "pending",
+          "failed_permanently"
+        ],
+        "title": "OutboxStats",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "JWTAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "servers": []
+}

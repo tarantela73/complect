@@ -26,6 +26,19 @@ def _decode_jwt(token: str) -> dict | None:
         return None
 
 
+def _incr_ws_counter() -> None:
+    from apps.common.infra.redis import get_default_redis
+    get_default_redis().incr("ws:active_connections")
+
+
+def _decr_ws_counter() -> None:
+    from apps.common.infra.redis import get_default_redis
+    r = get_default_redis()
+    current = r.get("ws:active_connections")
+    if current and int(current) > 0:
+        r.decr("ws:active_connections")
+
+
 class ErpRealtimeConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.tenant_id = None
@@ -34,12 +47,16 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
         self.notifications_group = None
         self.is_negotiated = False
         await self.accept()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _incr_ws_counter)
 
     async def disconnect(self, close_code):
         if self.files_group is not None:
             await self.channel_layer.group_discard(self.files_group, self.channel_name)
         if self.notifications_group is not None:
             await self.channel_layer.group_discard(self.notifications_group, self.channel_name)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _decr_ws_counter)
         logger.info("websocket_disconnected", close_code=close_code)
         clear_context()
 
