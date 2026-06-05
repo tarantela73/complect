@@ -289,7 +289,7 @@ services:
       CLAMAV_PORT: 3310
     networks:
       - erp_network
-    command: celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention -c 4
+    command: celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention,integration -c 4
 
     depends_on:
       postgres_primary:

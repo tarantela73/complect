@@ -139,7 +139,7 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_MAX_RETRIES = 5
 
-# rule 4.15 — queue topology (6 queues, high/normal/low priority tiers)
+# rule 4.15 — queue topology (7 queues, high/normal/low priority tiers)
 _default_exchange = Exchange("default", type="direct")
 CELERY_TASK_QUEUES = (
     Queue("default",       _default_exchange,         routing_key="default"),
@@ -148,6 +148,7 @@ CELERY_TASK_QUEUES = (
     Queue("finance",       Exchange("finance"),        routing_key="finance"),
     Queue("files",         Exchange("files"),          routing_key="files"),
     Queue("retention",     Exchange("retention"),      routing_key="retention"),
+    Queue("integration",   Exchange("integration"),    routing_key="integration"),
 )
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_IMPORTS = (
@@ -162,6 +163,7 @@ CELERY_IMPORTS = (
     "apps.files.tasks.policy_evaluator",
     "apps.files.tasks.recovery_scanner",
     "apps.notifications.consumer.notifications_consumer",
+    "apps.integration.tasks.webhook_consumer",
 )
 
 # rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
@@ -205,6 +207,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.consumer.notifications_consumer.run_notifications_consumer_task",
         "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
         "options": {"queue": "notifications"},
+    },
+    "webhook-fanout-consumer": {
+        "task": "apps.integration.tasks.webhook_consumer.run_webhook_fanout_consumer_task",
+        "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
+        "options": {"queue": "integration"},
     },
 }
 
