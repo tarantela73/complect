@@ -51,6 +51,7 @@ class FileQuarantinedEvent:
     tenant_id: uuid.UUID
     object_key: str
     quarantine_reason: str
+    uploaded_by: uuid.UUID
 
     @classmethod
     def create(
@@ -61,6 +62,7 @@ class FileQuarantinedEvent:
         tenant_id: uuid.UUID,
         object_key: str,
         quarantine_reason: str,
+        uploaded_by: uuid.UUID,
     ) -> "FileQuarantinedEvent":
         return cls(
             event_id=uuid.uuid4(),
@@ -71,6 +73,7 @@ class FileQuarantinedEvent:
             tenant_id=tenant_id,
             object_key=object_key,
             quarantine_reason=quarantine_reason,
+            uploaded_by=uploaded_by,
         )
 
 

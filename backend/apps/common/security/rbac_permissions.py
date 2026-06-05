@@ -60,6 +60,8 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("dlq", "write"),
     # dashboard (overview summary — all authenticated roles)
     Permission("dashboard", "read"),
+    # notifications (in-app notification feed — all authenticated roles)
+    Permission("notifications", "read"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

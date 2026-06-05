@@ -80,6 +80,7 @@ class TransactionPostingService:
                     transaction_id=tx.id,
                     amount=amount,
                     transaction_type=transaction_type,
+                    posted_by=posted_by,
                 )
             )
 

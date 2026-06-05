@@ -131,6 +131,7 @@ class FilesConsumer(BaseDomainConsumer):
                         tenant_id=event.tenant_id,
                         object_key=record.object_key,
                         quarantine_reason="virus_detected",
+                        uploaded_by=record.uploaded_by,
                     )
                 )
                 transaction.on_commit(
@@ -152,6 +153,7 @@ class FilesConsumer(BaseDomainConsumer):
                         tenant_id=event.tenant_id,
                         object_key=record.object_key,
                         quarantine_reason="scan_deferred_cb_open",
+                        uploaded_by=record.uploaded_by,
                     )
                 )
                 transaction.on_commit(
@@ -178,6 +180,7 @@ class FilesConsumer(BaseDomainConsumer):
                         tenant_id=event.tenant_id,
                         object_key=record.object_key,
                         quarantine_reason="scan_error",
+                        uploaded_by=record.uploaded_by,
                     )
                 )
                 transaction.on_commit(

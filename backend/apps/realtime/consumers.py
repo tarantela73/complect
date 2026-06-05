@@ -31,12 +31,15 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
         self.tenant_id = None
         self.stream_name = None
         self.files_group = None
+        self.notifications_group = None
         self.is_negotiated = False
         await self.accept()
 
     async def disconnect(self, close_code):
         if self.files_group is not None:
             await self.channel_layer.group_discard(self.files_group, self.channel_name)
+        if self.notifications_group is not None:
+            await self.channel_layer.group_discard(self.notifications_group, self.channel_name)
         logger.info("websocket_disconnected", close_code=close_code)
         clear_context()
 
@@ -117,9 +120,12 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
         self.stream_name = f"erp:streams:tenant:{self.tenant_id}"
         self.is_negotiated = True
 
-        # Join channel group for file status fanout
+        # Join channel groups for tenant-scoped fanout
         self.files_group = f"files.tenant.{self.tenant_id}"
         await self.channel_layer.group_add(self.files_group, self.channel_name)
+
+        self.notifications_group = f"notifications.tenant.{self.tenant_id}"
+        await self.channel_layer.group_add(self.notifications_group, self.channel_name)
 
         negotiated_capabilities = [cap for cap in ["at_least_once", "event_replay"] if cap in capabilities]
 
@@ -174,6 +180,21 @@ class ErpRealtimeConsumer(AsyncWebsocketConsumer):
                     "payload": {
                         "file_id": event["file_id"],
                         "status": event["status"],
+                    },
+                }
+            )
+        )
+
+    async def notifications_new(self, event: dict):
+        """Channel layer handler: broadcasts new notification to the WebSocket client."""
+        await self.send(
+            json.dumps(
+                {
+                    "type": "realtime_event",
+                    "event_type": "notification.new",
+                    "payload": {
+                        "user_id": event["user_id"],
+                        "notification_id": event["notification_id"],
                     },
                 }
             )

@@ -140,7 +140,8 @@
       "Bash(npm --version)",
       "Bash(npm install *)",
       "Bash(sudo chown -R sever:sever /home/sever/projects/Complect/frontend/node_modules)",
-      "Bash(docker run *)"
+      "Bash(docker run *)",
+      "Bash(docker network *)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

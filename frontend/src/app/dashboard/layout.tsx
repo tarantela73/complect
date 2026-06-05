@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useIsAuthenticated, useCan, useAuth } from '@/shared/auth/hooks'
 import { logout } from '@/shared/auth/api'
 import { cn } from '@/shared/ui/utils'
+import { useUnreadCount, useNotificationSocket } from '@/shared/api/notifications'
 
 interface NavItem {
   href: string
@@ -21,7 +22,46 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/finance', label: 'Финансы', permission: 'finance.read' },
   { href: '/dashboard/files', label: 'Файлы', permission: 'files.read' },
   { href: '/dashboard/objects', label: 'Объекты', permission: 'objects.read' },
+  { href: '/dashboard/notifications', label: 'Уведомления', permission: 'notifications.read' },
 ]
+
+function NotificationBell() {
+  const canRead = useCan('notifications.read')
+  const { data } = useUnreadCount()
+  useNotificationSocket()
+
+  if (!canRead) return null
+
+  const count = data?.count ?? 0
+
+  return (
+    <Link
+      href="/dashboard/notifications"
+      className="relative flex h-8 w-8 items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+      title="Уведомления"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+          {count > 9 ? '9+' : count}
+        </span>
+      )}
+    </Link>
+  )
+}
 
 function NavLink({ item }: { item: NavItem }) {
   const canView = useCan(item.permission)
@@ -67,8 +107,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-background">
       <aside className="flex w-56 flex-col bg-sidebar text-sidebar-foreground">
-        <div className="flex h-14 items-center border-b border-sidebar-border px-4">
+        <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
           <span className="text-sm font-semibold tracking-wide">ERP Комплект</span>
+          <NotificationBell />
         </div>
 
         <nav className="flex-1 space-y-1 p-3">

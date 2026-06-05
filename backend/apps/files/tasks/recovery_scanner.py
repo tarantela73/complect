@@ -71,6 +71,7 @@ def _rescan_one(
                     tenant_id=tenant_id,
                     object_key=record.object_key,
                     quarantine_reason="virus_detected",
+                    uploaded_by=record.uploaded_by,
                 )
             )
             logger.info("files_recovery_scan_infected", file_id=str(file_id))
@@ -83,6 +84,7 @@ def _rescan_one(
                     tenant_id=tenant_id,
                     object_key=record.object_key,
                     quarantine_reason="scan_error",
+                    uploaded_by=record.uploaded_by,
                 )
             )
             logger.warning("files_recovery_scan_error", file_id=str(file_id))

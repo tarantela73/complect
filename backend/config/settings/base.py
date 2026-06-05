@@ -37,6 +37,7 @@ LOCAL_APPS = [
     "apps.files",
     "apps.realtime",
     "apps.integration",
+    "apps.notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -180,6 +181,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.files.tasks.policy_evaluator.run_system_control_policy_task",
         "schedule": 30.0,  # every 30 seconds; self-healing via PARAM_TTL on batch_size key
         "options": {"queue": "files"},
+    },
+    "notifications-consumer": {
+        "task": "apps.notifications.consumer.notifications_consumer.run_notifications_consumer_task",
+        "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
+        "options": {"queue": "notifications"},
     },
 }
 

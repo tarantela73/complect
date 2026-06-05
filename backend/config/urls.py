@@ -12,6 +12,7 @@ from apps.contragents.api import router as contragents_router
 from apps.files.api.files_api import router as files_router
 from apps.finance.api import router as finance_router
 from apps.objects.api import router as objects_router
+from apps.notifications.api import router as notifications_router
 from apps.users.api import router as auth_router
 from config.api import api
 
@@ -22,6 +23,7 @@ api.add_router("/contragents/", contragents_router)
 api.add_router("/finance/", finance_router)
 api.add_router("/objects/", objects_router)
 api.add_router("/files/", files_router)
+api.add_router("/notifications/", notifications_router)
 
 urlpatterns = [
     path("", include("config.health_urls")),

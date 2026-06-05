@@ -15,6 +15,7 @@ class TransactionPostedEvent:
     transaction_id: uuid.UUID
     amount: int
     transaction_type: str
+    posted_by: uuid.UUID
     event_version: int = 1
 
     @classmethod
@@ -25,6 +26,7 @@ class TransactionPostedEvent:
         transaction_id: uuid.UUID,
         amount: int,
         transaction_type: str,
+        posted_by: uuid.UUID,
     ) -> "TransactionPostedEvent":
         return cls(
             event_id=uuid.uuid4(),
@@ -34,4 +36,5 @@ class TransactionPostedEvent:
             transaction_id=transaction_id,
             amount=amount,
             transaction_type=transaction_type,
+            posted_by=posted_by,
         )
