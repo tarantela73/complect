@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Query, Router, Schema

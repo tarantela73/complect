@@ -66,7 +66,7 @@ function NotificationBell() {
 function NavLink({ item }: { item: NavItem }) {
   const canView = useCan(item.permission)
   const pathname = usePathname()
-  const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+  const isActive = item.exact ? pathname === item.href : (pathname?.startsWith(item.href) ?? false)
 
   if (!canView) return null
 

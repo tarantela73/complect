@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from django.test import RequestFactory
 from django.utils import timezone as django_timezone
 
 from apps.common.models.outbox import OutboxRecord
@@ -264,7 +263,6 @@ class TestNotificationsApi:
         return ctx
 
     def test_list_returns_only_current_user_notifications(self, client):
-        from apps.common.tenancy.context_core import set_context
 
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
