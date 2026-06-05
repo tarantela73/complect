@@ -163,6 +163,7 @@ services:
   api_gateway:
     image: kong:latest
     container_name: complect_gateway_dev
+    restart: unless-stopped
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
