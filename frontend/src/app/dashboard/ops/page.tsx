@@ -1,6 +1,6 @@
 'use client'
 
-import { useOpsSnapshot, type OpsSnapshot } from '@/shared/api/ops'
+import { useOpsSnapshot, type OpsSnapshot, type SLOMetricStatus } from '@/shared/api/ops'
 
 function statusColor(value: number, warn: number, crit: number): string {
   if (value >= crit) return 'text-destructive'
@@ -92,6 +92,48 @@ function CircuitBreakersCard({ data }: { data: OpsSnapshot }) {
   )
 }
 
+const SLO_STATE_STYLES: Record<string, string> = {
+  ok: 'text-green-600 dark:text-green-400',
+  warn: 'text-yellow-600 dark:text-yellow-400',
+  crit: 'text-destructive',
+  recovering: 'text-blue-600 dark:text-blue-400',
+}
+
+const SLO_DOT_STYLES: Record<string, string> = {
+  ok: 'bg-green-500',
+  warn: 'bg-yellow-500',
+  crit: 'bg-destructive',
+  recovering: 'bg-blue-500',
+}
+
+function SLOCard({ slo }: { slo: SLOMetricStatus[] }) {
+  return (
+    <Card title="SLO Status">
+      <dl className="space-y-2 text-sm">
+        {slo.map((item) => (
+          <div key={item.name} className="flex items-center justify-between gap-2">
+            <dt className="font-mono text-xs text-muted-foreground leading-tight">
+              {item.label}
+            </dt>
+            <dd className="flex shrink-0 items-center gap-1.5">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${SLO_DOT_STYLES[item.state] ?? 'bg-muted'}`}
+              />
+              <span className={`font-mono font-medium text-xs ${SLO_STATE_STYLES[item.state] ?? ''}`}>
+                {item.state}
+              </span>
+              <span className="ml-1 font-mono text-xs text-muted-foreground">
+                {Math.round(item.error_budget * 100)}%
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-[10px] text-muted-foreground">error budget = % compliant / 30m</p>
+    </Card>
+  )
+}
+
 function InfraCard({ data }: { data: OpsSnapshot }) {
   return (
     <Card title="Infrastructure">
@@ -134,11 +176,12 @@ export default function OpsPage() {
       )}
 
       {data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <OutboxCard data={data} />
           <CeleryCard data={data} />
           <CircuitBreakersCard data={data} />
           <InfraCard data={data} />
+          <SLOCard slo={data.slo} />
         </div>
       )}
 

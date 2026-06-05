@@ -4,6 +4,7 @@ import type { components } from './generated/schema'
 
 export type OpsSnapshot = components['schemas']['OpsSnapshot']
 export type OutboxStats = components['schemas']['OutboxStats']
+export type SLOMetricStatus = components['schemas']['SLOMetricStatus']
 
 export function useOpsSnapshot() {
   return useQuery({

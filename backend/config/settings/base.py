@@ -155,6 +155,7 @@ CELERY_IMPORTS = (
     "apps.common.tasks.chain_completeness_monitor",
     "apps.common.tasks.causal_pair_monitor",
     "apps.common.tasks.retention_manager",
+    "apps.common.tasks.slo_compliance",
     "apps.contracts.tasks.consumer",
     "apps.finance.tasks.consumer",
     "apps.files.tasks.consumer",
@@ -174,6 +175,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.common.tasks.chain_completeness_monitor.run_chain_completeness_monitor_task",
         "schedule": 60.0,  # every 60 seconds
         "options": {"queue": "outbox"},
+    },
+    "slo-compliance-check": {
+        "task": "apps.common.tasks.slo_compliance.check_slo_compliance_task",
+        "schedule": 60.0,  # every 60 seconds
+        "options": {"queue": "notifications"},
     },
     "outbox-archive": {
         "task": "apps.common.tasks.retention_manager.archive_processed_outbox_records_task",
