@@ -38,8 +38,9 @@ def list_contracts(
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
 ):
-    result = get_contracts_page(cursor=cursor, limit=limit, status=status, resource_type=resource_type)
+    result = get_contracts_page(cursor=cursor, limit=limit, status=status, resource_type=resource_type, q=q)
     return 200, result
 
 

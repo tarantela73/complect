@@ -45,6 +45,7 @@ export function useContracts(params?: {
   limit?: number
   status?: string
   resource_type?: string
+  q?: string
 }) {
   return useQuery({
     queryKey: contractKeys.list(params ?? {}),

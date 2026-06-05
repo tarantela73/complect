@@ -10,8 +10,8 @@ import {
   CONTRAGENT_TYPE_LABELS,
   type Contragent,
 } from '@/shared/api/contragents'
+import { useDebounce } from '@/shared/ui/use-debounce'
 import { Button } from '@/shared/ui/button'
-import { cn } from '@/shared/ui/utils'
 
 function ContragentRow({
   item,
@@ -72,14 +72,15 @@ export default function ContragentsPage() {
   const [cursor, setCursor] = useState<string | undefined>()
   const [cursors, setCursors] = useState<string[]>([])
   const [typeFilter, setTypeFilter] = useState('')
-  const [innFilter, setInnFilter] = useState('')
-  const [innInput, setInnInput] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+
+  const q = useDebounce(searchInput)
 
   const { data, isLoading, isError } = useContragents({
     cursor,
     limit: 20,
     contragent_type: typeFilter || undefined,
-    inn: innFilter || undefined,
+    q: q || undefined,
   })
 
   const deleteMutation = useDeleteContragent()
@@ -104,14 +105,14 @@ export default function ContragentsPage() {
     setCursor(last || undefined)
   }
 
-  const handleSearch = () => {
-    setInnFilter(innInput)
+  const handleTypeChange = (val: string) => {
+    setTypeFilter(val)
     setCursor(undefined)
     setCursors([])
   }
 
-  const handleTypeChange = (val: string) => {
-    setTypeFilter(val)
+  const handleSearchChange = (val: string) => {
+    setSearchInput(val)
     setCursor(undefined)
     setCursors([])
   }
@@ -128,6 +129,13 @@ export default function ContragentsPage() {
       </div>
 
       <div className="mb-4 flex gap-3">
+        <input
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Поиск по названию или ИНН..."
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+
         <select
           value={typeFilter}
           onChange={(e) => handleTypeChange(e.target.value)}
@@ -139,27 +147,15 @@ export default function ContragentsPage() {
           <option value="INDIVIDUAL">Физическое лицо</option>
         </select>
 
-        <div className="flex gap-2">
-          <input
-            value={innInput}
-            onChange={(e) => setInnInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="ИНН"
-            className="rounded-md border border-input bg-background px-3 py-2 text-sm w-40"
-          />
-          <Button variant="outline" size="default" onClick={handleSearch}>
-            Найти
+        {(searchInput || typeFilter) && (
+          <Button
+            variant="ghost"
+            size="default"
+            onClick={() => { setSearchInput(''); setTypeFilter(''); setCursor(undefined); setCursors([]) }}
+          >
+            Сбросить
           </Button>
-          {innFilter && (
-            <Button
-              variant="ghost"
-              size="default"
-              onClick={() => { setInnFilter(''); setInnInput(''); setCursor(undefined); setCursors([]) }}
-            >
-              Сброс
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
       {isLoading && (
@@ -189,7 +185,7 @@ export default function ContragentsPage() {
                 {data.results.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-muted-foreground">
-                      Контрагенты не найдены
+                      {q ? `Ничего не найдено по запросу «${q}»` : 'Контрагенты не найдены'}
                     </td>
                   </tr>
                 ) : (

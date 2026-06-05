@@ -11,6 +11,7 @@ import {
   RESOURCE_TYPES,
   type Contract,
 } from '@/shared/api/contracts'
+import { useDebounce } from '@/shared/ui/use-debounce'
 import { Button } from '@/shared/ui/button'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -71,13 +72,17 @@ export default function ContractsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [resourceFilter, setResourceFilter] = useState('')
   const [cursors, setCursors] = useState<string[]>([])
+  const [searchInput, setSearchInput] = useState('')
   const currentCursor = cursors.at(-1)
+
+  const q = useDebounce(searchInput)
 
   const { data, isLoading, isError } = useContracts({
     cursor: currentCursor,
     limit: 20,
     status: statusFilter || undefined,
     resource_type: resourceFilter || undefined,
+    q: q || undefined,
   })
 
   const handleFilterChange = () => {
@@ -96,6 +101,13 @@ export default function ContractsPage() {
       </div>
 
       <div className="mb-4 flex gap-3">
+        <input
+          value={searchInput}
+          onChange={(e) => { setSearchInput(e.target.value); handleFilterChange() }}
+          placeholder="Поиск по названию или номеру..."
+          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); handleFilterChange() }}
@@ -117,6 +129,16 @@ export default function ContractsPage() {
             <option key={r} value={r}>{RESOURCE_TYPE_LABELS[r]}</option>
           ))}
         </select>
+
+        {(searchInput || statusFilter || resourceFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setSearchInput(''); setStatusFilter(''); setResourceFilter(''); handleFilterChange() }}
+          >
+            Сбросить
+          </Button>
+        )}
       </div>
 
       {isError && (
@@ -144,7 +166,7 @@ export default function ContractsPage() {
                 {data?.results.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      Договоры не найдены
+                      {q ? `Ничего не найдено по запросу «${q}»` : 'Договоры не найдены'}
                     </td>
                   </tr>
                 ) : (

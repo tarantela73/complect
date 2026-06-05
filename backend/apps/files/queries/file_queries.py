@@ -5,6 +5,8 @@ Cursor pagination: WHERE id < cursor ORDER BY id DESC (ADR rule 4.11).
 import uuid
 from typing import Optional
 
+from django.contrib.postgres.search import SearchQuery, SearchRank
+
 from apps.files.models.file_record import FileRecord
 from apps.files.repositories.file_repo import FileRepository
 from apps.files.schemas.file_dto import FileDetailResponse
@@ -18,8 +20,17 @@ def get_files_page(
     cursor: Optional[uuid.UUID] = None,
     limit: int = 20,
     status: Optional[str] = None,
+    q: Optional[str] = None,
 ) -> dict:
-    qs = FileRepository.get_queryset().order_by("-id")
+    qs = FileRepository.get_queryset()
+
+    if q:
+        search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
+        qs = qs.filter(search_vector=search_query).order_by(
+            SearchRank("search_vector", search_query).desc(), "-id"
+        )
+    else:
+        qs = qs.order_by("-id")
 
     if cursor:
         qs = qs.filter(id__lt=cursor)

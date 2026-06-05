@@ -6,6 +6,7 @@ import uuid
 from datetime import timedelta
 from typing import Optional
 
+from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import Count
 from django.utils import timezone
 
@@ -33,12 +34,21 @@ def get_contracts_page(
     limit: int = 20,
     status: Optional[str] = None,
     resource_type: Optional[str] = None,
+    q: Optional[str] = None,
 ) -> dict:
     """
     Returns a cursor-paginated page of contracts for the current tenant.
     Uses replica routing automatically (read replica DB, see db/router.py).
     """
-    qs = ContractRepository.get_queryset().order_by("-id")
+    qs = ContractRepository.get_queryset()
+
+    if q:
+        search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
+        qs = qs.filter(search_vector=search_query).order_by(
+            SearchRank("search_vector", search_query).desc(), "-id"
+        )
+    else:
+        qs = qs.order_by("-id")
 
     if cursor:
         qs = qs.filter(id__lt=cursor)

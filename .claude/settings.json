@@ -144,7 +144,10 @@
       "Bash(docker network *)",
       "Bash(git checkout *)",
       "Bash(python3 -c \"import json,sys; cfg=json.load\\(sys.stdin\\); print\\(json.dumps\\(cfg['services']['frontend'].get\\('volumes', []\\), indent=2\\)\\)\")",
-      "Bash(docker rm *)"
+      "Bash(docker rm *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts', {}\\), indent=2\\)\\)\")",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_run_code_unsafe"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

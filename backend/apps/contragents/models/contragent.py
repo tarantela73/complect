@@ -1,4 +1,5 @@
 # backend/apps/contragents/models/contragent.py
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 
 from apps.common.models.base import BaseEnterpriseModel
@@ -18,6 +19,15 @@ class Contragent(BaseEnterpriseModel):
         choices=ContragentType.choices,
         default=ContragentType.LEGAL_ENTITY,
         db_index=True,
+    )
+
+    search_vector = models.GeneratedField(
+        expression=(
+            SearchVector("name", config="pg_catalog.russian", weight="B")
+            + SearchVector("inn", config="simple", weight="A")
+        ),
+        output_field=SearchVectorField(),
+        db_persist=True,
     )
 
     class Meta:

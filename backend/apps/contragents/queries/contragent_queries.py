@@ -2,6 +2,8 @@
 import uuid
 from typing import Optional
 
+from django.contrib.postgres.search import SearchQuery, SearchRank
+
 from apps.common.security.pii_vault import PiiEncryptionVault
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contragents.models.contragent import Contragent, PersonProfile
@@ -21,8 +23,17 @@ def get_contragents_page(
     limit: int = 20,
     contragent_type: Optional[str] = None,
     inn: Optional[str] = None,
+    q: Optional[str] = None,
 ) -> dict:
-    qs = _contragent_qs().order_by("-id")
+    qs = _contragent_qs()
+
+    if q:
+        search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
+        qs = qs.filter(search_vector=search_query).order_by(
+            SearchRank("search_vector", search_query).desc(), "-id"
+        )
+    else:
+        qs = qs.order_by("-id")
 
     if cursor:
         qs = qs.filter(id__lt=cursor)

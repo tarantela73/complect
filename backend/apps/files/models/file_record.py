@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 
 from apps.common.models.base import BaseEnterpriseModel
@@ -61,6 +62,12 @@ class FileRecord(BaseEnterpriseModel):
     scanned_at = models.DateTimeField(null=True, blank=True)
 
     quarantine_reason = models.CharField(max_length=512, blank=True, default="")
+
+    search_vector = models.GeneratedField(
+        expression=SearchVector("original_name", config="pg_catalog.russian", weight="B"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
 
     class Meta:
         db_table = "files_file_records"

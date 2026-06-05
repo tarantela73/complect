@@ -39,8 +39,9 @@ def list_contragents(
     limit: int = Query(20, ge=1, le=100),  # noqa: B008
     contragent_type: Optional[str] = Query(None),  # noqa: B008
     inn: Optional[str] = Query(None),  # noqa: B008
+    q: Optional[str] = Query(None),  # noqa: B008
 ):
-    result = get_contragents_page(cursor=cursor, limit=limit, contragent_type=contragent_type, inn=inn)
+    result = get_contragents_page(cursor=cursor, limit=limit, contragent_type=contragent_type, inn=inn, q=q)
     return 200, result
 
 

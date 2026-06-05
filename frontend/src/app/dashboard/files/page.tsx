@@ -14,6 +14,7 @@ import {
   type FileRecord,
 } from '@/shared/api/files'
 import { useFileStatusSocket } from '@/shared/api/realtime'
+import { useDebounce } from '@/shared/ui/use-debounce'
 import { Button } from '@/shared/ui/button'
 
 function StatusBadge({ status }: { status: string }) {
@@ -85,7 +86,10 @@ export default function FilesPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [cursors, setCursors] = useState<string[]>([])
   const [uploadError, setUploadError] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const currentCursor = cursors.at(-1)
+
+  const q = useDebounce(searchInput)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -93,6 +97,7 @@ export default function FilesPage() {
     cursor: currentCursor,
     limit: 20,
     status: statusFilter || undefined,
+    q: q || undefined,
   })
 
   const uploadMutation = useUploadFile()
@@ -144,7 +149,14 @@ export default function FilesPage() {
         </p>
       )}
 
-      <div className="mb-4">
+      <div className="mb-4 flex gap-3">
+        <input
+          value={searchInput}
+          onChange={(e) => { setSearchInput(e.target.value); setCursors([]) }}
+          placeholder="Поиск по имени файла..."
+          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setCursors([]) }}
@@ -155,6 +167,16 @@ export default function FilesPage() {
             <option key={s} value={s}>{FILE_STATUS_LABELS[s]}</option>
           ))}
         </select>
+
+        {(searchInput || statusFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setSearchInput(''); setStatusFilter(''); setCursors([]) }}
+          >
+            Сбросить
+          </Button>
+        )}
       </div>
 
       {isError && (
@@ -181,7 +203,7 @@ export default function FilesPage() {
                 {data?.results.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      Файлы не найдены
+                      {q ? `Ничего не найдено по запросу «${q}»` : 'Файлы не найдены'}
                     </td>
                   </tr>
                 ) : (

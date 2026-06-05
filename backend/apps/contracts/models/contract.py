@@ -1,3 +1,4 @@
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 
 from apps.common.models.base import BaseEnterpriseModel
@@ -39,6 +40,15 @@ class Contract(BaseEnterpriseModel):
     )
     total_amount = models.BigIntegerField()
     paid_amount = models.BigIntegerField(default=0)
+
+    search_vector = models.GeneratedField(
+        expression=(
+            SearchVector("contract_number", config="simple", weight="A")
+            + SearchVector("title", config="pg_catalog.russian", weight="B")
+        ),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
 
     class Meta:
         db_table = "contracts_contracts"

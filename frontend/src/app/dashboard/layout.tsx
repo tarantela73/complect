@@ -96,7 +96,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isAuthenticated, router])
 
-  if (!isAuthenticated) return null
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">Загрузка...</div>
+      </div>
+    )
+  }
 
   const handleLogout = async () => {
     await logout().catch(() => null)

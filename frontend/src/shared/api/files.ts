@@ -40,7 +40,7 @@ export const fileKeys = {
   detail: (id: string) => [...fileKeys.details(), id] as const,
 }
 
-export function useFiles(params: { cursor?: string; limit?: number; status?: string }) {
+export function useFiles(params: { cursor?: string; limit?: number; status?: string; q?: string }) {
   return useQuery({
     queryKey: fileKeys.list(params),
     queryFn: async () => {

@@ -32,8 +32,9 @@ def list_files(
     cursor: Optional[uuid.UUID] = Query(None),
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
 ):
-    page = get_files_page(cursor=cursor, limit=limit, status=status)
+    page = get_files_page(cursor=cursor, limit=limit, status=status, q=q)
     return 200, FileListResponse(**page)
 
 

@@ -32,6 +32,7 @@ export function useContragents(params?: {
   limit?: number
   contragent_type?: string
   inn?: string
+  q?: string
 }) {
   return useQuery({
     queryKey: contragentKeys.list(params ?? {}),
