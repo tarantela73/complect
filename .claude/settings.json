@@ -136,7 +136,11 @@
       "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\"}')",
       "Bash(kill %1)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\('components',{}\\).get\\('schemas',{}\\).keys\\(\\)\\)[-5:]\\)\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); schemas=d.get\\('components',{}\\).get\\('schemas',{}\\); print\\([k for k in schemas if 'Event' in k or 'Operational' in k or 'Dashboard' in k]\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); schemas=d.get\\('components',{}\\).get\\('schemas',{}\\); print\\([k for k in schemas if 'Event' in k or 'Operational' in k or 'Dashboard' in k]\\)\")",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(sudo chown -R sever:sever /home/sever/projects/Complect/frontend/node_modules)",
+      "Bash(docker run *)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
