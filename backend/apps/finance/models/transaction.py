@@ -45,6 +45,12 @@ class Transaction(BaseEnterpriseModel):
     # Внешний идентификатор платежа (банк, 1С, SWIFT)
     external_ref = models.CharField(max_length=255, blank=True, default="", db_index=True)
 
+    # Дата валютирования (когда деньги фактически прошли по счёту)
+    value_date = models.DateField(null=True, blank=True, db_index=True)
+
+    # ИНН контрагента — для reconciliation без JOIN в contracts/contragents
+    counterparty_inn = models.CharField(max_length=12, blank=True, default="", db_index=True)
+
     # Пользователь, инициировавший транзакцию
     posted_by = models.UUIDField(null=True, blank=True)
 
@@ -55,6 +61,8 @@ class Transaction(BaseEnterpriseModel):
             models.Index(fields=["tenant_id", "contract_id"], name="idx_tx_tenant_contract"),
             models.Index(fields=["tenant_id", "status"], name="idx_tx_tenant_status"),
             models.Index(fields=["tenant_id", "id"], name="idx_tx_tenant_cursor"),
+            models.Index(fields=["tenant_id", "counterparty_inn"], name="idx_tx_tenant_inn"),
+            models.Index(fields=["tenant_id", "value_date"], name="idx_tx_tenant_vdate"),
         ]
         constraints = [
             models.CheckConstraint(

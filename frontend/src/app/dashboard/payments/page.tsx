@@ -1,0 +1,361 @@
+'use client'
+
+import { useRef, useState } from 'react'
+import {
+  useBankStatements,
+  useBankStatement,
+  useUploadStatement,
+  useConfirmStatement,
+  useCancelStatement,
+  type BankStatement,
+  type BankStatementLine,
+} from '@/shared/api/payments'
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function fmtDate(iso: string | null) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function fmtMoney(val: string | null, currency: string) {
+  if (!val) return '—'
+  const n = parseFloat(val)
+  return `${n.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ${currency}`
+}
+
+function statusLabel(s: BankStatement['status']): { text: string; cls: string } {
+  const map: Record<string, { text: string; cls: string }> = {
+    pending:      { text: 'Загружен',        cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    parsed:       { text: 'Распознан',       cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    parse_failed: { text: 'Ошибка',          cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    importing:    { text: 'Импортируется',   cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    imported:     { text: 'Импортирован',    cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+    cancelled:    { text: 'Отменён',         cls: 'bg-muted text-muted-foreground' },
+  }
+  return map[s] ?? { text: s, cls: 'bg-muted text-muted-foreground' }
+}
+
+function directionBadge(d: string) {
+  if (d === 'credit') return <span className="text-green-600 dark:text-green-400 font-mono">▲</span>
+  if (d === 'debit')  return <span className="text-red-600 dark:text-red-400 font-mono">▼</span>
+  return <span className="text-muted-foreground">—</span>
+}
+
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        {title}
+      </h2>
+      {children}
+    </div>
+  )
+}
+
+// ── Upload zone ───────────────────────────────────────────────────────────────
+
+function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const upload = useUploadStatement()
+  const [err, setErr] = useState('')
+
+  const handleFile = async (file: File) => {
+    setErr('')
+    try {
+      const stmt = await upload.mutateAsync(file)
+      onUploaded(stmt.id)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Ошибка загрузки')
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  return (
+    <Card title="Загрузить выписку">
+      <div
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+        className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-10 text-center cursor-pointer hover:border-primary/50 transition-colors"
+        onClick={() => fileRef.current?.click()}
+      >
+        <svg className="mb-3 h-10 w-10 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p className="text-sm font-medium">
+          {upload.isPending ? 'Загрузка...' : 'Перетащите файл или нажмите для выбора'}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Формат: 1C Client Bank Exchange (КЛ→1С, .txt)</p>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".txt,.1c"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+      />
+      {err && <p className="mt-2 text-xs text-destructive">{err}</p>}
+    </Card>
+  )
+}
+
+// ── Lines table ───────────────────────────────────────────────────────────────
+
+function LinesTable({ stmtId }: { stmtId: string }) {
+  const { data, isLoading } = useBankStatement(stmtId)
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Загрузка строк...</p>
+  if (!data) return null
+
+  const lines = data.lines ?? []
+  const parsed = lines.filter((l) => l.parse_status === 'parsed')
+  const failed  = lines.filter((l) => l.parse_status === 'failed')
+
+  return (
+    <div>
+      {failed.length > 0 && (
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {failed.length} строк не распознано — они пропущены при импорте.
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th className="pb-2 pr-3 font-medium">#</th>
+              <th className="pb-2 pr-3 font-medium">Дата</th>
+              <th className="pb-2 pr-3 font-medium">Сумма</th>
+              <th className="pb-2 pr-3 font-medium"></th>
+              <th className="pb-2 pr-3 font-medium">Контрагент</th>
+              <th className="pb-2 pr-3 font-medium">ИНН</th>
+              <th className="pb-2 pr-3 font-medium">Назначение</th>
+              <th className="pb-2 font-medium">№ doc</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {parsed.map((l: BankStatementLine) => (
+              <tr key={l.id} className="align-top">
+                <td className="py-1.5 pr-3 font-mono text-muted-foreground">{l.line_number + 1}</td>
+                <td className="py-1.5 pr-3 font-mono whitespace-nowrap">{l.transaction_date ?? '—'}</td>
+                <td className="py-1.5 pr-3 font-mono whitespace-nowrap">
+                  {l.amount ? parseFloat(l.amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 }) : '—'}
+                </td>
+                <td className="py-1.5 pr-3">{directionBadge(l.direction)}</td>
+                <td className="py-1.5 pr-3 max-w-[200px] truncate" title={l.counterparty_name}>{l.counterparty_name || '—'}</td>
+                <td className="py-1.5 pr-3 font-mono">{l.counterparty_inn || '—'}</td>
+                <td className="py-1.5 pr-3 max-w-[280px] truncate text-muted-foreground" title={l.description}>{l.description || '—'}</td>
+                <td className="py-1.5 font-mono text-muted-foreground">{l.doc_number || '—'}</td>
+              </tr>
+            ))}
+            {failed.map((l: BankStatementLine) => (
+              <tr key={l.id} className="align-top bg-destructive/5">
+                <td className="py-1.5 pr-3 font-mono text-muted-foreground">{l.line_number + 1}</td>
+                <td className="py-1.5 pr-3 text-destructive" colSpan={7}>
+                  <span className="font-medium">Ошибка: </span>{l.parse_error || 'неизвестная ошибка'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {parsed.length === 0 && failed.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">Нет строк для отображения.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Statement detail panel ────────────────────────────────────────────────────
+
+function StatementPanel({ stmt, onClose }: { stmt: BankStatement; onClose: () => void }) {
+  const confirm = useConfirmStatement()
+  const cancel  = useCancelStatement()
+  const [err, setErr] = useState('')
+
+  const handleConfirm = async () => {
+    setErr('')
+    try {
+      await confirm.mutateAsync(stmt.id)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Ошибка')
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!window.confirm('Отменить импорт выписки?')) return
+    setErr('')
+    try {
+      await cancel.mutateAsync(stmt.id)
+      onClose()
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Ошибка')
+    }
+  }
+
+  const sl = statusLabel(stmt.status)
+  const canConfirm = stmt.status === 'parsed'
+  const canCancel  = stmt.status === 'parsed' || stmt.status === 'parse_failed'
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-medium">{stmt.file_name}</span>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${sl.cls}`}>
+              {sl.text}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {stmt.account_number && <span>Счёт: {stmt.account_number}</span>}
+            {stmt.period_from && stmt.period_to && <span>{stmt.period_from} — {stmt.period_to}</span>}
+            {stmt.opening_balance && <span>Открытие: {fmtMoney(stmt.opening_balance, stmt.currency)}</span>}
+            {stmt.closing_balance && <span>Закрытие: {fmtMoney(stmt.closing_balance, stmt.currency)}</span>}
+            <span>Строк: {stmt.total_lines ?? 0} (распознано {stmt.parsed_lines ?? 0}, ошибок {stmt.failed_lines ?? 0})</span>
+          </div>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
+      </div>
+
+      {stmt.parse_error && (
+        <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {stmt.parse_error}
+        </div>
+      )}
+
+      {(canConfirm || canCancel) && (
+        <div className="mt-4 flex gap-2">
+          {canConfirm && (
+            <button
+              onClick={handleConfirm}
+              disabled={confirm.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {confirm.isPending ? 'Импорт...' : 'Импортировать'}
+            </button>
+          )}
+          {canCancel && (
+            <button
+              onClick={handleCancel}
+              disabled={cancel.isPending}
+              className="rounded-md border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+            >
+              Отменить
+            </button>
+          )}
+        </div>
+      )}
+
+      {err && <p className="mt-2 text-xs text-destructive">{err}</p>}
+
+      {stmt.status !== 'parse_failed' && (
+        <div className="mt-5 border-t border-border pt-4">
+          <LinesTable stmtId={stmt.id} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Statements list ───────────────────────────────────────────────────────────
+
+function StatementsList({ onSelect }: { onSelect: (s: BankStatement) => void }) {
+  const { data, isLoading, error } = useBankStatements()
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Загрузка...</p>
+  if (error)    return <p className="text-sm text-destructive">Ошибка загрузки списка.</p>
+  if (!data?.items?.length) return <p className="text-sm text-muted-foreground">Нет загруженных выписок.</p>
+
+  return (
+    <div className="space-y-2">
+      {data.items.map((stmt: BankStatement) => {
+        const sl = statusLabel(stmt.status)
+        return (
+          <div
+            key={stmt.id}
+            className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 hover:bg-accent/50 transition-colors"
+            onClick={() => onSelect(stmt)}
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm truncate">{stmt.file_name}</span>
+                <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${sl.cls}`}>
+                  {sl.text}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                {stmt.period_from && <span>{stmt.period_from} — {stmt.period_to}</span>}
+                {stmt.account_number && <span>{stmt.account_number}</span>}
+                <span>{fmtDate(stmt.created_at)}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right text-xs text-muted-foreground">
+              <div>{stmt.parsed_lines ?? 0} / {stmt.total_lines ?? 0}</div>
+              <div>строк</div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function PaymentsPage() {
+  const [selected, setSelected] = useState<BankStatement | null>(null)
+  const { data, refetch } = useBankStatements()
+
+  const handleUploaded = (id: string) => {
+    refetch().then(() => {
+      const stmt = data?.items?.find((s) => s.id === id)
+      if (stmt) setSelected(stmt)
+    })
+    refetch()
+  }
+
+  const handleSelect = (stmt: BankStatement) => setSelected(stmt)
+
+  // Sync selected with latest data after mutations
+  const latestSelected = selected
+    ? (data?.items?.find((s) => s.id === selected.id) ?? selected)
+    : null
+
+  return (
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold">Выписки</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Импорт банковских выписок в формате КЛ→1С
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <UploadCard onUploaded={handleUploaded} />
+
+        {latestSelected && (
+          <StatementPanel
+            stmt={latestSelected}
+            onClose={() => setSelected(null)}
+          />
+        )}
+
+        <Card title="История загрузок">
+          <StatementsList onSelect={handleSelect} />
+        </Card>
+      </div>
+    </div>
+  )
+}
