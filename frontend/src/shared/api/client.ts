@@ -18,6 +18,16 @@ export function configureAuthInterceptors(
   _onUnauthorized = onUnauthorized
 }
 
+const idempotencyMiddleware: Middleware = {
+  async onRequest({ request }) {
+    const method = request.method.toUpperCase()
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      request.headers.set('Idempotency-Key', crypto.randomUUID())
+    }
+    return request
+  },
+}
+
 const authMiddleware: Middleware = {
   async onRequest({ request }) {
     const token = _getAccessToken?.()
@@ -41,3 +51,4 @@ const authMiddleware: Middleware = {
 }
 
 apiClient.use(authMiddleware)
+apiClient.use(idempotencyMiddleware)

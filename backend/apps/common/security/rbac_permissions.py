@@ -64,6 +64,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("notifications", "read"),
     # ops (platform runtime observability — platform admin only)
     Permission("ops", "read"),
+    # webhooks (integration endpoints)
+    Permission("webhooks", "read"),
+    Permission("webhooks", "write"),
+    # payments (bank statement import)
+    Permission("payments", "read"),
+    Permission("payments", "write"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

@@ -1,7 +1,9 @@
 import uuid
 from typing import Optional
 
+from django.db.models import Avg, Count, Q
 from django.http import HttpRequest
+from django.utils import timezone as tz
 from ninja import Query, Router, Schema
 
 from apps.common.api.errors import make_error_response
@@ -92,6 +94,16 @@ class DeliveryListOut(Schema):
     next_cursor: Optional[uuid.UUID] = None
 
 
+class WebhookStatsOut(Schema):
+    active_subscriptions: int
+    deliveries_24h: int
+    success_rate: float
+    failed_count: int
+    dead_count: int
+    avg_duration_ms: Optional[float] = None
+    collected_at: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -160,6 +172,46 @@ def create_webhook(request: HttpRequest, body: WebhookSubscriptionCreate):
     return 201, WebhookSubscriptionOut.from_model(sub)
 
 
+@router.get("/stats/", response={200: WebhookStatsOut, 403: dict})
+@require_permission("read", "webhooks")
+def get_webhook_stats(request: HttpRequest):
+    import datetime
+
+    from apps.integration.models import WebhookDelivery, WebhookDeliveryStatus, WebhookSubscription
+
+    tenant_id = _get_tenant_id(request)
+    since = tz.now() - datetime.timedelta(hours=24)
+
+    active_subscriptions = WebhookSubscription.objects.filter(
+        tenant_id=tenant_id,
+        is_active=True,
+        is_deleted=False,
+    ).count()
+
+    deliveries_qs = WebhookDelivery.objects.filter(tenant_id=tenant_id, created_at__gte=since)
+    agg = deliveries_qs.aggregate(
+        total=Count("id"),
+        delivered=Count("id", filter=Q(status=WebhookDeliveryStatus.DELIVERED)),
+        failed=Count("id", filter=Q(status=WebhookDeliveryStatus.FAILED)),
+        dead=Count("id", filter=Q(status=WebhookDeliveryStatus.DEAD)),
+        avg_ms=Avg("duration_ms", filter=Q(status=WebhookDeliveryStatus.DELIVERED)),
+    )
+
+    total = agg["total"] or 0
+    delivered = agg["delivered"] or 0
+    success_rate = round(delivered / total * 100, 1) if total > 0 else 0.0
+
+    return 200, WebhookStatsOut(
+        active_subscriptions=active_subscriptions,
+        deliveries_24h=total,
+        success_rate=success_rate,
+        failed_count=agg["failed"] or 0,
+        dead_count=agg["dead"] or 0,
+        avg_duration_ms=round(agg["avg_ms"], 1) if agg["avg_ms"] is not None else None,
+        collected_at=tz.now().isoformat(),
+    )
+
+
 @router.get("/{sub_id}/", response={200: WebhookSubscriptionOut, 403: dict, 404: dict})
 @require_permission("read", "webhooks")
 def get_webhook(request: HttpRequest, sub_id: uuid.UUID):
@@ -224,6 +276,55 @@ def delete_webhook(request: HttpRequest, sub_id: uuid.UUID):
 
     WebhookSubscription.objects.filter(id=sub_id).update(is_active=False, is_deleted=True)
     return 204, None
+
+
+@router.post(
+    "/{sub_id}/deliveries/{delivery_id}/replay/",
+    response={201: WebhookDeliveryOut, 403: dict, 404: dict, 422: dict},
+)
+@require_permission("write", "webhooks")
+def replay_delivery(request: HttpRequest, sub_id: uuid.UUID, delivery_id: uuid.UUID):
+    from django.db import transaction
+
+    from apps.integration.models import WebhookDelivery, WebhookDeliveryStatus, WebhookSubscription
+    from apps.integration.tasks.webhook_consumer import deliver_webhook_task
+
+    tenant_id = _get_tenant_id(request)
+
+    if not WebhookSubscription.objects.filter(id=sub_id, tenant_id=tenant_id, is_deleted=False).exists():
+        return 404, make_error_response("WEBHOOK_NOT_FOUND", "Подписка не найдена.")
+
+    try:
+        dead = WebhookDelivery.objects.get(id=delivery_id, subscription_id=sub_id, tenant_id=tenant_id)
+    except WebhookDelivery.DoesNotExist:
+        return 404, make_error_response("DELIVERY_NOT_FOUND", "Доставка не найдена.")
+
+    if dead.status != WebhookDeliveryStatus.DEAD:
+        return 422, make_error_response(
+            "DELIVERY_NOT_DEAD",
+            f"Повторная отправка разрешена только для DEAD доставок. Текущий статус: {dead.status}.",
+        )
+
+    with transaction.atomic():
+        new_delivery = WebhookDelivery.objects.create(
+            tenant_id=tenant_id,
+            subscription_id=sub_id,
+            outbox_record_id=dead.outbox_record_id,
+            event_type=dead.event_type,
+            event_id=dead.event_id,
+            status=WebhookDeliveryStatus.PENDING,
+            payload_sha256=dead.payload_sha256,
+            attempt=1,
+        )
+        _did = new_delivery.id
+        transaction.on_commit(
+            lambda: deliver_webhook_task.apply_async(
+                kwargs={"delivery_id": str(_did)},
+                queue="integration",
+            )
+        )
+
+    return 201, WebhookDeliveryOut.from_model(new_delivery)
 
 
 @router.get("/{sub_id}/deliveries/", response={200: DeliveryListOut, 403: dict, 404: dict})

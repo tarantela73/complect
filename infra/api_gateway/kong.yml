@@ -24,7 +24,7 @@ services:
             - Accept
             - Authorization
             - Content-Type
-            - X-Idempotency-Key
+            - Idempotency-Key
           credentials: true
           preflight_continue: false
           max_age: 3600

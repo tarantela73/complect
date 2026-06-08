@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "generate:api": "openapi-typescript http://localhost:8000/api/v1/openapi.json -o src/shared/api/generated/schema.d.ts",
+    "generate:api": "openapi-typescript http://complect_backend_dev:8010/api/v1/openapi.json -o src/shared/api/generated/schema.d.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "cd e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test",

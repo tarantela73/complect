@@ -103,6 +103,15 @@ build-frontend:
 tsc:
 	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit"
 
+generate-sdk:
+	docker compose -f docker-compose.dev.yml exec backend python -c "\
+import os, json; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local');\
+import django; django.setup();\
+from config.urls import api; print(json.dumps(api.get_openapi_schema()))" \
+	> /tmp/openapi.json
+	docker cp /tmp/openapi.json complect_frontend_dev:/tmp/openapi.json
+	$(COMPOSE) exec frontend npx openapi-typescript /tmp/openapi.json -o src/shared/api/generated/schema.d.ts
+
 test-e2e:
 	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm install --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
 

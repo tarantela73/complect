@@ -20,9 +20,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/contragents', label: 'Контрагенты', permission: 'contragents.read' },
   { href: '/dashboard/contracts', label: 'Договоры', permission: 'contracts.read' },
   { href: '/dashboard/finance', label: 'Финансы', permission: 'finance.read' },
+  { href: '/dashboard/payments', label: 'Выписки', permission: 'payments.read' },
   { href: '/dashboard/files', label: 'Файлы', permission: 'files.read' },
   { href: '/dashboard/objects', label: 'Объекты', permission: 'objects.read' },
   { href: '/dashboard/notifications', label: 'Уведомления', permission: 'notifications.read' },
+  { href: '/dashboard/integrations', label: 'Интеграции', permission: 'webhooks.read' },
   { href: '/dashboard/ops', label: 'Ops Console', permission: 'ops.read' },
 ]
 
