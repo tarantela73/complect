@@ -63,6 +63,10 @@ class Transaction(BaseEnterpriseModel):
             models.Index(fields=["tenant_id", "id"], name="idx_tx_tenant_cursor"),
             models.Index(fields=["tenant_id", "counterparty_inn"], name="idx_tx_tenant_inn"),
             models.Index(fields=["tenant_id", "value_date"], name="idx_tx_tenant_vdate"),
+            models.Index(
+                fields=["tenant_id", "contract_id", "status", "is_deleted", "-id"],
+                name="idx_tx_360_payments",
+            ),
         ]
         constraints = [
             models.CheckConstraint(

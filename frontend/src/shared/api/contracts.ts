@@ -3,6 +3,8 @@ import { apiClient } from './client'
 import type { components } from './generated/schema'
 
 export type Contract = components['schemas']['ContractResponseSchema']
+export type ContractDetail = components['schemas']['ContractDetailSchema']
+export type LastPayment = components['schemas']['LastPaymentSchema']
 export type ContractList = components['schemas']['ContractListResponse']
 export type ContractCreateRequest = components['schemas']['ContractCreateRequestSchema']
 export type ContractUpdateRequest = components['schemas']['ContractUpdateSchema']
@@ -68,7 +70,7 @@ export function useContract(id: string) {
       })
       if (response.status === 404) throw new Error('NOT_FOUND')
       if (error) throw new Error('Ошибка загрузки договора')
-      return data as Contract
+      return data as ContractDetail
     },
     enabled: !!id,
   })
@@ -103,8 +105,8 @@ export function useUpdateContract(id: string) {
       if (error) throw new Error('Ошибка обновления')
       return data as Contract
     },
-    onSuccess: (updated) => {
-      qc.setQueryData(contractKeys.detail(id), updated)
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: contractKeys.detail(id) })
       qc.invalidateQueries({ queryKey: contractKeys.lists() })
     },
   })
@@ -122,8 +124,8 @@ export function useActivateContract() {
       if (error) throw new Error('Ошибка активации')
       return data as Contract
     },
-    onSuccess: (updated, id) => {
-      qc.setQueryData(contractKeys.detail(id), updated)
+    onSuccess: (_updated, id) => {
+      qc.invalidateQueries({ queryKey: contractKeys.detail(id) })
       qc.invalidateQueries({ queryKey: contractKeys.lists() })
     },
   })
@@ -155,8 +157,8 @@ export function useCloseContract() {
       if (error) throw new Error('Ошибка закрытия')
       return data as Contract
     },
-    onSuccess: (updated, id) => {
-      qc.setQueryData(contractKeys.detail(id), updated)
+    onSuccess: (_updated, id) => {
+      qc.invalidateQueries({ queryKey: contractKeys.detail(id) })
       qc.invalidateQueries({ queryKey: contractKeys.lists() })
     },
   })

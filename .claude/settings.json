@@ -217,7 +217,16 @@
       "Bash(make generate-sdk *)",
       "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin1234!\",\"device_fingerprint\":\"\"}' -c /tmp/test_cookies.txt -w '\\\\nHTTP_STATUS: %{http_code}')",
       "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@test.com\",\"password\":\"Admin1234!\"}')",
-      "mcp__postgres__query"
+      "mcp__postgres__query",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/token/ -H 'Content-Type: application/json' -d '{\"email\":\"admin@complect.local\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/)",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@complect.local\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin@complect.local\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"testadmin\",\"password\":\"Admin123!\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('access_token' in d, d.get\\('token_type',''\\)\\)\")",
+      "Bash(git diff *)",
+      "Bash(python3 -c \"from ninja.testing import TestClient; print\\('ok'\\)\")",
+      "Bash(grep -v \"^--$\")"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

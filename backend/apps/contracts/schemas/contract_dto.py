@@ -10,6 +10,7 @@ class ContractCreateRequestSchema(BaseModel):
     title: str = Field(..., max_length=255)
     resource_type: str = Field(..., description="ELECTRICITY, GAS, WATER, HEAT, OTHER")
     total_amount: int = Field(..., description="Общая сумма договора в копейках", gt=0)
+    contragent_id: Optional[uuid.UUID] = None
 
 
 class ContractUpdateSchema(BaseModel):
@@ -27,6 +28,7 @@ class ContractResponseSchema(BaseModel):
     paid_amount: int
     remaining_amount: int = 0
     created_at: Optional[datetime] = None
+    contragent_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -52,6 +54,7 @@ class ContractDetailSchema(ContractResponseSchema):
     attachments_count: int = 0
     files_available: int = 0
     files_quarantined: int = 0
+    files_unresolvable: int = Field(0, ge=0)
 
 
 class ContractListResponse(BaseModel):

@@ -10,6 +10,7 @@ import {
   useCloseContract,
   CONTRACT_STATUS_LABELS,
   RESOURCE_TYPE_LABELS,
+  type LastPayment,
 } from '@/shared/api/contracts'
 import {
   useContractAttachments,
@@ -79,10 +80,14 @@ function AttachmentsSection({
   contractId,
   contractStatus,
   canWrite,
+  filesAvailable = 0,
+  filesQuarantined = 0,
 }: {
   contractId: string
   contractStatus: string
   canWrite: boolean
+  filesAvailable?: number
+  filesQuarantined?: number
 }) {
   const [showPicker, setShowPicker] = useState(false)
   const [attachError, setAttachError] = useState('')
@@ -114,7 +119,15 @@ function AttachmentsSection({
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Вложения</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold">Вложения</h2>
+          {filesAvailable > 0 && (
+            <span className="text-xs text-muted-foreground">{filesAvailable} доступно</span>
+          )}
+          {filesQuarantined > 0 && (
+            <span className="text-xs text-destructive">{filesQuarantined} на карантине</span>
+          )}
+        </div>
         {canWrite && isMutable && (
           <Button
             variant="outline"
@@ -215,6 +228,49 @@ function AttachmentsSection({
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+function LastPaymentsSection({ payments, contractId }: { payments: LastPayment[]; contractId: string }) {
+  if (payments.length === 0) {
+    return (
+      <div className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold">Последние платежи</h2>
+        <p className="text-xs text-muted-foreground">Проведённых платежей нет</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-6">
+      <h2 className="mb-3 text-sm font-semibold">Последние платежи</h2>
+      <div className="rounded-md border border-border overflow-hidden">
+        <table className="w-full">
+          <tbody>
+            {payments.map((p) => (
+              <tr key={p.transaction_id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                <td className="px-3 py-2 text-xs text-muted-foreground font-mono">
+                  {p.value_date
+                    ? new Date(p.value_date).toLocaleDateString('ru-RU')
+                    : '—'}
+                </td>
+                <td className="px-3 py-2 text-sm text-right font-medium tabular-nums">
+                  +{formatAmount(p.amount)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 text-right">
+        <Link
+          href={`/dashboard/finance?contract_id=${contractId}`}
+          className="text-xs text-primary hover:underline"
+        >
+          Все платежи →
+        </Link>
+      </div>
     </div>
   )
 }
@@ -329,7 +385,14 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         <Row label="ID" value={data.id} mono />
       </dl>
 
-      <AttachmentsSection contractId={id} contractStatus={data.status} canWrite={canWrite} />
+      <LastPaymentsSection payments={data.last_payments ?? []} contractId={id} />
+      <AttachmentsSection
+        contractId={id}
+        contractStatus={data.status}
+        canWrite={canWrite}
+        filesAvailable={data.files_available ?? 0}
+        filesQuarantined={data.files_quarantined ?? 0}
+      />
       <EventTimeline contractId={id} />
     </div>
   )

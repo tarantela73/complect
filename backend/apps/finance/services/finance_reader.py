@@ -34,6 +34,4 @@ class FinanceReaderService:
         ]
 
 
-# Singleton — injected in contracts/api.py
-_: FinanceReaderProtocol = FinanceReaderService()  # type: ignore[assignment]
-default_finance_reader = FinanceReaderService()
+default_finance_reader: FinanceReaderProtocol = FinanceReaderService()

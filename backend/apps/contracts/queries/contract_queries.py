@@ -30,6 +30,7 @@ def _to_dto(contract: Contract) -> ContractResponseSchema:
         paid_amount=contract.paid_amount,
         remaining_amount=contract.total_amount - contract.paid_amount,
         created_at=contract.created_at,
+        contragent_id=contract.contragent_id,
     )
 
 
@@ -92,14 +93,14 @@ def get_contract_detail_360(
     360° contract view: base fields + last payments + attachment counts.
     Cross-domain reads go through Protocols (ADR-0005).
     """
-    contract = ContractRepository.get_by_id(contract_id)
     tenant_id = get_tenant_id()
+    contract = ContractRepository.get_by_id(contract_id)
 
     last_payments = finance_reader.get_last_posted_payments(tenant_id, contract_id, limit=5)
 
     file_ids = AttachmentRepository.list_file_ids(contract_id)
-    file_metas = [file_service.get_file_meta(fid, tenant_id) for fid in file_ids]
-    valid_metas = [m for m in file_metas if m is not None]
+    file_metas_by_id = file_service.get_file_metas_batch(file_ids, tenant_id)
+    valid_metas = list(file_metas_by_id.values())
 
     return ContractDetailSchema(
         id=contract.id,
@@ -122,6 +123,7 @@ def get_contract_detail_360(
         attachments_count=len(file_ids),
         files_available=sum(1 for m in valid_metas if m.status == "AVAILABLE"),
         files_quarantined=sum(1 for m in valid_metas if m.status == "QUARANTINED"),
+        files_unresolvable=len(file_ids) - len(valid_metas),
     )
 
 

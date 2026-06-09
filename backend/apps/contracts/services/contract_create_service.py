@@ -36,6 +36,7 @@ class ContractCreateService:
                 total_amount=request.total_amount,
                 paid_amount=0,
                 status=ContractStatus.DRAFT,
+                contragent_id=request.contragent_id,
             )
             ContractRepository.create(contract)
 

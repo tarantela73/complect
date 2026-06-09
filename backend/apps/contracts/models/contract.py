@@ -41,6 +41,10 @@ class Contract(BaseEnterpriseModel):
     total_amount = models.BigIntegerField()
     paid_amount = models.BigIntegerField(default=0)
 
+    # [ADR-0022] UUID reference без ORM FK — cross-domain link к contragents-домену.
+    # Nullable: исторические договоры заполняются через Celery-backfill (Release N+1).
+    contragent_id = models.UUIDField(null=True, blank=True)
+
     search_vector = models.GeneratedField(
         expression=(
             SearchVector("contract_number", config="simple", weight="A")
@@ -52,6 +56,12 @@ class Contract(BaseEnterpriseModel):
 
     class Meta:
         db_table = "contracts_contracts"
+        indexes = [
+            models.Index(
+                fields=["tenant_id", "contragent_id", "status", "is_deleted", "-id"],
+                name="idx_contract_tenant_contragent",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant_id", "resource_type", "contract_number"],

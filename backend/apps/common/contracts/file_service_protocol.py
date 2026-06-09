@@ -32,3 +32,14 @@ class FileServiceProtocol(Protocol):
         Включает presigned download_url (TTL 3600s) только для AVAILABLE файлов.
         """
         ...
+
+    def get_file_metas_batch(
+        self,
+        file_ids: list[uuid.UUID],
+        tenant_id: uuid.UUID,
+    ) -> dict[uuid.UUID, FileMetaDTO]:
+        """
+        Batch-вариант get_file_meta: один SELECT для всех file_ids, один storage backend.
+        Отсутствующие / чужие / удалённые файлы отсутствуют в возвращаемом словаре.
+        """
+        ...
