@@ -49,6 +49,9 @@ migrate:
 makemigrations:
 	$(COMPOSE) exec backend python manage.py makemigrations
 
+seed-finance-dev:
+	$(COMPOSE) exec backend python manage.py seed_finance_dev
+
 shell:
 	$(COMPOSE) exec backend python manage.py shell
 
