@@ -12,16 +12,15 @@ from __future__ import annotations
 import uuid
 from datetime import date
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from apps.common.tenancy.context import set_tenant_context
 from apps.common.contracts.finance_contracts import TxCandidateDTO
+from apps.common.tenancy.context import set_tenant_context
 from apps.payments.models.bank_statement import BankStatement, BankStatementStatus
 from apps.payments.models.bank_statement_line import BankStatementLine, MatchStatus
 from apps.payments.services.matching_service import MatchingService
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

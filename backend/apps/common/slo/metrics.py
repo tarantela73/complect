@@ -83,6 +83,30 @@ def collect_ws_connections() -> int:
         return 0
 
 
+def collect_reconciliation_stats() -> dict[str, int]:
+    try:
+        from apps.payments.models import (  # noqa: PLC0415
+            BankStatement,
+            BankStatementLine,
+            BankStatementStatus,
+            MatchStatus,
+        )
+        importing = BankStatement.objects.filter(status=BankStatementStatus.IMPORTING).count()
+        base = BankStatementLine.objects.filter(
+            is_deleted=False,
+            statement__status=BankStatementStatus.IMPORTED,
+        )
+        return {
+            "statements_importing": importing,
+            "unmatched_lines": base.filter(match_status=MatchStatus.UNMATCHED).count(),
+            "ambiguous_lines": base.filter(match_status=MatchStatus.AMBIGUOUS).count(),
+            "partial_lines":   base.filter(match_status=MatchStatus.PARTIAL).count(),
+        }
+    except Exception:
+        logger.warning("ops_reconciliation_stats_unavailable")
+        return {"statements_importing": -1, "unmatched_lines": -1, "ambiguous_lines": -1, "partial_lines": -1}
+
+
 def collect_snapshot() -> dict:
     """Full snapshot dict for SLO evaluation."""
     outbox = collect_outbox()

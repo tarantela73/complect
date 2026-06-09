@@ -16,6 +16,7 @@ from apps.common.slo.metrics import (
     collect_circuit_breakers,
     collect_dlq_count,
     collect_outbox,
+    collect_reconciliation_stats,
     collect_ws_connections,
 )
 from apps.common.slo.state_tracker import get_error_budget, get_slo_display_state
@@ -37,6 +38,13 @@ class SLOMetricStatus(Schema):
     error_budget: float
 
 
+class ReconciliationStats(Schema):
+    statements_importing: int
+    unmatched_lines: int
+    ambiguous_lines: int
+    partial_lines: int
+
+
 class OpsSnapshot(Schema):
     outbox: OutboxStats
     celery: dict[str, int]
@@ -44,6 +52,7 @@ class OpsSnapshot(Schema):
     dlq: int
     ws_connections: int
     slo: list[SLOMetricStatus]
+    reconciliation: ReconciliationStats
     collected_at: str
 
 
@@ -63,6 +72,7 @@ def _slo_statuses() -> list[SLOMetricStatus]:
 @require_permission("read", "ops")
 def get_ops_snapshot(request: HttpRequest):
     outbox = collect_outbox()
+    rec = collect_reconciliation_stats()
     return 200, OpsSnapshot(
         outbox=OutboxStats(
             pending=outbox["pending"],
@@ -74,5 +84,6 @@ def get_ops_snapshot(request: HttpRequest):
         dlq=collect_dlq_count(),
         ws_connections=collect_ws_connections(),
         slo=_slo_statuses(),
+        reconciliation=ReconciliationStats(**rec),
         collected_at=tz.now().isoformat(),
     )

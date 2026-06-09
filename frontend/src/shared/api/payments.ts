@@ -6,9 +6,11 @@ import type { components } from './generated/schema'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type BankStatementLine = components['schemas']['BankStatementLineOut']
-export type BankStatement     = components['schemas']['BankStatementOut']
+export type BankStatementLine  = components['schemas']['BankStatementLineOut']
+export type BankStatement      = components['schemas']['BankStatementOut']
 export type BankStatementDetail = components['schemas']['BankStatementDetailOut']
+export type ReviewLine         = components['schemas']['ReviewLineOut']
+export type ReviewQueue        = components['schemas']['ReviewQueueOut']
 
 export type TxCandidate = {
   transaction_id: string
@@ -25,6 +27,7 @@ export const paymentKeys = {
   all: ['payments'] as const,
   statements: () => [...paymentKeys.all, 'statements'] as const,
   statement: (id: string) => [...paymentKeys.all, 'statement', id] as const,
+  review: (status?: string) => [...paymentKeys.all, 'review', status] as const,
 }
 
 // ── Error helper ──────────────────────────────────────────────────────────────
@@ -45,6 +48,10 @@ export function useBankStatements(status?: string) {
       if (error) throw new Error(apiMsg(error, 'Ошибка загрузки выписок'))
       return data
     },
+    refetchInterval: (query) => {
+      const items = (query.state.data as { items?: Array<{ status: string }> } | undefined)?.items
+      return items?.some((s) => s.status === 'importing') ? 3000 : false
+    },
   })
 }
 
@@ -59,6 +66,24 @@ export function useBankStatement(id: string) {
       return data
     },
     enabled: !!id,
+    refetchInterval: (query) => {
+      const data = query.state.data as { status?: string } | undefined
+      return data?.status === 'importing' ? 3000 : false
+    },
+  })
+}
+
+export function useReviewQueue(matchStatus?: string) {
+  return useQuery({
+    queryKey: paymentKeys.review(matchStatus),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET('/api/v1/payments/review/', {
+        params: { query: matchStatus ? { match_status: matchStatus } : undefined },
+      })
+      if (error) throw new Error(apiMsg(error, 'Ошибка загрузки очереди сверки'))
+      return data as ReviewQueue
+    },
+    staleTime: 10_000,
   })
 }
 

@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 
 from django.db import transaction
 
+from apps.common.context.core import get_correlation_id
+from apps.common.services.outbox_service import TransactionalOutboxService
+from apps.payments.events import ReconciliationStartedEvent
 from apps.payments.models import BankStatement, BankStatementLine, BankStatementStatus
 from apps.payments.parsers.kl_to_1c import KlTo1CParser
 
@@ -106,20 +109,38 @@ class BankStatementService:
         if stmt.status != BankStatementStatus.PARSED:
             raise ValueError(f"Импорт возможен только из статуса 'parsed'. Текущий: {stmt.status}.")
 
+        correlation_id = _safe_correlation_id()
+
         with transaction.atomic():
-            BankStatement.objects.filter(id=stmt.id).update(
-                status=BankStatementStatus.IMPORTED,
+            BankStatement.objects.filter(id=stmt.id, tenant_id=stmt.tenant_id).update(
+                status=BankStatementStatus.IMPORTING,
                 imported_by=confirmed_by,
                 imported_at=datetime.now(timezone.utc),
             )
             stmt.refresh_from_db()
 
-            # Запускаем reconciliation синхронно внутри той же транзакции.
-            # При росте объёмов перенести в Celery-таску (outbox pattern).
-            from apps.finance.services.transaction_finder import get_transaction_finder  # noqa: PLC0415
-            from apps.payments.services.matching_service import MatchingService  # noqa: PLC0415
+            TransactionalOutboxService.push_to_outbox(
+                ReconciliationStartedEvent.create(
+                    correlation_id=correlation_id,
+                    tenant_id=stmt.tenant_id,
+                    statement_id=stmt.id,
+                    confirmed_by=confirmed_by,
+                )
+            )
 
-            MatchingService(get_transaction_finder()).match_statement(stmt)
+            def _dispatch() -> None:
+                from apps.payments.tasks import reconcile_statement_task  # noqa: PLC0415
+
+                reconcile_statement_task.apply_async(
+                    kwargs={
+                        "stmt_id": str(stmt.id),
+                        "tenant_id": str(stmt.tenant_id),
+                        "confirmed_by": str(confirmed_by),
+                        "correlation_id": str(correlation_id),
+                    },
+                )
+
+            transaction.on_commit(_dispatch)
 
         return stmt
 
@@ -135,6 +156,13 @@ class BankStatementService:
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 _ENCODINGS = ("windows-1251", "utf-8", "cp866")
+
+
+def _safe_correlation_id() -> uuid.UUID:
+    try:
+        return get_correlation_id()
+    except Exception:  # noqa: BLE001
+        return uuid.uuid4()
 
 
 def _decode_file(content: bytes) -> str:

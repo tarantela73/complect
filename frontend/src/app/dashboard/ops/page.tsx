@@ -134,6 +134,40 @@ function SLOCard({ slo }: { slo: SLOMetricStatus[] }) {
   )
 }
 
+function ReconciliationCard({ data }: { data: OpsSnapshot }) {
+  const { statements_importing, unmatched_lines, ambiguous_lines, partial_lines } = data.reconciliation
+  return (
+    <Card title="Сверка">
+      <dl className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">В обработке</dt>
+          <dd className={`font-mono font-medium ${statusColor(statements_importing, 1, 3)}`}>
+            {statements_importing < 0 ? 'n/a' : statements_importing}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">UNMATCHED</dt>
+          <dd className={`font-mono font-medium ${statusColor(unmatched_lines, 10, 100)}`}>
+            {unmatched_lines < 0 ? 'n/a' : unmatched_lines}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">AMBIGUOUS</dt>
+          <dd className={`font-mono font-medium ${statusColor(ambiguous_lines, 5, 50)}`}>
+            {ambiguous_lines < 0 ? 'n/a' : ambiguous_lines}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">PARTIAL</dt>
+          <dd className={`font-mono font-medium ${statusColor(partial_lines, 10, 50)}`}>
+            {partial_lines < 0 ? 'n/a' : partial_lines}
+          </dd>
+        </div>
+      </dl>
+    </Card>
+  )
+}
+
 function InfraCard({ data }: { data: OpsSnapshot }) {
   return (
     <Card title="Infrastructure">
@@ -176,10 +210,11 @@ export default function OpsPage() {
       )}
 
       {data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <OutboxCard data={data} />
           <CeleryCard data={data} />
           <CircuitBreakersCard data={data} />
+          <ReconciliationCard data={data} />
           <InfraCard data={data} />
           <SLOCard slo={data.slo} />
         </div>

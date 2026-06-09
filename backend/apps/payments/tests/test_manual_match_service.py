@@ -15,14 +15,13 @@ from unittest.mock import MagicMock
 import pytest
 from django.core.exceptions import PermissionDenied
 
+from apps.common.contracts.finance_contracts import TxCandidateDTO
 from apps.common.models.outbox import OutboxRecord
 from apps.common.tenancy.context import set_tenant_context
-from apps.common.contracts.finance_contracts import TxCandidateDTO
 from apps.payments.events import BankStatementLineMatchedEvent
 from apps.payments.models.bank_statement import BankStatement, BankStatementStatus
 from apps.payments.models.bank_statement_line import BankStatementLine, MatchStatus
 from apps.payments.services.manual_match_service import ManualMatchService
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

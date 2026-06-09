@@ -46,6 +46,7 @@ class BankStatement(BaseEnterpriseModel):
     total_lines = models.IntegerField(null=True, blank=True)
     parsed_lines = models.IntegerField(null=True, blank=True)
     failed_lines = models.IntegerField(null=True, blank=True)
+    matched_lines = models.IntegerField(null=True, blank=True)
 
     imported_by = models.UUIDField(null=True, blank=True)
     imported_at = models.DateTimeField(null=True, blank=True)

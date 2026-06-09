@@ -9,7 +9,7 @@ from ninja.files import UploadedFile
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.common.contracts.finance_contracts import TxCandidateDTO
-from apps.payments.models import BankStatement, BankStatementLine
+from apps.payments.models import BankStatement, BankStatementLine, BankStatementStatus, MatchStatus
 from apps.payments.services.bank_statement_service import BankStatementService
 from apps.payments.services.manual_match_service import ManualMatchService
 
@@ -81,6 +81,7 @@ class BankStatementOut(Schema):
     total_lines: Optional[int] = None
     parsed_lines: Optional[int] = None
     failed_lines: Optional[int] = None
+    matched_lines: Optional[int] = None
     imported_at: Optional[str] = None
     created_at: str
 
@@ -101,6 +102,7 @@ class BankStatementOut(Schema):
             total_lines=obj.total_lines,
             parsed_lines=obj.parsed_lines,
             failed_lines=obj.failed_lines,
+            matched_lines=obj.matched_lines,
             imported_at=obj.imported_at.isoformat() if obj.imported_at else None,
             created_at=obj.created_at.isoformat(),
         )
@@ -119,6 +121,59 @@ class BankStatementDetailOut(BankStatementOut):
 class BankStatementListOut(Schema):
     items: list[BankStatementOut]
     next_cursor: Optional[uuid.UUID] = None
+
+
+class ReviewLineOut(Schema):
+    id: uuid.UUID
+    statement_id: uuid.UUID
+    statement_file_name: str
+    statement_period_from: Optional[str] = None
+    statement_period_to: Optional[str] = None
+    statement_account_number: str
+    line_number: int
+    transaction_date: Optional[str] = None
+    amount: Optional[str] = None
+    direction: str
+    currency: str
+    description: str
+    counterparty_name: str
+    counterparty_inn: str
+    match_status: str
+    match_confidence: int
+    transaction_id: Optional[uuid.UUID] = None
+    created_at: str
+
+    @staticmethod
+    def from_model(obj: BankStatementLine) -> "ReviewLineOut":
+        stmt = obj.statement
+        return ReviewLineOut(
+            id=obj.id,
+            statement_id=stmt.id,
+            statement_file_name=stmt.file_name,
+            statement_period_from=stmt.period_from.isoformat() if stmt.period_from else None,
+            statement_period_to=stmt.period_to.isoformat() if stmt.period_to else None,
+            statement_account_number=stmt.account_number,
+            line_number=obj.line_number,
+            transaction_date=obj.transaction_date.isoformat() if obj.transaction_date else None,
+            amount=str(obj.amount) if obj.amount is not None else None,
+            direction=obj.direction,
+            currency=obj.currency,
+            description=obj.description,
+            counterparty_name=obj.counterparty_name,
+            counterparty_inn=obj.counterparty_inn,
+            match_status=obj.match_status,
+            match_confidence=obj.match_confidence,
+            transaction_id=obj.transaction_id,
+            created_at=obj.created_at.isoformat(),
+        )
+
+
+class ReviewQueueOut(Schema):
+    items: list[ReviewLineOut]
+    total_count: int
+    unmatched_count: int
+    ambiguous_count: int
+    partial_count: int
 
 
 class ManualMatchIn(Schema):
@@ -263,6 +318,49 @@ def cancel_statement(request: HttpRequest, stmt_id: uuid.UUID):
         return 422, make_error_response("INVALID_STATE", str(exc))
 
     return 200, BankStatementOut.from_model(stmt)
+
+
+_REVIEW_STATUSES = [MatchStatus.UNMATCHED, MatchStatus.AMBIGUOUS, MatchStatus.PARTIAL]
+
+
+@router.get(
+    "/review/",
+    response={200: ReviewQueueOut, 403: dict},
+    summary="Очередь сверки — строки требующие ручной обработки",
+)
+@require_permission("read", "payments")
+def get_review_queue(
+    request: HttpRequest,
+    match_status: Optional[str] = Query(None),
+):
+    tenant_id = _get_tenant_id(request)
+
+    base_qs = BankStatementLine.objects.filter(
+        tenant_id=tenant_id,
+        is_deleted=False,
+        statement__status=BankStatementStatus.IMPORTED,
+        statement__is_deleted=False,
+        match_status__in=_REVIEW_STATUSES,
+    )
+
+    unmatched_count = base_qs.filter(match_status=MatchStatus.UNMATCHED).count()
+    ambiguous_count = base_qs.filter(match_status=MatchStatus.AMBIGUOUS).count()
+    partial_count   = base_qs.filter(match_status=MatchStatus.PARTIAL).count()
+    total_count     = unmatched_count + ambiguous_count + partial_count
+
+    qs = base_qs.select_related("statement")
+    if match_status and match_status in [s.value for s in _REVIEW_STATUSES]:
+        qs = qs.filter(match_status=match_status)
+
+    qs = qs.order_by("-transaction_date", "line_number")
+
+    return 200, ReviewQueueOut(
+        items=[ReviewLineOut.from_model(ln) for ln in qs[:500]],
+        total_count=total_count,
+        unmatched_count=unmatched_count,
+        ambiguous_count=ambiguous_count,
+        partial_count=partial_count,
+    )
 
 
 def _get_line(stmt_id: uuid.UUID, line_id: uuid.UUID, tenant_id: uuid.UUID) -> BankStatementLine | None:

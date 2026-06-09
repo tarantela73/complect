@@ -15,6 +15,7 @@
     "test:e2e:ui": "cd e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test --headed"
   },
   "dependencies": {
+    "@bprogress/next": "^3.2.12",
     "@hookform/resolvers": "^5.0.0",
     "@tanstack/react-query": "^5.77.0",
     "@tanstack/react-query-devtools": "^5.77.0",

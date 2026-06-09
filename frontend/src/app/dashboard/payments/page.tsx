@@ -35,16 +35,31 @@ function fmtMoney(val: string | null, currency: string) {
   return `${n.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ${currency}`
 }
 
-function statusLabel(s: BankStatement['status']): { text: string; cls: string } {
-  const map: Record<string, { text: string; cls: string }> = {
+function statusLabel(s: BankStatement['status']): { text: string; cls: string; pulse?: boolean } {
+  const map: Record<string, { text: string; cls: string; pulse?: boolean }> = {
     pending:      { text: 'Загружен',        cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
     parsed:       { text: 'Распознан',       cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' },
     parse_failed: { text: 'Ошибка',          cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
-    importing:    { text: 'Импортируется',   cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    importing:    { text: 'Сопоставление',   cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', pulse: true },
     imported:     { text: 'Импортирован',    cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
     cancelled:    { text: 'Отменён',         cls: 'bg-muted text-muted-foreground' },
   }
   return map[s] ?? { text: s, cls: 'bg-muted text-muted-foreground' }
+}
+
+function StatusBadge({ stmt }: { stmt: BankStatement }) {
+  const sl = statusLabel(stmt.status)
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${sl.cls}`}>
+      {sl.pulse && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
+        </span>
+      )}
+      {sl.text}
+    </span>
+  )
 }
 
 function directionBadge(d: string) {
@@ -272,11 +287,37 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
   )
 }
 
+// ── Importing banner ──────────────────────────────────────────────────────────
+
+function ImportingBanner({ stmt }: { stmt: BankStatement }) {
+  return (
+    <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+      <div className="flex items-center gap-3">
+        <svg className="h-5 w-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-blue-900 dark:text-blue-200">Сопоставление выполняется...</p>
+          <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-400">
+            {stmt.total_lines
+              ? `${stmt.total_lines} строк передано в обработку. Страница обновится автоматически.`
+              : 'Строки передаются в обработку. Страница обновится автоматически.'}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Lines table ───────────────────────────────────────────────────────────────
 
-function LinesTable({ stmtId }: { stmtId: string }) {
+type LinesFilter = 'all' | 'review'
+
+function LinesTable({ stmtId, defaultFilter = 'all' }: { stmtId: string; defaultFilter?: LinesFilter }) {
   const { data, isLoading } = useBankStatement(stmtId)
   const [matchingLine, setMatchingLine] = useState<BankStatementLine | null>(null)
+  const [filter, setFilter] = useState<LinesFilter>(defaultFilter)
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Загрузка строк...</p>
   if (!data) return null
@@ -292,6 +333,11 @@ function LinesTable({ stmtId }: { stmtId: string }) {
     UNMATCHED: parsed.filter((l) => l.match_status === 'UNMATCHED').length,
   }
 
+  const needsReview = matchStats.PARTIAL + matchStats.AMBIGUOUS + matchStats.UNMATCHED
+  const displayLines = filter === 'review'
+    ? parsed.filter((l) => l.match_status !== 'MATCHED')
+    : parsed
+
   return (
     <div>
       {failed.length > 0 && (
@@ -301,15 +347,29 @@ function LinesTable({ stmtId }: { stmtId: string }) {
       )}
 
       {parsed.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2 text-xs">
-          {matchStats.MATCHED > 0 && <MatchBadge status="MATCHED" confidence={0} />}
-          {matchStats.MATCHED > 0 && <span className="text-muted-foreground">{matchStats.MATCHED}</span>}
-          {matchStats.PARTIAL > 0 && <MatchBadge status="PARTIAL" confidence={0} />}
-          {matchStats.PARTIAL > 0 && <span className="text-muted-foreground">{matchStats.PARTIAL}</span>}
-          {matchStats.AMBIGUOUS > 0 && <MatchBadge status="AMBIGUOUS" confidence={0} />}
-          {matchStats.AMBIGUOUS > 0 && <span className="text-muted-foreground">{matchStats.AMBIGUOUS}</span>}
-          {matchStats.UNMATCHED > 0 && <MatchBadge status="UNMATCHED" confidence={0} />}
-          {matchStats.UNMATCHED > 0 && <span className="text-muted-foreground">{matchStats.UNMATCHED}</span>}
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {matchStats.MATCHED > 0 && <><MatchBadge status="MATCHED" confidence={0} /><span className="text-muted-foreground">{matchStats.MATCHED}</span></>}
+            {matchStats.PARTIAL > 0 && <><MatchBadge status="PARTIAL" confidence={0} /><span className="text-muted-foreground">{matchStats.PARTIAL}</span></>}
+            {matchStats.AMBIGUOUS > 0 && <><MatchBadge status="AMBIGUOUS" confidence={0} /><span className="text-muted-foreground">{matchStats.AMBIGUOUS}</span></>}
+            {matchStats.UNMATCHED > 0 && <><MatchBadge status="UNMATCHED" confidence={0} /><span className="text-muted-foreground">{matchStats.UNMATCHED}</span></>}
+          </div>
+          {needsReview > 0 && (
+            <div className="flex gap-1 text-xs">
+              <button
+                onClick={() => setFilter('all')}
+                className={`rounded-md px-2 py-1 transition-colors ${filter === 'all' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-accent'}`}
+              >
+                Все ({parsed.length})
+              </button>
+              <button
+                onClick={() => setFilter('review')}
+                className={`rounded-md px-2 py-1 transition-colors ${filter === 'review' ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-accent'}`}
+              >
+                Требуют внимания ({needsReview})
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -330,7 +390,7 @@ function LinesTable({ stmtId }: { stmtId: string }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {parsed.map((l: BankStatementLine) => (
+            {displayLines.map((l: BankStatementLine) => (
               <tr key={l.id} className="align-top">
                 <td className="py-1.5 pr-3 font-mono text-muted-foreground">{l.line_number + 1}</td>
                 <td className="py-1.5 pr-3 font-mono whitespace-nowrap">{l.transaction_date ?? '—'}</td>
@@ -365,8 +425,10 @@ function LinesTable({ stmtId }: { stmtId: string }) {
             ))}
           </tbody>
         </table>
-        {parsed.length === 0 && failed.length === 0 && (
-          <p className="py-4 text-center text-sm text-muted-foreground">Нет строк для отображения.</p>
+        {displayLines.length === 0 && failed.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            {filter === 'review' ? 'Все строки успешно сопоставлены.' : 'Нет строк для отображения.'}
+          </p>
         )}
       </div>
 
@@ -408,9 +470,14 @@ function StatementPanel({ stmt, onClose }: { stmt: BankStatement; onClose: () =>
     }
   }
 
-  const sl = statusLabel(stmt.status)
   const canConfirm = stmt.status === 'parsed'
   const canCancel  = stmt.status === 'parsed' || stmt.status === 'parse_failed'
+  const isImporting = stmt.status === 'importing'
+  const isImported  = stmt.status === 'imported'
+
+  const needsReviewCount = isImported
+    ? (stmt.total_lines ?? 0) - (stmt.matched_lines ?? 0) - (stmt.failed_lines ?? 0)
+    : 0
 
   return (
     <div className="rounded-lg border border-border bg-card p-5">
@@ -418,16 +485,25 @@ function StatementPanel({ stmt, onClose }: { stmt: BankStatement; onClose: () =>
         <div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-medium">{stmt.file_name}</span>
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${sl.cls}`}>
-              {sl.text}
-            </span>
+            <StatusBadge stmt={stmt} />
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             {stmt.account_number && <span>Счёт: {stmt.account_number}</span>}
             {stmt.period_from && stmt.period_to && <span>{stmt.period_from} — {stmt.period_to}</span>}
             {stmt.opening_balance && <span>Открытие: {fmtMoney(stmt.opening_balance, stmt.currency)}</span>}
             {stmt.closing_balance && <span>Закрытие: {fmtMoney(stmt.closing_balance, stmt.currency)}</span>}
-            <span>Строк: {stmt.total_lines ?? 0} (распознано {stmt.parsed_lines ?? 0}, ошибок {stmt.failed_lines ?? 0})</span>
+            {isImported && stmt.matched_lines !== null && stmt.matched_lines !== undefined ? (
+              <span>
+                Строк: {stmt.total_lines ?? 0} · Сопоставлено: {stmt.matched_lines}
+                {needsReviewCount > 0 && (
+                  <span className="ml-1 text-orange-600 dark:text-orange-400">
+                    · Требуют внимания: {needsReviewCount}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span>Строк: {stmt.total_lines ?? 0} (распознано {stmt.parsed_lines ?? 0}, ошибок {stmt.failed_lines ?? 0})</span>
+            )}
           </div>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
@@ -447,7 +523,7 @@ function StatementPanel({ stmt, onClose }: { stmt: BankStatement; onClose: () =>
               disabled={confirm.isPending}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {confirm.isPending ? 'Импорт...' : 'Импортировать'}
+              {confirm.isPending ? 'Запуск...' : 'Импортировать'}
             </button>
           )}
           {canCancel && (
@@ -464,9 +540,14 @@ function StatementPanel({ stmt, onClose }: { stmt: BankStatement; onClose: () =>
 
       {err && <p className="mt-2 text-xs text-destructive">{err}</p>}
 
-      {stmt.status !== 'parse_failed' && (
+      {isImporting && <ImportingBanner stmt={stmt} />}
+
+      {!isImporting && stmt.status !== 'parse_failed' && (
         <div className="mt-5 border-t border-border pt-4">
-          <LinesTable stmtId={stmt.id} />
+          <LinesTable
+            stmtId={stmt.id}
+            defaultFilter={isImported && needsReviewCount > 0 ? 'review' : 'all'}
+          />
         </div>
       )}
     </div>
@@ -485,7 +566,10 @@ function StatementsList({ onSelect }: { onSelect: (s: BankStatement) => void }) 
   return (
     <div className="space-y-2">
       {data.items.map((stmt: BankStatement) => {
-        const sl = statusLabel(stmt.status)
+        const isImported = stmt.status === 'imported'
+        const needsReview = isImported
+          ? (stmt.total_lines ?? 0) - (stmt.matched_lines ?? 0) - (stmt.failed_lines ?? 0)
+          : 0
         return (
           <div
             key={stmt.id}
@@ -495,9 +579,7 @@ function StatementsList({ onSelect }: { onSelect: (s: BankStatement) => void }) 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm truncate">{stmt.file_name}</span>
-                <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${sl.cls}`}>
-                  {sl.text}
-                </span>
+                <StatusBadge stmt={stmt} />
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                 {stmt.period_from && <span>{stmt.period_from} — {stmt.period_to}</span>}
@@ -505,9 +587,21 @@ function StatementsList({ onSelect }: { onSelect: (s: BankStatement) => void }) 
                 <span>{fmtDate(stmt.created_at)}</span>
               </div>
             </div>
-            <div className="shrink-0 text-right text-xs text-muted-foreground">
-              <div>{stmt.parsed_lines ?? 0} / {stmt.total_lines ?? 0}</div>
-              <div>строк</div>
+            <div className="shrink-0 text-right text-xs">
+              {isImported && stmt.matched_lines !== null && stmt.matched_lines !== undefined ? (
+                <>
+                  <div className="text-muted-foreground">{stmt.matched_lines} / {stmt.total_lines ?? 0}</div>
+                  {needsReview > 0
+                    ? <div className="text-orange-600 dark:text-orange-400">{needsReview} не сопост.</div>
+                    : <div className="text-green-600 dark:text-green-400">все сопост.</div>
+                  }
+                </>
+              ) : (
+                <div className="text-muted-foreground">
+                  <div>{stmt.parsed_lines ?? 0} / {stmt.total_lines ?? 0}</div>
+                  <div>строк</div>
+                </div>
+              )}
             </div>
           </div>
         )
