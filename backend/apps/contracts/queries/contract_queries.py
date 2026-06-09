@@ -10,9 +10,13 @@ from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import Count
 from django.utils import timezone
 
+from apps.common.contracts.file_service_protocol import FileServiceProtocol
+from apps.common.contracts.finance_contracts import FinanceReaderProtocol
+from apps.common.tenancy.context_core import get_tenant_id
 from apps.contracts.models.contract import Contract, ContractStatus
+from apps.contracts.repositories.attachment_repo import AttachmentRepository
 from apps.contracts.repositories.contract_repo import ContractRepository
-from apps.contracts.schemas.contract_dto import ContractResponseSchema
+from apps.contracts.schemas.contract_dto import ContractDetailSchema, ContractResponseSchema
 
 
 def _to_dto(contract: Contract) -> ContractResponseSchema:
@@ -77,6 +81,48 @@ def get_contract_detail(contract_id: uuid.UUID) -> ContractResponseSchema:
     """Raises PermissionDenied if not found or wrong tenant."""
     contract = ContractRepository.get_by_id(contract_id)
     return _to_dto(contract)
+
+
+def get_contract_detail_360(
+    contract_id: uuid.UUID,
+    finance_reader: FinanceReaderProtocol,
+    file_service: FileServiceProtocol,
+) -> ContractDetailSchema:
+    """
+    360° contract view: base fields + last payments + attachment counts.
+    Cross-domain reads go through Protocols (ADR-0005).
+    """
+    contract = ContractRepository.get_by_id(contract_id)
+    tenant_id = get_tenant_id()
+
+    last_payments = finance_reader.get_last_posted_payments(tenant_id, contract_id, limit=5)
+
+    file_ids = AttachmentRepository.list_file_ids(contract_id)
+    file_metas = [file_service.get_file_meta(fid, tenant_id) for fid in file_ids]
+    valid_metas = [m for m in file_metas if m is not None]
+
+    return ContractDetailSchema(
+        id=contract.id,
+        contract_number=contract.contract_number,
+        title=contract.title,
+        status=contract.status,
+        resource_type=contract.resource_type,
+        total_amount=contract.total_amount,
+        paid_amount=contract.paid_amount,
+        remaining_amount=contract.total_amount - contract.paid_amount,
+        created_at=contract.created_at,
+        last_payments=[
+            {
+                "transaction_id": p.transaction_id,
+                "amount": p.amount,
+                "value_date": p.value_date,
+            }
+            for p in last_payments
+        ],
+        attachments_count=len(file_ids),
+        files_available=sum(1 for m in valid_metas if m.status == "AVAILABLE"),
+        files_quarantined=sum(1 for m in valid_metas if m.status == "QUARANTINED"),
+    )
 
 
 def get_contract_counts() -> dict:

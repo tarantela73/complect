@@ -9,12 +9,17 @@ from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.contracts.models.contract import ContractStatus
 from apps.contracts.queries.attachment_queries import get_attachments_list
-from apps.contracts.queries.contract_queries import get_contract_detail, get_contracts_page
+from apps.contracts.queries.contract_queries import (
+    get_contract_detail,
+    get_contract_detail_360,
+    get_contracts_page,
+)
 from apps.contracts.queries.event_log_queries import get_contract_event_log
 from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.attachment_dto import AttachFileRequest, AttachmentListResponse
 from apps.contracts.schemas.contract_dto import (
     ContractCreateRequestSchema,
+    ContractDetailSchema,
     ContractEventLogResponse,
     ContractListResponse,
     ContractResponseSchema,
@@ -25,6 +30,7 @@ from apps.contracts.services.contract_activate_service import ContractActivateSe
 from apps.contracts.services.contract_closure import ContractClosureService
 from apps.contracts.services.contract_create_service import ContractCreateService
 from apps.files.services.file_common_service import default_file_service
+from apps.finance.services.finance_reader import default_finance_reader
 
 router = Router(tags=["contracts"])
 _attachment_service = AttachmentService(file_service=default_file_service)
@@ -44,11 +50,11 @@ def list_contracts(
     return 200, result
 
 
-@router.get("/{contract_id}/", response={200: ContractResponseSchema, 403: dict})
+@router.get("/{contract_id}/", response={200: ContractDetailSchema, 403: dict})
 @require_permission("read", "contracts")
 def get_contract(request: HttpRequest, contract_id: uuid.UUID):
     try:
-        return 200, get_contract_detail(contract_id)
+        return 200, get_contract_detail_360(contract_id, default_finance_reader, default_file_service)
     except PermissionDenied:
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
 

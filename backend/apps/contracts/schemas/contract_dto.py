@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -39,6 +39,19 @@ class ContractResponseSchema(BaseModel):
             if "remaining_amount" not in values:
                 values["remaining_amount"] = total - paid
         return values
+
+
+class LastPaymentSchema(BaseModel):
+    transaction_id: uuid.UUID
+    amount: int
+    value_date: Optional[date] = None
+
+
+class ContractDetailSchema(ContractResponseSchema):
+    last_payments: list[LastPaymentSchema] = []
+    attachments_count: int = 0
+    files_available: int = 0
+    files_quarantined: int = 0
 
 
 class ContractListResponse(BaseModel):

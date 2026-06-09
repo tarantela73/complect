@@ -7,6 +7,25 @@ from typing import Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
+class LastPaymentDTO:
+    transaction_id: uuid.UUID
+    amount: int
+    value_date: date | None
+
+
+@runtime_checkable
+class FinanceReaderProtocol(Protocol):
+    """[ADR-0005] Cross-domain read contract: apps/contracts → apps/finance (Query Side)."""
+
+    def get_last_posted_payments(
+        self,
+        tenant_id: uuid.UUID,
+        contract_id: uuid.UUID,
+        limit: int = 5,
+    ) -> list[LastPaymentDTO]: ...
+
+
+@dataclass(frozen=True, slots=True)
 class TxCandidateDTO:
     transaction_id: uuid.UUID
     contract_id: uuid.UUID
