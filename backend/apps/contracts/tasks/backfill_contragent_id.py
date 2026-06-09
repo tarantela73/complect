@@ -11,7 +11,8 @@ Run via: celery call contracts.tasks.backfill_contragent_id.run_backfill_contrag
 from __future__ import annotations
 
 import structlog
-from django.db import connection
+from celery.exceptions import SoftTimeLimitExceeded
+from django.db import connection, transaction
 
 from apps.common.tasks import BaseEnterpriseTask
 from config.celery import app
@@ -24,9 +25,11 @@ BATCH_SIZE = 5_000
 @app.task(
     base=BaseEnterpriseTask,
     bind=True,
-    queue="default",
+    queue="retention",
     max_retries=5,
     acks_late=True,
+    soft_time_limit=3600,
+    time_limit=3900,
     name="contracts.tasks.backfill_contragent_id.run_backfill_contragent_id",
 )
 def run_backfill_contragent_id(self) -> dict:
@@ -37,24 +40,45 @@ def run_backfill_contragent_id(self) -> dict:
     total_updated = 0
     iteration = 0
 
-    while True:
-        iteration += 1
-        updated = _backfill_batch(BATCH_SIZE)
-        total_updated += updated
+    try:
+        while True:
+            iteration += 1
+            updated = _backfill_batch(BATCH_SIZE)
+            total_updated += updated
 
-        logger.info(
-            "backfill_contragent_id_batch",
-            iteration=iteration,
-            batch_updated=updated,
+            logger.info(
+                "backfill_contragent_id_batch",
+                task_id=self.request.id,
+                iteration=iteration,
+                batch_updated=updated,
+                total_updated=total_updated,
+            )
+
+            if updated == 0:
+                break
+
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "backfill_contragent_id_time_limit",
+            task_id=self.request.id,
             total_updated=total_updated,
+            iteration=iteration,
         )
+        raise self.retry(countdown=60) from None
 
-        if updated == 0:
-            break
+    except Exception as exc:
+        logger.exception(
+            "backfill_contragent_id_error",
+            task_id=self.request.id,
+            total_updated=total_updated,
+            iteration=iteration,
+        )
+        raise self.retry(exc=exc, countdown=60 * 2**self.request.retries) from exc
 
     remaining = _count_unmatched()
     logger.info(
         "backfill_contragent_id_complete",
+        task_id=self.request.id,
         total_updated=total_updated,
         remaining_unmatched=remaining,
     )
@@ -67,7 +91,8 @@ def _backfill_batch(batch_size: int) -> int:
 
     Logic:
       1. Find contracts without contragent_id.
-      2. For each, look up the INN from any non-deleted transaction on that contract.
+      2. For each, look up the INN from the most recent non-deleted transaction
+         on that contract (ORDER BY id DESC ensures deterministic selection).
       3. Match INN → contragent_id only when exactly one contragent has that INN
          within the same tenant (COUNT = 1 guard prevents ambiguous matches).
       4. Limit to batch_size to avoid long-running transactions.
@@ -86,6 +111,7 @@ def _backfill_batch(batch_size: int) -> int:
                   AND tenant_id   = c.tenant_id
                   AND is_deleted  = FALSE
                   AND counterparty_inn != ''
+                ORDER BY id DESC
                 LIMIT 1
             ) t ON TRUE
             WHERE c.contragent_id IS NULL
@@ -115,9 +141,11 @@ def _backfill_batch(batch_size: int) -> int:
         FROM   unique_matches um
         WHERE  cc.id = um.contract_id
     """
-    with connection.cursor() as cursor:
-        cursor.execute(sql, {"batch_size": batch_size})
-        return cursor.rowcount
+    # savepoint=False: FOR UPDATE SKIP LOCKED fails inside a subtransaction
+    with transaction.atomic(savepoint=False):
+        with connection.cursor() as cursor:
+            cursor.execute(sql, {"batch_size": batch_size})
+            return cursor.rowcount
 
 
 def _count_unmatched() -> int:

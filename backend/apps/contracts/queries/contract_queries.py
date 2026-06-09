@@ -6,17 +6,20 @@ import uuid
 from datetime import timedelta
 from typing import Optional
 
+import structlog
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import Count
 from django.utils import timezone
 
 from apps.common.contracts.file_service_protocol import FileServiceProtocol
 from apps.common.contracts.finance_contracts import FinanceReaderProtocol
-from apps.common.tenancy.context_core import get_tenant_id
+from apps.common.tenancy.context_core import get_context
 from apps.contracts.models.contract import Contract, ContractStatus
 from apps.contracts.repositories.attachment_repo import AttachmentRepository
 from apps.contracts.repositories.contract_repo import ContractRepository
-from apps.contracts.schemas.contract_dto import ContractDetailSchema, ContractResponseSchema
+from apps.contracts.schemas.contract_dto import ContractDetailSchema, ContractResponseSchema, LastPaymentSchema
+
+logger = structlog.get_logger(__name__)
 
 
 def _to_dto(contract: Contract) -> ContractResponseSchema:
@@ -93,10 +96,23 @@ def get_contract_detail_360(
     360° contract view: base fields + last payments + attachment counts.
     Cross-domain reads go through Protocols (ADR-0005).
     """
-    tenant_id = get_tenant_id()
+    ctx = get_context()
+    tenant_id = ctx.tenant_id
     contract = ContractRepository.get_by_id(contract_id)
 
     last_payments = finance_reader.get_last_posted_payments(tenant_id, contract_id, limit=5)
+
+    # Rule 5.8 — audit log for financial PII read
+    logger.info(
+        "contract_payments_pii_read",
+        why="contract_360_view",
+        contract_id=str(contract_id),
+        payment_count=len(last_payments),
+        tenant_id=str(ctx.tenant_id),
+        user_id=str(ctx.user_id),
+        request_id=str(ctx.request_id),
+        correlation_id=str(ctx.correlation_id),
+    )
 
     file_ids = AttachmentRepository.list_file_ids(contract_id)
     file_metas_by_id = file_service.get_file_metas_batch(file_ids, tenant_id)
@@ -113,11 +129,11 @@ def get_contract_detail_360(
         remaining_amount=contract.total_amount - contract.paid_amount,
         created_at=contract.created_at,
         last_payments=[
-            {
-                "transaction_id": p.transaction_id,
-                "amount": p.amount,
-                "value_date": p.value_date,
-            }
+            LastPaymentSchema(
+                transaction_id=p.transaction_id,
+                amount=p.amount,
+                value_date=p.value_date,
+            )
             for p in last_payments
         ],
         attachments_count=len(file_ids),

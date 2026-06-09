@@ -1,7 +1,7 @@
 import uuid
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connection, transaction
 
 from apps.common.cache.dashboard_cache import invalidate_dashboard
 from apps.common.events.contracts import ContractCreatedEvent
@@ -26,6 +26,16 @@ class ContractCreateService:
             )
 
         ctx = get_context()
+
+        if request.contragent_id is not None:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM contragents_contragents"
+                    " WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
+                    [request.contragent_id, ctx.tenant_id],
+                )
+                if cursor.fetchone() is None:
+                    raise ValidationError("Контрагент не найден в текущем тенанте.")
 
         with transaction.atomic():
             contract = Contract(

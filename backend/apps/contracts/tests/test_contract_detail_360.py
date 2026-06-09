@@ -16,9 +16,9 @@ from django.core.exceptions import PermissionDenied
 from apps.common.contracts.file_service_protocol import FileMetaDTO
 from apps.common.contracts.finance_contracts import LastPaymentDTO
 from apps.common.tenancy.context import set_tenant_context
+from apps.common.tenancy.context_core import RequestContext, set_context
 from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
 from apps.contracts.queries.contract_queries import get_contract_detail_360
-from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.contracts.schemas.contract_dto import ContractDetailSchema
 
 
@@ -54,7 +54,12 @@ class TestGetContractDetail360:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.tenant_id = uuid.uuid4()
-        set_tenant_context(self.tenant_id)
+        set_context(RequestContext(
+            tenant_id=self.tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        ))
 
     def test_happy_path_returns_360_fields(self):
         contract = _make_contract(self.tenant_id, total=500_000, paid=200_000)
@@ -74,7 +79,8 @@ class TestGetContractDetail360:
             download_url="https://s3.test/doc.pdf",
         )
 
-        with patch("apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids", return_value=[file_id]):
+        patch_target = "apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids"
+        with patch(patch_target, return_value=[file_id]):
             result = get_contract_detail_360(
                 contract.id,
                 _stub_finance_reader([payment]),

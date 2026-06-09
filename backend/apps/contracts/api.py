@@ -50,13 +50,15 @@ def list_contracts(
     return 200, result
 
 
-@router.get("/{contract_id}/", response={200: ContractDetailSchema, 403: dict, 404: dict})
+@router.get("/{contract_id}/", response={200: ContractDetailSchema, 404: dict, 503: dict})
 @require_permission("read", "contracts")
 def get_contract(request: HttpRequest, contract_id: uuid.UUID):
     try:
         return 200, get_contract_detail_360(contract_id, default_finance_reader, default_file_service)
     except PermissionDenied:
         return 404, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    except Exception:
+        return 503, make_error_response("SERVICE_UNAVAILABLE", "Сервис временно недоступен.")
 
 
 @router.post("/", response={201: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
