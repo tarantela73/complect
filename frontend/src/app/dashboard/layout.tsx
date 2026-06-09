@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/notifications', label: 'Уведомления', permission: 'notifications.read' },
   { href: '/dashboard/integrations', label: 'Интеграции', permission: 'webhooks.read' },
   { href: '/dashboard/ops', label: 'Ops Console', permission: 'ops.read' },
+  { href: '/dashboard/admin', label: 'Администрирование', permission: 'users.read' },
 ]
 
 function NotificationBell() {

@@ -17,9 +17,11 @@ from apps.notifications.api import router as notifications_router
 from apps.payments.api import router as payments_router
 from apps.objects.api import router as objects_router
 from apps.users.api import router as auth_router
+from apps.users.api_admin import router as admin_users_router
 from config.api import api
 
 api.add_router("/auth/", auth_router)
+api.add_router("/admin/", admin_users_router)
 api.add_router("/dashboard/", dashboard_router)
 api.add_router("/contracts/", contracts_router)
 api.add_router("/contragents/", contragents_router)
