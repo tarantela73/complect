@@ -10,6 +10,15 @@ export type BankStatementLine = components['schemas']['BankStatementLineOut']
 export type BankStatement     = components['schemas']['BankStatementOut']
 export type BankStatementDetail = components['schemas']['BankStatementDetailOut']
 
+export type TxCandidate = {
+  transaction_id: string
+  contract_id: string
+  amount_kopecks: number
+  external_ref: string
+  counterparty_inn: string
+  value_date: string | null
+}
+
 // ── Query keys ────────────────────────────────────────────────────────────────
 
 export const paymentKeys = {
@@ -108,5 +117,87 @@ export function useCancelStatement() {
       return data
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: paymentKeys.statements() }),
+  })
+}
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().accessToken
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export function useLineCandidates(stmtId: string, lineId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...paymentKeys.all, 'candidates', stmtId, lineId],
+    queryFn: async () => {
+      const resp = await fetch(
+        `${env.NEXT_PUBLIC_API_URL}/api/v1/payments/statements/${stmtId}/lines/${lineId}/candidates/`,
+        { headers: authHeaders() },
+      )
+      if (!resp.ok) throw new Error('Ошибка загрузки кандидатов')
+      return (await resp.json()) as TxCandidate[]
+    },
+    enabled,
+  })
+}
+
+export function useManualMatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      stmtId,
+      lineId,
+      transactionId,
+    }: {
+      stmtId: string
+      lineId: string
+      transactionId: string
+    }) => {
+      const resp = await fetch(
+        `${env.NEXT_PUBLIC_API_URL}/api/v1/payments/statements/${stmtId}/lines/${lineId}/match/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ transaction_id: transactionId }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': crypto.randomUUID(),
+            ...authHeaders(),
+          },
+        },
+      )
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({})) as { error?: { message?: string } }
+        throw new Error(body?.error?.message ?? 'Ошибка привязки')
+      }
+      return (await resp.json()) as BankStatementLine
+    },
+    onSuccess: (_, { stmtId }) => {
+      qc.invalidateQueries({ queryKey: paymentKeys.statement(stmtId) })
+    },
+  })
+}
+
+export function useDetachMatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ stmtId, lineId }: { stmtId: string; lineId: string }) => {
+      const resp = await fetch(
+        `${env.NEXT_PUBLIC_API_URL}/api/v1/payments/statements/${stmtId}/lines/${lineId}/match/`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Idempotency-Key': crypto.randomUUID(),
+            ...authHeaders(),
+          },
+        },
+      )
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({})) as { error?: { message?: string } }
+        throw new Error(body?.error?.message ?? 'Ошибка отвязки')
+      }
+      return (await resp.json()) as BankStatementLine
+    },
+    onSuccess: (_, { stmtId }) => {
+      qc.invalidateQueries({ queryKey: paymentKeys.statement(stmtId) })
+    },
   })
 }

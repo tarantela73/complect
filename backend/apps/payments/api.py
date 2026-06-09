@@ -1,14 +1,17 @@
 import uuid
 from typing import Optional
 
+from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
 from ninja import File, Query, Router, Schema
 from ninja.files import UploadedFile
 
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
+from apps.common.contracts.finance_contracts import TxCandidateDTO
 from apps.payments.models import BankStatement, BankStatementLine
 from apps.payments.services.bank_statement_service import BankStatementService
+from apps.payments.services.manual_match_service import ManualMatchService
 
 router = Router(tags=["payments"])
 
@@ -116,6 +119,30 @@ class BankStatementDetailOut(BankStatementOut):
 class BankStatementListOut(Schema):
     items: list[BankStatementOut]
     next_cursor: Optional[uuid.UUID] = None
+
+
+class ManualMatchIn(Schema):
+    transaction_id: uuid.UUID
+
+
+class TxCandidateOut(Schema):
+    transaction_id: uuid.UUID
+    contract_id: uuid.UUID
+    amount_kopecks: int
+    external_ref: str
+    counterparty_inn: str
+    value_date: Optional[str] = None
+
+    @staticmethod
+    def from_dto(dto: TxCandidateDTO) -> "TxCandidateOut":
+        return TxCandidateOut(
+            transaction_id=dto.transaction_id,
+            contract_id=dto.contract_id,
+            amount_kopecks=dto.amount_kopecks,
+            external_ref=dto.external_ref,
+            counterparty_inn=dto.counterparty_inn,
+            value_date=dto.value_date.isoformat() if dto.value_date else None,
+        )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -236,3 +263,72 @@ def cancel_statement(request: HttpRequest, stmt_id: uuid.UUID):
         return 422, make_error_response("INVALID_STATE", str(exc))
 
     return 200, BankStatementOut.from_model(stmt)
+
+
+def _get_line(stmt_id: uuid.UUID, line_id: uuid.UUID, tenant_id: uuid.UUID) -> BankStatementLine | None:
+    try:
+        return BankStatementLine.objects.get(
+            id=line_id,
+            statement_id=stmt_id,
+            tenant_id=tenant_id,
+            is_deleted=False,
+        )
+    except BankStatementLine.DoesNotExist:
+        return None
+
+
+@router.post(
+    "/statements/{stmt_id}/lines/{line_id}/match/",
+    response={200: BankStatementLineOut, 403: dict, 404: dict},
+    summary="Ручная привязка строки к транзакции",
+)
+@require_permission("write", "payments")
+def attach_match(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID, data: ManualMatchIn):
+    tenant_id = _get_tenant_id(request)
+    line = _get_line(stmt_id, line_id, tenant_id)
+    if line is None:
+        return 404, make_error_response("LINE_NOT_FOUND", "Строка выписки не найдена.")
+    try:
+        line = ManualMatchService.attach(
+            tenant_id=tenant_id,
+            line=line,
+            transaction_id=data.transaction_id,
+            confirmed_by=_get_user_id(request),
+        )
+    except PermissionDenied:
+        return 403, make_error_response("TRANSACTION_NOT_FOUND", "Транзакция не найдена в рамках тенанта.")
+    return 200, BankStatementLineOut.from_model(line)
+
+
+@router.delete(
+    "/statements/{stmt_id}/lines/{line_id}/match/",
+    response={200: BankStatementLineOut, 403: dict, 404: dict},
+    summary="Снять привязку строки с транзакции",
+)
+@require_permission("write", "payments")
+def detach_match(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID):
+    tenant_id = _get_tenant_id(request)
+    line = _get_line(stmt_id, line_id, tenant_id)
+    if line is None:
+        return 404, make_error_response("LINE_NOT_FOUND", "Строка выписки не найдена.")
+    line = ManualMatchService.detach(
+        tenant_id=tenant_id,
+        line=line,
+        confirmed_by=_get_user_id(request),
+    )
+    return 200, BankStatementLineOut.from_model(line)
+
+
+@router.get(
+    "/statements/{stmt_id}/lines/{line_id}/candidates/",
+    response={200: list[TxCandidateOut], 403: dict, 404: dict},
+    summary="Кандидаты для ручного сопоставления строки",
+)
+@require_permission("read", "payments")
+def get_line_candidates(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID):
+    tenant_id = _get_tenant_id(request)
+    line = _get_line(stmt_id, line_id, tenant_id)
+    if line is None:
+        return 404, make_error_response("LINE_NOT_FOUND", "Строка выписки не найдена.")
+    candidates = ManualMatchService.get_candidates(tenant_id=tenant_id, line=line)
+    return 200, [TxCandidateOut.from_dto(c) for c in candidates]

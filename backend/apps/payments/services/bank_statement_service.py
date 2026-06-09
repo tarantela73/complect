@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from django.db import transaction
 
-from apps.payments.models import BankStatement, BankStatementLine, BankStatementStatus, LineParseStatus
+from apps.payments.models import BankStatement, BankStatementLine, BankStatementStatus
 from apps.payments.parsers.kl_to_1c import KlTo1CParser
 
 _PARSER = KlTo1CParser()
@@ -54,8 +54,8 @@ class BankStatementService:
                 )
                 return stmt
 
-            parsed_count = sum(1 for l in result.lines if l.parse_status == "parsed")
-            failed_count = sum(1 for l in result.lines if l.parse_status == "failed")
+            parsed_count = sum(1 for ln in result.lines if ln.parse_status == "parsed")
+            failed_count = sum(1 for ln in result.lines if ln.parse_status == "failed")
 
             BankStatement.objects.filter(id=stmt.id).update(
                 status=BankStatementStatus.PARSED,

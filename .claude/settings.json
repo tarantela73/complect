@@ -213,7 +213,8 @@
       "mcp__playwright__browser_press_key",
       "Bash(python3 -)",
       "Bash(git -C /home/sever/projects/Complect status)",
-      "Bash(git -C /home/sever/projects/Complect log --oneline -5)"
+      "Bash(git -C /home/sever/projects/Complect log --oneline -5)",
+      "Bash(make generate-sdk *)"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

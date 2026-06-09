@@ -186,5 +186,6 @@ CLAUDE.md
 .claude
 .claude/
 .claude_session*
+.claudeignore
 
 

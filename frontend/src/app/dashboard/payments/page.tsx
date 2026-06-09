@@ -7,8 +7,12 @@ import {
   useUploadStatement,
   useConfirmStatement,
   useCancelStatement,
+  useLineCandidates,
+  useManualMatch,
+  useDetachMatch,
   type BankStatement,
   type BankStatementLine,
+  type TxCandidate,
 } from '@/shared/api/payments'
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -47,6 +51,163 @@ function directionBadge(d: string) {
   if (d === 'credit') return <span className="text-green-600 dark:text-green-400 font-mono">▲</span>
   if (d === 'debit')  return <span className="text-red-600 dark:text-red-400 font-mono">▼</span>
   return <span className="text-muted-foreground">—</span>
+}
+
+function MatchBadge({ status, confidence }: { status: string; confidence: number }) {
+  const map: Record<string, { text: string; cls: string }> = {
+    MATCHED:   { text: 'Сопост.',   cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+    PARTIAL:   { text: 'Частично',  cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    AMBIGUOUS: { text: 'Неоднозн.', cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
+    UNMATCHED: { text: 'Нет',       cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+  }
+  const s = map[status] ?? { text: status, cls: 'bg-muted text-muted-foreground' }
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${s.cls}`}>
+      {s.text}
+      {confidence > 0 && <span className="opacity-60">{confidence}%</span>}
+    </span>
+  )
+}
+
+// ── Manual match dialog ───────────────────────────────────────────────────────
+
+function ManualMatchDialog({
+  stmtId,
+  line,
+  onClose,
+}: {
+  stmtId: string
+  line: BankStatementLine
+  onClose: () => void
+}) {
+  const [txId, setTxId] = useState('')
+  const [err, setErr] = useState('')
+  const { data: candidates, isLoading } = useLineCandidates(stmtId, line.id, true)
+  const attach = useManualMatch()
+  const detach = useDetachMatch()
+
+  const handleAttach = async (transactionId: string) => {
+    setErr('')
+    try {
+      await attach.mutateAsync({ stmtId, lineId: line.id, transactionId })
+      onClose()
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Ошибка привязки')
+    }
+  }
+
+  const handleDetach = async () => {
+    setErr('')
+    try {
+      await detach.mutateAsync({ stmtId, lineId: line.id })
+      onClose()
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Ошибка отвязки')
+    }
+  }
+
+  const isMatched = line.match_status === 'MATCHED'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">
+            {isMatched ? 'Сопоставление строки' : 'Привязать к транзакции'}
+          </h3>
+          <button onClick={onClose} className="text-lg leading-none text-muted-foreground hover:text-foreground">×</button>
+        </div>
+
+        {/* Line summary */}
+        <div className="mb-4 rounded-md bg-muted/40 px-3 py-2 text-xs">
+          <span className="font-mono">{line.transaction_date ?? '—'}</span>
+          {' · '}
+          <span className="font-mono font-medium">
+            {line.amount ? parseFloat(line.amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 }) : '—'}
+          </span>
+          {' · '}
+          <span className="text-muted-foreground">{line.counterparty_name || line.counterparty_inn || '—'}</span>
+        </div>
+
+        {isMatched && line.transaction_id && (
+          <div className="mb-4">
+            <p className="mb-1.5 text-xs text-muted-foreground">Привязана к транзакции:</p>
+            <p className="rounded bg-muted px-2 py-1 font-mono text-xs">{line.transaction_id}</p>
+            <button
+              onClick={handleDetach}
+              disabled={detach.isPending}
+              className="mt-3 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+            >
+              {detach.isPending ? 'Отвязка...' : 'Отвязать'}
+            </button>
+          </div>
+        )}
+
+        {!isMatched && (
+          <>
+            {isLoading && <p className="mb-3 text-xs text-muted-foreground">Поиск кандидатов...</p>}
+
+            {!isLoading && candidates && candidates.length > 0 && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs text-muted-foreground">Найденные совпадения:</p>
+                <div className="max-h-48 space-y-1 overflow-y-auto">
+                  {candidates.map((c: TxCandidate) => (
+                    <button
+                      key={c.transaction_id}
+                      onClick={() => handleAttach(c.transaction_id)}
+                      disabled={attach.isPending}
+                      className="w-full rounded border border-border px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50 disabled:opacity-50"
+                    >
+                      <div className="flex justify-between gap-2">
+                        <span className="truncate font-mono text-muted-foreground">{c.transaction_id}</span>
+                        <span className="shrink-0 font-mono font-medium">
+                          {(c.amount_kopecks / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      {(c.external_ref || c.counterparty_inn) && (
+                        <div className="mt-0.5 text-muted-foreground">
+                          {c.external_ref && <span>{c.external_ref}</span>}
+                          {c.counterparty_inn && <span className="ml-2">ИНН: {c.counterparty_inn}</span>}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!isLoading && candidates?.length === 0 && (
+              <p className="mb-3 text-xs text-muted-foreground">Автоматические кандидаты не найдены.</p>
+            )}
+
+            <div>
+              <p className="mb-1.5 text-xs text-muted-foreground">Или введите ID транзакции вручную:</p>
+              <div className="flex gap-2">
+                <input
+                  value={txId}
+                  onChange={(e) => setTxId(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  onClick={() => { if (txId) handleAttach(txId) }}
+                  disabled={!txId || attach.isPending}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {attach.isPending ? '...' : 'Привязать'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {err && <p className="mt-3 text-xs text-destructive">{err}</p>}
+      </div>
+    </div>
+  )
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -115,6 +276,7 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
 
 function LinesTable({ stmtId }: { stmtId: string }) {
   const { data, isLoading } = useBankStatement(stmtId)
+  const [matchingLine, setMatchingLine] = useState<BankStatementLine | null>(null)
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Загрузка строк...</p>
   if (!data) return null
@@ -123,6 +285,13 @@ function LinesTable({ stmtId }: { stmtId: string }) {
   const parsed = lines.filter((l) => l.parse_status === 'parsed')
   const failed  = lines.filter((l) => l.parse_status === 'failed')
 
+  const matchStats = {
+    MATCHED:   parsed.filter((l) => l.match_status === 'MATCHED').length,
+    PARTIAL:   parsed.filter((l) => l.match_status === 'PARTIAL').length,
+    AMBIGUOUS: parsed.filter((l) => l.match_status === 'AMBIGUOUS').length,
+    UNMATCHED: parsed.filter((l) => l.match_status === 'UNMATCHED').length,
+  }
+
   return (
     <div>
       {failed.length > 0 && (
@@ -130,6 +299,20 @@ function LinesTable({ stmtId }: { stmtId: string }) {
           {failed.length} строк не распознано — они пропущены при импорте.
         </div>
       )}
+
+      {parsed.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+          {matchStats.MATCHED > 0 && <MatchBadge status="MATCHED" confidence={0} />}
+          {matchStats.MATCHED > 0 && <span className="text-muted-foreground">{matchStats.MATCHED}</span>}
+          {matchStats.PARTIAL > 0 && <MatchBadge status="PARTIAL" confidence={0} />}
+          {matchStats.PARTIAL > 0 && <span className="text-muted-foreground">{matchStats.PARTIAL}</span>}
+          {matchStats.AMBIGUOUS > 0 && <MatchBadge status="AMBIGUOUS" confidence={0} />}
+          {matchStats.AMBIGUOUS > 0 && <span className="text-muted-foreground">{matchStats.AMBIGUOUS}</span>}
+          {matchStats.UNMATCHED > 0 && <MatchBadge status="UNMATCHED" confidence={0} />}
+          {matchStats.UNMATCHED > 0 && <span className="text-muted-foreground">{matchStats.UNMATCHED}</span>}
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -141,7 +324,9 @@ function LinesTable({ stmtId }: { stmtId: string }) {
               <th className="pb-2 pr-3 font-medium">Контрагент</th>
               <th className="pb-2 pr-3 font-medium">ИНН</th>
               <th className="pb-2 pr-3 font-medium">Назначение</th>
-              <th className="pb-2 font-medium">№ doc</th>
+              <th className="pb-2 pr-3 font-medium">№ doc</th>
+              <th className="pb-2 pr-3 font-medium">Матч</th>
+              <th className="pb-2 font-medium"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -153,16 +338,27 @@ function LinesTable({ stmtId }: { stmtId: string }) {
                   {l.amount ? parseFloat(l.amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 }) : '—'}
                 </td>
                 <td className="py-1.5 pr-3">{directionBadge(l.direction)}</td>
-                <td className="py-1.5 pr-3 max-w-[200px] truncate" title={l.counterparty_name}>{l.counterparty_name || '—'}</td>
+                <td className="py-1.5 pr-3 max-w-50 truncate" title={l.counterparty_name}>{l.counterparty_name || '—'}</td>
                 <td className="py-1.5 pr-3 font-mono">{l.counterparty_inn || '—'}</td>
-                <td className="py-1.5 pr-3 max-w-[280px] truncate text-muted-foreground" title={l.description}>{l.description || '—'}</td>
-                <td className="py-1.5 font-mono text-muted-foreground">{l.doc_number || '—'}</td>
+                <td className="py-1.5 pr-3 max-w-70 truncate text-muted-foreground" title={l.description}>{l.description || '—'}</td>
+                <td className="py-1.5 pr-3 font-mono text-muted-foreground">{l.doc_number || '—'}</td>
+                <td className="py-1.5 pr-3 whitespace-nowrap">
+                  <MatchBadge status={l.match_status} confidence={l.match_confidence} />
+                </td>
+                <td className="py-1.5">
+                  <button
+                    onClick={() => setMatchingLine(l)}
+                    className="rounded px-2 py-0.5 text-xs text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    {l.match_status === 'MATCHED' ? 'Изменить' : l.match_status === 'AMBIGUOUS' ? 'Выбрать' : 'Привязать'}
+                  </button>
+                </td>
               </tr>
             ))}
             {failed.map((l: BankStatementLine) => (
               <tr key={l.id} className="align-top bg-destructive/5">
                 <td className="py-1.5 pr-3 font-mono text-muted-foreground">{l.line_number + 1}</td>
-                <td className="py-1.5 pr-3 text-destructive" colSpan={7}>
+                <td className="py-1.5 pr-3 text-destructive" colSpan={9}>
                   <span className="font-medium">Ошибка: </span>{l.parse_error || 'неизвестная ошибка'}
                 </td>
               </tr>
@@ -173,6 +369,14 @@ function LinesTable({ stmtId }: { stmtId: string }) {
           <p className="py-4 text-center text-sm text-muted-foreground">Нет строк для отображения.</p>
         )}
       </div>
+
+      {matchingLine && (
+        <ManualMatchDialog
+          stmtId={stmtId}
+          line={matchingLine}
+          onClose={() => setMatchingLine(null)}
+        />
+      )}
     </div>
   )
 }

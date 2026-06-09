@@ -72,6 +72,14 @@ class DjangoTransactionFinder:
             )
         ]
 
+    def find_by_id(
+        self,
+        tenant_id: uuid.UUID,
+        transaction_id: uuid.UUID,
+    ) -> TxCandidateDTO | None:
+        tx = _qs(tenant_id).filter(id=transaction_id).first()
+        return _to_dto(tx) if tx is not None else None
+
 
 # Singleton — инжектируется в MatchingService как default
 _finder: FinanceTransactionFinder = DjangoTransactionFinder()

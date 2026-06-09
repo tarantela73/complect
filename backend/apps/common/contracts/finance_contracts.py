@@ -49,3 +49,11 @@ class FinanceTransactionFinder(Protocol):
     ) -> list[TxCandidateDTO]:
         """Поиск по сумме + ИНН контрагента."""
         ...
+
+    def find_by_id(
+        self,
+        tenant_id: uuid.UUID,
+        transaction_id: uuid.UUID,
+    ) -> TxCandidateDTO | None:
+        """Точечная проверка принадлежности транзакции тенанту (anti-IDOR guard)."""
+        ...

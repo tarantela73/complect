@@ -12,7 +12,7 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from apps.payments.parsers.base import BankStatementParser, ParsedLine, ParsedStatement
+from apps.payments.parsers.base import ParsedLine, ParsedStatement
 
 _DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})$")
 _ENCODINGS = ("windows-1251", "utf-8", "cp866")
