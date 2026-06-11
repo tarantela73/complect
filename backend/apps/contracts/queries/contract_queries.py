@@ -43,6 +43,7 @@ def get_contracts_page(
     status: Optional[str] = None,
     resource_type: Optional[str] = None,
     q: Optional[str] = None,
+    contragent_id: Optional[uuid.UUID] = None,
 ) -> dict:
     """
     Returns a cursor-paginated page of contracts for the current tenant.
@@ -66,6 +67,9 @@ def get_contracts_page(
 
     if resource_type:
         qs = qs.filter(resource_type=resource_type)
+
+    if contragent_id:
+        qs = qs.filter(contragent_id=contragent_id)
 
     # Fetch limit+1 to determine if there are more pages
     rows = list(qs[: limit + 1])

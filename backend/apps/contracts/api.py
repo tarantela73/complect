@@ -45,8 +45,16 @@ def list_contracts(
     status: Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    contragent_id: Optional[uuid.UUID] = Query(None),
 ):
-    result = get_contracts_page(cursor=cursor, limit=limit, status=status, resource_type=resource_type, q=q)
+    result = get_contracts_page(
+        cursor=cursor,
+        limit=limit,
+        status=status,
+        resource_type=resource_type,
+        q=q,
+        contragent_id=contragent_id,
+    )
     return 200, result
 
 

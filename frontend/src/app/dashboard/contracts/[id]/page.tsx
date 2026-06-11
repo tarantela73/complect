@@ -4,6 +4,8 @@ import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCan } from '@/shared/auth/hooks'
+import { useAuthStore } from '@/shared/auth/store'
+import { downloadPdf } from '@/shared/api/reports'
 import {
   useContract,
   useActivateContract,
@@ -12,6 +14,7 @@ import {
   RESOURCE_TYPE_LABELS,
   type LastPayment,
 } from '@/shared/api/contracts'
+import { useContragent } from '@/shared/api/contragents'
 import {
   useContractAttachments,
   useAttachFile,
@@ -21,6 +24,7 @@ import {
 import { useContractEvents, type ContractEventLogEntry } from '@/shared/api/contracts'
 import { useFiles, FILE_STATUS_LABELS, FILE_STATUS_COLORS, formatFileSize } from '@/shared/api/files'
 import { Button } from '@/shared/ui/button'
+import { ObjectsSection } from './components/ObjectsSection'
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-muted text-muted-foreground',
@@ -31,6 +35,20 @@ const STATUS_COLORS: Record<string, string> = {
 
 function formatAmount(kopecks: number) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(kopecks / 100)
+}
+
+function ContragentLink({ contragentId }: { contragentId: string }) {
+  const { data, isLoading } = useContragent(contragentId)
+  if (isLoading) return <span className="inline-block h-4 w-32 animate-pulse rounded bg-muted" />
+  if (!data) return <span className="text-muted-foreground">—</span>
+  return (
+    <Link
+      href={`/dashboard/contragents/${contragentId}`}
+      className="text-primary hover:underline"
+    >
+      {data.name}
+    </Link>
+  )
 }
 
 function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -279,6 +297,8 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params)
   const router = useRouter()
   const canWrite = useCan('contracts.write')
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data, isLoading, isError, error } = useContract(id)
   const { data: attachments } = useContractAttachments(id)
@@ -324,6 +344,17 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
     })
   }
 
+  const handlePdf = async () => {
+    setPdfLoading(true)
+    try {
+      await downloadPdf(`/api/v1/reports/contracts/${id}/pdf/`, `contract_${id}.pdf`, accessToken)
+    } catch {
+      alert('Ошибка при формировании PDF')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   return (
     <div className="p-6 max-w-2xl">
       <div className="mb-6 flex items-start gap-4">
@@ -341,39 +372,50 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
           </div>
           <p className="text-xs text-muted-foreground font-mono">{data.contract_number}</p>
         </div>
-        {canWrite && isMutable && (
-          <div className="flex gap-2 shrink-0">
-            {isDraft && (
-              <>
-                <Link href={`/dashboard/contracts/${id}/edit`}>
-                  <Button variant="outline" size="sm">Изменить</Button>
-                </Link>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" loading={pdfLoading} onClick={handlePdf}>
+            PDF
+          </Button>
+          {canWrite && isMutable && (
+            <>
+              {isDraft && (
+                <>
+                  <Link href={`/dashboard/contracts/${id}/edit`}>
+                    <Button variant="outline" size="sm">Изменить</Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    loading={activateMutation.isPending}
+                    onClick={handleActivate}
+                  >
+                    Активировать
+                  </Button>
+                </>
+              )}
+              {isActive && (
                 <Button
+                  variant="destructive"
                   size="sm"
-                  loading={activateMutation.isPending}
-                  onClick={handleActivate}
+                  loading={closeMutation.isPending}
+                  disabled={!hasAttachments}
+                  title={!hasAttachments ? 'Прикрепите хотя бы один файл перед закрытием' : undefined}
+                  onClick={handleClose}
                 >
-                  Активировать
+                  Закрыть
                 </Button>
-              </>
-            )}
-            {isActive && (
-              <Button
-                variant="destructive"
-                size="sm"
-                loading={closeMutation.isPending}
-                disabled={!hasAttachments}
-                title={!hasAttachments ? 'Прикрепите хотя бы один файл перед закрытием' : undefined}
-                onClick={handleClose}
-              >
-                Закрыть
-              </Button>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <dl className="divide-y divide-border rounded-md border border-border">
+        {data.contragent_id && (
+          <div className="flex px-4 py-3 gap-4">
+            <dt className="w-44 shrink-0 text-sm font-medium text-muted-foreground">Контрагент</dt>
+            <dd className="text-sm flex-1"><ContragentLink contragentId={data.contragent_id} /></dd>
+          </div>
+        )}
         <Row label="Тип ресурса" value={RESOURCE_TYPE_LABELS[data.resource_type] ?? data.resource_type} />
         <Row label="Сумма договора" value={formatAmount(data.total_amount)} />
         <Row label="Оплачено" value={formatAmount(data.paid_amount)} />
@@ -394,6 +436,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         filesQuarantined={data.files_quarantined ?? 0}
       />
       <EventTimeline contractId={id} />
+      <ObjectsSection contractId={id} />
     </div>
   )
 }
