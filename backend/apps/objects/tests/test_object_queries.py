@@ -53,7 +53,7 @@ class TestObjectQueries:
         result = get_objects_page(limit=20)
 
         assert result["count"] == 3
-        returned_ids = {r.properties.id for r in result["results"]}
+        returned_ids = {r.id for r in result["results"]}
         other_ids = set(SupplyObject.objects.filter(tenant_id=self.other_tenant_id).values_list("id", flat=True))
         assert returned_ids.isdisjoint(other_ids)
 
@@ -78,8 +78,8 @@ class TestObjectQueries:
         page1 = get_objects_page(limit=2)
         page2 = get_objects_page(cursor=uuid.UUID(page1["next_cursor"]), limit=2)
 
-        ids1 = {r.properties.id for r in page1["results"]}
-        ids2 = {r.properties.id for r in page2["results"]}
+        ids1 = {r.id for r in page1["results"]}
+        ids2 = {r.id for r in page2["results"]}
         assert ids1.isdisjoint(ids2)
 
     # --- Filters ---
@@ -90,7 +90,7 @@ class TestObjectQueries:
 
         result = get_objects_page(object_type=SupplyObjectType.GRS, limit=20)
         assert result["count"] == 1
-        assert result["results"][0].properties.object_type == SupplyObjectType.GRS
+        assert result["results"][0].object_type == SupplyObjectType.GRS
 
     def test_filter_by_resource_type(self):
         _make_obj(self.tenant_id, resource_type=ResourceType.GAS)
@@ -98,7 +98,7 @@ class TestObjectQueries:
 
         result = get_objects_page(resource_type=ResourceType.WATER, limit=20)
         assert result["count"] == 1
-        assert result["results"][0].properties.resource_type == ResourceType.WATER
+        assert result["results"][0].resource_type == ResourceType.WATER
 
     def test_filter_by_contract_id(self):
         contract_id = uuid.uuid4()
@@ -107,7 +107,7 @@ class TestObjectQueries:
 
         result = get_objects_page(contract_id=contract_id, limit=20)
         assert result["count"] == 1
-        assert result["results"][0].properties.contract_id == contract_id
+        assert result["results"][0].contract_id == contract_id
 
     def test_filter_by_contract_id_other_tenant_returns_empty(self):
         contract_id = uuid.uuid4()
@@ -129,7 +129,7 @@ class TestObjectQueries:
         result = get_objects_page(bbox=moscow_bbox, limit=20)
 
         assert result["count"] == 1
-        assert result["results"][0].properties.name == "В Москве"
+        assert result["results"][0].name == "В Москве"
 
     def test_bbox_filter_excludes_objects_without_location(self):
         _make_obj(self.tenant_id, name="Без координат")  # location=None
@@ -138,7 +138,7 @@ class TestObjectQueries:
         moscow_bbox = (37.0, 55.0, 38.0, 56.0)
         result = get_objects_page(bbox=moscow_bbox, limit=20)
 
-        names = {r.properties.name for r in result["results"]}
+        names = {r.name for r in result["results"]}
         assert "С координатами" in names
         assert "Без координат" not in names
 
@@ -167,9 +167,10 @@ class TestObjectQueries:
 
     def test_get_object_detail_returns_feature(self):
         obj = _make_obj(self.tenant_id, name="Детальный")
-        feature = get_object_detail(obj.id)
-        assert feature.properties.id == obj.id
-        assert feature.properties.name == "Детальный"
+        detail = get_object_detail(obj.id)
+        assert detail.id == obj.id
+        assert detail.name == "Детальный"
+        assert len(detail.stages) == 10
 
     def test_get_object_detail_wrong_tenant_raises(self):
         obj = _make_obj(self.other_tenant_id)
@@ -232,5 +233,5 @@ class TestObjectDeleteService:
         obj = _make_obj(self.tenant_id)
         ObjectDeleteService.soft_delete(obj.id)
         result = get_objects_page(limit=20)
-        ids = {r.properties.id for r in result["results"]}
+        ids = {r.id for r in result["results"]}
         assert obj.id not in ids

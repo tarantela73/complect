@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -31,6 +32,91 @@ class FeatureCollectionSchema(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[FeatureSchema]
 
+
+# --- Enriched detail schema ---
+
+class UserDisplaySchema(BaseModel):
+    id: uuid.UUID
+    full_name: str
+
+
+class ObjectStageResponse(BaseModel):
+    stage_key: str
+    status: str
+    order: int
+    is_optional: bool
+    completed_at: Optional[datetime] = None
+    completed_by_id: Optional[uuid.UUID] = None
+    note: str = ""
+
+
+class SupplyObjectDetailResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    address: str
+    object_type: str
+    resource_type: str
+    status: str
+    description: str
+    manager: Optional[UserDisplaySchema] = None
+    foreman: Optional[UserDisplaySchema] = None
+    team_name: str
+    contract_id: Optional[uuid.UUID] = None
+    contragent_id: Optional[uuid.UUID] = None
+    planned_start_date: Optional[date] = None
+    planned_end_date: Optional[date] = None
+    actual_start_date: Optional[date] = None
+    actual_end_date: Optional[date] = None
+    stages: list[ObjectStageResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+# --- Update request ---
+
+class SupplyObjectUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    address: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = None
+    status: Optional[str] = None
+    manager_id: Optional[uuid.UUID] = None
+    foreman_id: Optional[uuid.UUID] = None
+    team_name: Optional[str] = Field(None, max_length=255)
+    planned_start_date: Optional[date] = None
+    planned_end_date: Optional[date] = None
+    actual_start_date: Optional[date] = None
+    actual_end_date: Optional[date] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from apps.objects.models.supply_object import ObjectStatus
+        valid = {choice[0] for choice in ObjectStatus.choices}
+        if v not in valid:
+            msg = f"Недопустимый статус: {v}. Допустимые: {valid}"
+            raise ValueError(msg)
+        return v
+
+
+class StageUpdateRequest(BaseModel):
+    status: str
+    note: Optional[str] = None
+    completed_by_id: Optional[uuid.UUID] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        from apps.objects.models.object_stage import ObjectStageStatus
+        valid = {choice[0] for choice in ObjectStageStatus.choices}
+        if v not in valid:
+            msg = f"Недопустимый статус этапа: {v}. Допустимые: {valid}"
+            raise ValueError(msg)
+        return v
+
+
+# --- Create request ---
 
 class SupplyObjectCreateRequest(BaseModel):
     name: str = Field(..., max_length=255)
@@ -71,6 +157,14 @@ class UpdateLocationRequest(BaseModel):
 
 
 class SupplyObjectListResponse(BaseModel):
-    results: list[FeatureSchema]
+    results: list[SupplyObjectDetailResponse]
     next_cursor: Optional[str] = None
     count: int
+
+
+class ObjectContractLinkRequest(BaseModel):
+    contract_id: uuid.UUID
+
+
+class ObjectContractResponse(BaseModel):
+    contract_id: uuid.UUID
