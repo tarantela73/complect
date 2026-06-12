@@ -1,7 +1,13 @@
 import uuid
 
-from apps.common.contracts.user_info_contracts import UserDisplayDTO, UserInfoProtocol
+from apps.common.contracts.user_info_contracts import UserDisplayDTO
 from apps.users.models import User
+
+_UUID_PK_MASK = 0xFFFFFFFFFFFF
+
+
+def _uuid_to_pk(uid: uuid.UUID) -> int:
+    return uid.int & _UUID_PK_MASK
 
 
 class DjangoUserInfoProvider:
@@ -14,10 +20,13 @@ class DjangoUserInfoProvider:
     ) -> dict[uuid.UUID, UserDisplayDTO]:
         if not ids:
             return {}
-        users = User.objects.filter(id__in=ids, tenant_id=tenant_id).values("id", "first_name", "last_name")
+        pk_to_uuid: dict[int, uuid.UUID] = {_uuid_to_pk(uid): uid for uid in ids}
+        users = User.objects.filter(
+            pk__in=list(pk_to_uuid.keys()), tenant_id=tenant_id
+        ).values("pk", "first_name", "last_name", "username")
         result: dict[uuid.UUID, UserDisplayDTO] = {}
         for u in users:
-            uid = u["id"]
-            full_name = f"{u['first_name']} {u['last_name']}".strip() or str(uid)
+            uid = pk_to_uuid[u["pk"]]
+            full_name = f"{u['first_name']} {u['last_name']}".strip() or u["username"]
             result[uid] = UserDisplayDTO(user_id=uid, full_name=full_name)
         return result

@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCan } from '@/shared/auth/hooks'
@@ -15,8 +15,73 @@ import {
   REQUEST_SOURCE_LABELS,
   REQUEST_RESOURCE_LABELS,
 } from '@/shared/api/requests'
+import { useAdminUsers } from '@/shared/api/admin'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/ui/utils'
+
+function AssignManagerModal({
+  requestId,
+  onClose,
+}: {
+  requestId: string
+  onClose: () => void
+}) {
+  const assign = useAssignRequest(requestId)
+  const { data: usersData, isLoading } = useAdminUsers()
+  const [selectedUuid, setSelectedUuid] = useState('')
+
+  const activeUsers = (usersData?.items ?? []).filter((u) => u.is_active)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedUuid) return
+    try {
+      await assign.mutateAsync({ manager_id: selectedUuid })
+      onClose()
+    } catch {
+      // error shown below
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-sm rounded-lg bg-background p-5 shadow-xl">
+        <h2 className="mb-4 text-base font-semibold">Назначить менеджера</h2>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Менеджер</label>
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Загрузка...</p>
+            ) : (
+              <select
+                required
+                value={selectedUuid}
+                onChange={(e) => setSelectedUuid(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">— выберите —</option>
+                {activeUsers.map((u) => (
+                  <option key={u.user_uuid} value={u.user_uuid}>
+                    {u.full_name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          {assign.isError && (
+            <p className="text-xs text-destructive">{(assign.error as Error).message}</p>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>Отмена</Button>
+            <Button type="submit" size="sm" disabled={!selectedUuid || assign.isPending}>
+              {assign.isPending ? 'Назначение...' : 'Назначить'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 export default function RequestDetailPage({
   params,
@@ -28,10 +93,10 @@ export default function RequestDetailPage({
   const canWrite = useCan('requests.write')
 
   const { data, isLoading, isError, error } = useRequest(id)
-  const assign = useAssignRequest(id)
   const process_ = useProcessRequest(id)
   const convert = useConvertRequest(id)
   const close = useCloseRequest(id)
+  const [showAssignModal, setShowAssignModal] = useState(false)
 
   if (isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">Загрузка...</div>
@@ -121,6 +186,7 @@ export default function RequestDetailPage({
             </dd>
           </div>
         )}
+        <Row label="Менеджер" value={data.manager_name ?? undefined} />
         <Row label="ID" value={data.id} mono />
         <Row
           label="Создана"
@@ -134,12 +200,7 @@ export default function RequestDetailPage({
             <Button
               variant="outline"
               size="sm"
-              disabled={assign.isPending}
-              onClick={() => {
-                const manager_id = prompt('UUID менеджера:')
-                if (!manager_id) return
-                assign.mutate({ manager_id })
-              }}
+              onClick={() => setShowAssignModal(true)}
             >
               Назначить менеджера
             </Button>
@@ -174,6 +235,13 @@ export default function RequestDetailPage({
             </Button>
           )}
         </div>
+      )}
+
+      {showAssignModal && (
+        <AssignManagerModal
+          requestId={id}
+          onClose={() => setShowAssignModal(false)}
+        />
       )}
     </div>
   )

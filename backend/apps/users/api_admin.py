@@ -41,6 +41,7 @@ def list_users_endpoint(request: HttpRequest):
         items=[
             {
                 "id": u.id,
+                "user_uuid": u.user_uuid,
                 "email": u.email,
                 "full_name": u.full_name,
                 "is_active": u.is_active,
