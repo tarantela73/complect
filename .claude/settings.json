@@ -261,7 +261,15 @@
       "Bash(git symbolic-ref *)",
       "Bash(make -C /home/sever/projects/Complect generate-sdk)",
       "Bash(mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/objects/\\\\[id\\\\]/components && ls /home/sever/projects/Complect/frontend/src/app/dashboard/objects/)",
-      "Bash(mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/requests/\\\\[id\\\\])"
+      "Bash(mkdir -p /home/sever/projects/Complect/frontend/src/app/dashboard/requests/\\\\[id\\\\])",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\": \"admin@test.com\", \"password\": \"admin123\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\": \"admin@test.com\", \"password\": \"Admin123!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\": \"testadmin\", \"password\": \"Admin123!\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Status:', d.get\\('status', d\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Convert result:', d\\)\")",
+      "Bash(mkdir -p /home/sever/projects/Complect/docs/plans)",
+      "Bash(python3 -c \"import sys,json;p=json.load\\(sys.stdin\\);print\\('peerDeps:', json.dumps\\(p.get\\('peerDependencies',{}\\), indent=2\\)\\)\")",
+      "mcp__playwright__browser_select_option"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",
@@ -274,7 +282,8 @@
       "/home/sever/projects/Complect/frontend",
       "/home/sever/projects/Complect/docs/solutions",
       "/home/sever/projects/Complect/frontend/src/app/dashboard/objects/[id]",
-      "/home/sever/projects/Complect/frontend/src/app/dashboard/requests"
+      "/home/sever/projects/Complect/frontend/src/app/dashboard/requests",
+      "/home/sever/projects/Complect/docs/plans"
     ]
   },
   "enabledPlugins": {

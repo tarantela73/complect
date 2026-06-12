@@ -11,7 +11,6 @@ from apps.objects.schemas.object_dto import (
     ObjectStageResponse,
     PointGeometry,
     SupplyObjectDetailResponse,
-    SupplyObjectListResponse,
     SupplyObjectProperties,
     UserDisplaySchema,
 )
@@ -29,6 +28,7 @@ def _to_feature(obj: SupplyObject) -> FeatureSchema:
             address=obj.address,
             object_type=obj.object_type,
             resource_type=obj.resource_type,
+            status=obj.status,
             contract_id=obj.contract_id,
             contragent_id=obj.contragent_id,
         ),
@@ -82,6 +82,8 @@ def _to_detail(
         actual_start_date=obj.actual_start_date,
         actual_end_date=obj.actual_end_date,
         stages=stage_responses,
+        longitude=obj.location.x if obj.location else None,
+        latitude=obj.location.y if obj.location else None,
     )
 
 

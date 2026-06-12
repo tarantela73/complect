@@ -9,6 +9,9 @@ export type ObjectList = components['schemas']['SupplyObjectListResponse']
 export type ObjectCreateRequest = components['schemas']['SupplyObjectCreateRequest']
 export type ObjectUpdateRequest = components['schemas']['SupplyObjectUpdateRequest']
 export type StageUpdateRequest = components['schemas']['StageUpdateRequest']
+export type ObjectGeoJSON = components['schemas']['FeatureCollectionSchema']
+export type ObjectFeature = components['schemas']['FeatureSchema']
+export type UpdateLocationRequest = components['schemas']['UpdateLocationRequest']
 
 export const RESOURCE_TYPE_LABELS: Record<string, string> = {
   ELECTRICITY: 'Электроснабжение',
@@ -206,5 +209,44 @@ export function useUpdateObjectStage(objectId: string) {
       return data as SupplyObject
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: objectKeys.detail(objectId) }),
+  })
+}
+
+export function useObjectsGeoJSON(params?: {
+  contract_id?: string
+  bbox?: string
+}) {
+  return useQuery({
+    queryKey: ['objects', 'geojson', params ?? {}],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET('/api/v1/objects/geojson/', {
+        params: {
+          query: {
+            contract_id: params?.contract_id as never,
+            bbox: params?.bbox,
+          },
+        },
+      })
+      if (error) throw new Error('Ошибка загрузки геоданных объектов')
+      return data as ObjectGeoJSON
+    },
+  })
+}
+
+export function useUpdateObjectLocation(objectId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: UpdateLocationRequest) => {
+      const { error } = await apiClient.PATCH('/api/v1/objects/{object_id}/location/', {
+        params: { path: { object_id: objectId } },
+        body,
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      })
+      if (error) throw new Error(apiMsg(error, 'Ошибка обновления координат'))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['objects', 'geojson'] })
+      qc.invalidateQueries({ queryKey: objectKeys.detail(objectId) })
+    },
   })
 }

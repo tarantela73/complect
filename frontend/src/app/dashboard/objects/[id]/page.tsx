@@ -13,6 +13,7 @@ import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/ui/utils'
 import { StagesChecklist } from './components/StagesChecklist'
 import { ContractsTab } from './components/ContractsTab'
+import { LocationSection } from './components/LocationSection'
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
   BUILDING: 'Здание',
@@ -135,6 +136,7 @@ export default function ObjectDetailPage({
       </div>
 
       {activeTab === 'main' && (
+        <>
         <dl className="divide-y divide-border rounded-md border border-border">
           <Row
             label="Тип объекта"
@@ -170,6 +172,12 @@ export default function ObjectDetailPage({
           />
           <Row label="ID" value={data.id} mono />
         </dl>
+        <LocationSection
+          objectId={id}
+          longitude={data.longitude}
+          latitude={data.latitude}
+        />
+        </>
       )}
 
       {activeTab === 'stages' && (
