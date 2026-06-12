@@ -5,6 +5,7 @@ from ninja import Schema
 
 class UserListItemSchema(Schema):
     id: int
+    user_uuid: str
     email: str
     full_name: str
     is_active: bool

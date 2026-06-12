@@ -31,6 +31,7 @@ class RequestResponse(BaseModel):
     source: str
     status: str
     manager_id: Optional[uuid.UUID] = None
+    manager_name: Optional[str] = None
     converted_object_id: Optional[uuid.UUID] = None
     converted_at: Optional[datetime] = None
     created_at: datetime

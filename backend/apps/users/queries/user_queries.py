@@ -11,6 +11,7 @@ from apps.users.services.auth_service import _pk_to_uuid4
 @dataclass
 class UserListItem:
     id: int
+    user_uuid: str
     email: str
     full_name: str
     is_active: bool
@@ -55,6 +56,7 @@ def list_users(tenant_id: uuid.UUID) -> list[UserListItem]:
         user_uuid = _pk_to_uuid4(u.pk)
         result.append(UserListItem(
             id=u.pk,
+            user_uuid=user_uuid,
             email=u.email,
             full_name=u.first_name or u.username,
             is_active=u.is_active,
