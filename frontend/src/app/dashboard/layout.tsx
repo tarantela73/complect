@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/reports', label: 'Отчёты', permission: 'contracts.read' },
   { href: '/dashboard/files', label: 'Файлы', permission: 'files.read' },
   { href: '/dashboard/objects', label: 'Объекты', permission: 'objects.read' },
+  { href: '/dashboard/map', label: 'Карта', permission: 'objects.read' },
   { href: '/dashboard/requests', label: 'Заявки', permission: 'requests.read' },
   { href: '/dashboard/notifications', label: 'Уведомления', permission: 'notifications.read' },
   { href: '/dashboard/integrations', label: 'Интеграции', permission: 'webhooks.read' },

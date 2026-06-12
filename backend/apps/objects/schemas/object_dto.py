@@ -16,6 +16,7 @@ class SupplyObjectProperties(BaseModel):
     address: str
     object_type: str
     resource_type: str
+    status: str
     contract_id: Optional[uuid.UUID] = None
     contragent_id: Optional[uuid.UUID] = None
 
@@ -68,6 +69,8 @@ class SupplyObjectDetailResponse(BaseModel):
     actual_start_date: Optional[date] = None
     actual_end_date: Optional[date] = None
     stages: list[ObjectStageResponse] = []
+    longitude: Optional[float] = None
+    latitude: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
