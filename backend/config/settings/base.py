@@ -43,6 +43,7 @@ LOCAL_APPS = [
     "apps.reports",
     "apps.requests",
     "apps.site",
+    "apps.map",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -257,6 +258,16 @@ CHAIN_COMPLETENESS_SLO_WINDOW_SECONDS = 300
 CHAIN_COMPLETENESS_OBSERVATION_SLACK_SECONDS = 300
 # SLO target (99.9%): fraction of chains that must be complete within the SLO window.
 CHAIN_COMPLETENESS_SLO_TARGET = 0.999
+
+# ===========================================================================
+# MAP / GIS INTEGRATION
+# ===========================================================================
+# DaData Suggestions API key (server-side only — never expose to client)
+DADATA_API_KEY = ""
+
+# Feature flag: use Росреестр PKK6 ЗОУИТ overlay instead of OpenRailwayMap.
+# Set to False if the tile service is unavailable.
+MAP_ZOUIT_ENABLED = True
 
 # ===========================================================================
 # INTERNATIONALIZATION

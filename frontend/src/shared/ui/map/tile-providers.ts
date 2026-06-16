@@ -46,16 +46,32 @@ export function getAvailableProviders(): TileProvider[] {
 
 export const ALL_PROVIDERS: TileProvider[] = [OSM, YANDEX, GIS2]
 
-export const PKK_WMS = {
-  url: 'https://pkk.rosreestr.ru/arcgis/rest/services/PKK6/CadastreSelected/MapServer/WMSServer',
-  layers: '0',
-  format: 'image/png',
-  transparent: true,
-  version: '1.1.1',
-  attribution: '&copy; Росреестр',
+// ArcGIS REST tile URL format: {z}/{y}/{x} = level/row/col (matches Leaflet XYZ scheme)
+export const PKK_TILES = {
+  url: 'https://pkk.rosreestr.ru/arcgis/rest/services/PKK6/CadastreObjects/MapServer/tile/{z}/{y}/{x}',
+  attribution: '&copy; <a href="https://rosreestr.gov.ru">Росреестр ПКК</a>',
+  maxZoom: 20,
+  minZoom: 5,
+  opacity: 0.7,
 }
 
-export const OPENINFRA_WMS = {
-  url: 'https://openinframap.org/tiles/{z}/{x}/{y}.png',
-  attribution: '&copy; <a href="https://openinframap.org">OpenInfraMap</a>',
-}
+// MAP_ZOUIT_ENABLED: true = Росреестр PKK6 ЗОУИТ охранные зоны (ЛЭП, газ, водоканал, связь)
+// false = fallback к OpenRailwayMap (ж/д коридоры). Toggle при недоступности сервиса Росреестра.
+export const MAP_ZOUIT_ENABLED = true
+
+export const OPENINFRA_TILES = MAP_ZOUIT_ENABLED
+  ? {
+      url: 'https://pkk.rosreestr.ru/arcgis/rest/services/PKK6/ZuitsPolygons/MapServer/tile/{z}/{y}/{x}',
+      attribution: '&copy; <a href="https://rosreestr.gov.ru">Росреестр ЗОУИТ</a>',
+      maxZoom: 18,
+      opacity: 0.65,
+      subdomains: undefined as string | undefined,
+    }
+  : {
+      url: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
+      attribution:
+        '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      subdomains: 'abc' as string | undefined,
+      maxZoom: 19,
+      opacity: 0.75,
+    }

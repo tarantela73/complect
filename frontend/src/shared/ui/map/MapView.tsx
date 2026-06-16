@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, WMSTileLayer, LayersControl, useMap } from 'react-leaflet'
-import type { LatLngExpression } from 'leaflet'
+import { MapContainer, TileLayer, useMap } from 'react-leaflet'
+import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import type { ObjectFeature, ObjectGeoJSON } from '@/shared/api/objects'
 import type { TileProvider } from './tile-providers'
-import { PKK_WMS } from './tile-providers'
+import { PKK_TILES, OPENINFRA_TILES } from './tile-providers'
 import { ObjectMarker } from './ObjectMarker'
+import { MapFlyTo } from './MapFlyTo'
+import type { FlyToTarget } from './MapFlyTo'
+import { CadastralHighlight } from './CadastralHighlight'
 
 const RUSSIA_CENTER: LatLngExpression = [55.75, 37.62]
 const DEFAULT_ZOOM = 6
@@ -52,6 +55,9 @@ interface MapViewProps {
   height?: string
   showCadastral?: boolean
   showInfra?: boolean
+  flyTarget?: FlyToTarget | null
+  highlightGeometry?: GeoJSON.Geometry | null
+  highlightCenter?: { lat: number; lon: number } | null
   onClick?: (lat: number, lng: number) => void
   children?: React.ReactNode
 }
@@ -65,6 +71,9 @@ export function MapView({
   height = '100%',
   showCadastral = false,
   showInfra = false,
+  flyTarget,
+  highlightGeometry,
+  highlightCenter,
   onClick,
   children,
 }: MapViewProps) {
@@ -83,39 +92,42 @@ export function MapView({
         <FixLeafletIcons />
         {onClick && <MapClickHandler onClick={onClick} />}
 
-        <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name={provider.label}>
-            <TileLayer
-              url={provider.url}
-              attribution={provider.attribution}
-              maxZoom={provider.maxZoom ?? 19}
-            />
-          </LayersControl.BaseLayer>
+        <TileLayer
+          url={provider.url}
+          attribution={provider.attribution}
+          maxZoom={provider.maxZoom ?? 19}
+        />
 
-          <LayersControl.Overlay checked={showCadastral} name="Кадастр (Росреестр)">
-            <WMSTileLayer
-              url={PKK_WMS.url}
-              layers={PKK_WMS.layers}
-              format={PKK_WMS.format}
-              transparent={PKK_WMS.transparent}
-              version={PKK_WMS.version}
-              attribution={PKK_WMS.attribution}
-              opacity={0.7}
-            />
-          </LayersControl.Overlay>
+        {showCadastral && (
+          <TileLayer
+            url={PKK_TILES.url}
+            attribution={PKK_TILES.attribution}
+            opacity={PKK_TILES.opacity}
+            maxZoom={PKK_TILES.maxZoom}
+            minZoom={PKK_TILES.minZoom}
+          />
+        )}
 
-          <LayersControl.Overlay checked={showInfra} name="Коммуникации (OSM)">
-            <TileLayer
-              url="https://openinframap.org/tiles/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://openinframap.org">OpenInfraMap</a>'
-              opacity={0.75}
-            />
-          </LayersControl.Overlay>
-        </LayersControl>
+        {showInfra && (
+          <TileLayer
+            url={OPENINFRA_TILES.url}
+            attribution={OPENINFRA_TILES.attribution}
+            opacity={OPENINFRA_TILES.opacity}
+            {...(OPENINFRA_TILES.subdomains ? { subdomains: OPENINFRA_TILES.subdomains } : {})}
+            maxZoom={OPENINFRA_TILES.maxZoom}
+          />
+        )}
 
         {pointFeatures.map((feature) => (
           <ObjectMarker key={String(feature.properties.id)} feature={feature} />
         ))}
+
+        <MapFlyTo target={flyTarget ?? null} />
+        <CadastralHighlight
+          geometry={highlightGeometry ?? null}
+          centerLat={highlightCenter?.lat}
+          centerLon={highlightCenter?.lon}
+        />
 
         {children}
       </MapContainer>

@@ -18,6 +18,7 @@ from apps.payments.api import router as payments_router
 from apps.objects.api import router as objects_router
 from apps.reports.api import router as reports_router
 from apps.requests.api import router as requests_router
+from apps.map.api.search_api import router as map_router
 from apps.site.api.cms_api import router as cms_router
 from apps.site.api.public_api import router as public_router
 from apps.users.api import router as auth_router
@@ -38,6 +39,7 @@ api.add_router("/webhooks/", webhooks_router)
 api.add_router("/payments/", payments_router)
 api.add_router("/reports/", reports_router)
 api.add_router("/requests/", requests_router)
+api.add_router("/map/", map_router)
 api.add_router("/public/", public_router)
 api.add_router("/cms/", cms_router)
 
