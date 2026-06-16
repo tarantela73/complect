@@ -18,6 +18,10 @@ export function configureAuthInterceptors(
   _onUnauthorized = onUnauthorized
 }
 
+export function getAccessToken(): string | null {
+  return _getAccessToken?.() ?? null
+}
+
 const idempotencyMiddleware: Middleware = {
   async onRequest({ request }) {
     const method = request.method.toUpperCase()

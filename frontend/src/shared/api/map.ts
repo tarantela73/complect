@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from './client'
+import { getAccessToken } from './client'
 import { env } from '@/shared/config/env'
 
 // Local types until SDK is regenerated after backend endpoint is added
@@ -33,7 +33,10 @@ export interface MapSearchResponse {
 
 async function fetchMapSearch(q: string): Promise<MapSearchResponse> {
   const url = `${env.NEXT_PUBLIC_API_URL}/map/search?q=${encodeURIComponent(q)}`
-  const resp = await fetch(url, { credentials: 'include' })
+  const headers: Record<string, string> = {}
+  const token = getAccessToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const resp = await fetch(url, { credentials: 'include', headers })
   if (!resp.ok) throw new Error(`map search ${resp.status}`)
   return resp.json()
 }

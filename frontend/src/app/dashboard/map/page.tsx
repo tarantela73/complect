@@ -34,6 +34,11 @@ export default function MapPage() {
   const [flyTarget, setFlyTarget] = useState<FlyToTarget | null>(null)
   const [highlightGeometry, setHighlightGeometry] = useState<GeoJSON.Geometry | null>(null)
   const [highlightCenter, setHighlightCenter] = useState<{ lat: number; lon: number } | null>(null)
+  const [cadastralUnavailable, setCadastralUnavailable] = useState(false)
+
+  const handleCadastralUnavailable = useCallback(() => {
+    setCadastralUnavailable(true)
+  }, [])
 
   const { data: geoJSON, isLoading, isError } = useObjectsGeoJSON()
 
@@ -127,14 +132,17 @@ export default function MapPage() {
           ))}
         </select>
 
-        <label className="flex items-center gap-1 text-xs cursor-pointer">
+        <label
+          className="flex items-center gap-1 text-xs cursor-pointer"
+          title={cadastralUnavailable ? 'Сервис ПКК Росреестра недоступен' : 'Кадастровые границы (ПКК Росреестра)'}
+        >
           <input
             type="checkbox"
             checked={showCadastral}
-            onChange={(e) => setShowCadastral(e.target.checked)}
+            onChange={(e) => { setShowCadastral(e.target.checked); setCadastralUnavailable(false) }}
             className="rounded"
           />
-          Кадастр
+          Кадастр{cadastralUnavailable && <span className="text-destructive ml-0.5">(!)</span>}
         </label>
 
         <label className="flex items-center gap-1 text-xs cursor-pointer">
@@ -180,6 +188,7 @@ export default function MapPage() {
             highlightGeometry={highlightGeometry}
             highlightCenter={highlightCenter}
             onClick={handleMapClick}
+            onCadastralUnavailable={handleCadastralUnavailable}
             height="100%"
           />
         )}
