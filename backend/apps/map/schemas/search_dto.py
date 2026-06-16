@@ -29,3 +29,9 @@ class MapSearchResponse(Schema):
     objects: list[MapObjectResult]
     addresses: list[MapAddressResult]
     cadastre: list[MapCadastreResult]
+
+
+class MapReverseResult(Schema):
+    label: Optional[str] = None
+    lat: float
+    lon: float

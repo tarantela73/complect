@@ -4,12 +4,13 @@ from django.http import HttpRequest
 from ninja import Query, Router
 
 from apps.common.api.permissions import require_permission
-from apps.integration.dadata_client import suggest_address
+from apps.integration.dadata_client import geolocate_address, suggest_address
 from apps.integration.pkk_client import search_cadastre
 from apps.map.schemas.search_dto import (
     MapAddressResult,
     MapCadastreResult,
     MapObjectResult,
+    MapReverseResult,
     MapSearchResponse,
 )
 from apps.objects.queries.map_search import search_objects_for_map
@@ -73,3 +74,16 @@ async def map_search(
         )
 
     return 200, MapSearchResponse(objects=objects, addresses=addresses, cadastre=cadastre)
+
+
+@router.get("/reverse", response={200: MapReverseResult, 403: dict})
+@require_permission("read", "objects")
+async def map_reverse(
+    request: HttpRequest,
+    lat: float = Query(...),
+    lon: float = Query(...),
+):
+    result = await geolocate_address(lat, lon)
+    if result is None:
+        return 200, MapReverseResult(label=None, lat=lat, lon=lon)
+    return 200, MapReverseResult(label=result.label, lat=result.lat, lon=result.lon)

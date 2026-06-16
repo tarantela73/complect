@@ -223,6 +223,7 @@ services:
       DATA_UPLOAD_MAX_MEMORY_SIZE: 52428800
       FILE_UPLOAD_MAX_MEMORY_SIZE: 52428800
       EXPECTED_GATEWAY_TOKEN: complect_internal_secure_mesh_token_2026
+      DADATA_API_KEY: ${DADATA_API_KEY}
     ports:
       - "8010:8010"
     networks:

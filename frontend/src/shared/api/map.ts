@@ -32,7 +32,7 @@ export interface MapSearchResponse {
 }
 
 async function fetchMapSearch(q: string): Promise<MapSearchResponse> {
-  const url = `${env.NEXT_PUBLIC_API_URL}/map/search?q=${encodeURIComponent(q)}`
+  const url = `${env.NEXT_PUBLIC_API_URL}/api/v1/map/search?q=${encodeURIComponent(q)}`
   const headers: Record<string, string> = {}
   const token = getAccessToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -54,4 +54,20 @@ export const EMPTY_SEARCH_RESPONSE: MapSearchResponse = {
   objects: [],
   addresses: [],
   cadastre: [],
+}
+
+export interface MapReverseResult {
+  label: string | null
+  lat: number
+  lon: number
+}
+
+export async function reverseGeocode(lat: number, lon: number): Promise<MapReverseResult> {
+  const url = `${env.NEXT_PUBLIC_API_URL}/api/v1/map/reverse?lat=${lat}&lon=${lon}`
+  const headers: Record<string, string> = {}
+  const token = getAccessToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const resp = await fetch(url, { credentials: 'include', headers })
+  if (!resp.ok) throw new Error(`map reverse ${resp.status}`)
+  return resp.json()
 }
