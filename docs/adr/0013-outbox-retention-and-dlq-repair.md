@@ -12,7 +12,7 @@
 После ADR-0010–0012 система образует три слоя истины с разными гарантиями хранения:
 
 | Слой | Хранилище | Роль | Текущий lifecycle |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Transport truth | `OutboxRecord` | delivery buffer | удаляется / архивируется? — **не определено** |
 | Consumption truth | `ProcessedEvent` / `AggregateSequenceFence` | delivery ledger | не определено |
 | Business truth | domain tables | canonical state | permanent |

@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, useMap } from 'react-leaflet'
-import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
+import type { LatLngExpression } from 'leaflet'
 import type { ObjectFeature, ObjectGeoJSON } from '@/shared/api/objects'
 import type { TileProvider } from './tile-providers'
 import { PKK_TILES, OPENINFRA_TILES } from './tile-providers'
 import { ObjectMarker } from './ObjectMarker'
-import { MapFlyTo } from './MapFlyTo'
 import type { FlyToTarget } from './MapFlyTo'
 import { CadastralHighlight } from './CadastralHighlight'
 
@@ -46,6 +45,48 @@ function MapClickHandler({ onClick }: MapClickHandlerProps) {
   return null
 }
 
+export interface ClickedPoint {
+  lat: number
+  lon: number
+  label: string | null
+  loading: boolean
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+  )
+}
+
+function ClickPopup({ point }: { point: ClickedPoint | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!point) return
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const L = require('leaflet')
+    const coords = `${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}`
+    const addr = point.loading
+      ? 'Определение адреса…'
+      : point.label
+        ? escapeHtml(point.label)
+        : 'Адрес не найден'
+    const html =
+      `<div style="font-size:12px;line-height:1.4;min-width:140px">` +
+      `<div style="font-weight:500;margin-bottom:2px">${addr}</div>` +
+      `<div style="color:#666;font-family:monospace">${coords}</div>` +
+      `</div>`
+    const popup = L.popup({ closeButton: true })
+      .setLatLng([point.lat, point.lon])
+      .setContent(html)
+      .openOn(map)
+    return () => {
+      map.closePopup(popup)
+    }
+  }, [point, map])
+  return null
+}
+
 
 interface MapViewProps {
   geoJSON?: ObjectGeoJSON
@@ -60,6 +101,7 @@ interface MapViewProps {
   flyTarget?: FlyToTarget | null
   highlightGeometry?: GeoJSON.Geometry | null
   highlightCenter?: { lat: number; lon: number } | null
+  clickedPoint?: ClickedPoint | null
   onClick?: (lat: number, lng: number) => void
   children?: React.ReactNode
 }
@@ -76,6 +118,7 @@ export function MapView({
   flyTarget,
   highlightGeometry,
   highlightCenter,
+  clickedPoint,
   onClick,
   onCadastralUnavailable,
   children,
@@ -84,6 +127,18 @@ export function MapView({
   const cadastralErrorFiredRef = useRef(false)
   const features = featuresProp ?? geoJSON?.features ?? []
   const pointFeatures = features.filter((f) => f.geometry !== null && f.geometry !== undefined)
+
+  // flyTo через mapRef — обходит цепочку prop→child→useEffect, которая ненадёжна
+  // с dynamic() в Next.js 15 / React 19
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !flyTarget) return
+    if (flyTarget.bounds) {
+      map.fitBounds(flyTarget.bounds, { padding: [20, 20] })
+    } else if (flyTarget.lat != null && flyTarget.lon != null) {
+      map.flyTo([flyTarget.lat, flyTarget.lon], flyTarget.zoom ?? 16, { duration: 1 })
+    }
+  }, [flyTarget])
 
   const handleCadastralTileError = () => {
     if (!cadastralErrorFiredRef.current) {
@@ -134,12 +189,13 @@ export function MapView({
           <ObjectMarker key={String(feature.properties.id)} feature={feature} />
         ))}
 
-        <MapFlyTo target={flyTarget ?? null} />
         <CadastralHighlight
           geometry={highlightGeometry ?? null}
           centerLat={highlightCenter?.lat}
           centerLon={highlightCenter?.lon}
         />
+
+        <ClickPopup point={clickedPoint ?? null} />
 
         {children}
       </MapContainer>

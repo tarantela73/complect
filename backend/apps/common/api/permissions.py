@@ -25,6 +25,7 @@ import functools
 import uuid
 from typing import Callable
 
+from asgiref.sync import sync_to_async
 from django.core.exceptions import PermissionDenied
 
 from apps.common.security.policy_engine import PolicyEngine
@@ -59,7 +60,9 @@ def require_permission(action: str, resource: str) -> Callable:
         if asyncio.iscoroutinefunction(func):
             @functools.wraps(func)
             async def async_wrapper(request, *args, **kwargs):
-                _check(request)
+                # _check runs a sync ORM query (RBAC cache miss → RoleBinding lookup);
+                # must be offloaded to a thread to avoid SynchronousOnlyOperation.
+                await sync_to_async(_check, thread_sensitive=True)(request)
                 return await func(request, *args, **kwargs)
 
             async_wrapper._rbac_action = action

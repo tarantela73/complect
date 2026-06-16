@@ -9,6 +9,8 @@ import type { TileProvider } from '@/shared/ui/map/tile-providers'
 import { MapSearchBar } from '@/shared/ui/map/MapSearchBar'
 import type { SearchResult } from '@/shared/ui/map/MapSearchBar'
 import type { FlyToTarget } from '@/shared/ui/map/MapFlyTo'
+import type { ClickedPoint } from '@/shared/ui/map/MapView'
+import { reverseGeocode } from '@/shared/api/map'
 
 const MapView = dynamic(() => import('@/shared/ui/map/MapView').then((m) => m.MapView), {
   ssr: false,
@@ -34,6 +36,7 @@ export default function MapPage() {
   const [flyTarget, setFlyTarget] = useState<FlyToTarget | null>(null)
   const [highlightGeometry, setHighlightGeometry] = useState<GeoJSON.Geometry | null>(null)
   const [highlightCenter, setHighlightCenter] = useState<{ lat: number; lon: number } | null>(null)
+  const [clickedPoint, setClickedPoint] = useState<ClickedPoint | null>(null)
   const [cadastralUnavailable, setCadastralUnavailable] = useState(false)
 
   const handleCadastralUnavailable = useCallback(() => {
@@ -55,30 +58,39 @@ export default function MapPage() {
 
   const handleSearchResult = useCallback(
     (result: SearchResult) => {
+      setClickedPoint(null)
       if (result.type === 'address') {
         setHighlightGeometry(null)
-        setHighlightCenter(null)
+        setHighlightCenter({ lat: result.data.lat, lon: result.data.lon })
         setFlyTarget({ lat: result.data.lat, lon: result.data.lon, zoom: 16 })
       } else if (result.type === 'cadastre') {
         const cad = result.data
         setHighlightGeometry(cad.geometry)
         setHighlightCenter({ lat: cad.center_lat, lon: cad.center_lon })
-        if (cad.geometry) {
-          // fitBounds via flyTarget with bounds extracted from geometry
-          setFlyTarget({ lat: cad.center_lat, lon: cad.center_lon, zoom: 17 })
-        } else {
-          setFlyTarget({ lat: cad.center_lat, lon: cad.center_lon, zoom: 17 })
-        }
+        setFlyTarget({ lat: cad.center_lat, lon: cad.center_lon, zoom: 17 })
       } else if (result.type === 'object') {
-        router.push(`/dashboard/objects/${result.data.id}`)
+        if (result.data.lat != null && result.data.lon != null) {
+          setHighlightGeometry(null)
+          setHighlightCenter({ lat: result.data.lat, lon: result.data.lon })
+          setFlyTarget({ lat: result.data.lat, lon: result.data.lon, zoom: 17 })
+        } else {
+          router.push(`/dashboard/objects/${result.data.id}`)
+        }
       }
     },
     [router],
   )
 
-  const handleMapClick = useCallback(() => {
+  const handleMapClick = useCallback(async (lat: number, lon: number) => {
     setHighlightGeometry(null)
     setHighlightCenter(null)
+    setClickedPoint({ lat, lon, label: null, loading: true })
+    try {
+      const r = await reverseGeocode(lat, lon)
+      setClickedPoint({ lat, lon, label: r.label, loading: false })
+    } catch {
+      setClickedPoint({ lat, lon, label: null, loading: false })
+    }
   }, [])
 
   const handleGeolocate = useCallback(() => {
@@ -95,7 +107,7 @@ export default function MapPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-background shrink-0 flex-wrap">
+      <div className="relative z-20 flex items-center gap-3 px-4 py-2 border-b border-border bg-background shrink-0 flex-wrap">
         <span className="text-sm font-medium">Карта объектов</span>
 
         <MapSearchBar onResult={handleSearchResult} />
@@ -173,7 +185,7 @@ export default function MapPage() {
         </span>
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="relative z-0 flex-1 min-h-0">
         {isError ? (
           <div className="flex items-center justify-center h-full text-sm text-destructive">
             Ошибка загрузки данных
@@ -187,6 +199,7 @@ export default function MapPage() {
             flyTarget={flyTarget}
             highlightGeometry={highlightGeometry}
             highlightCenter={highlightCenter}
+            clickedPoint={clickedPoint}
             onClick={handleMapClick}
             onCadastralUnavailable={handleCadastralUnavailable}
             height="100%"
