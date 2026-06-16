@@ -70,6 +70,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     # payments (bank statement import)
     Permission("payments", "read"),
     Permission("payments", "write"),
+    # requests (lead form / CRM)
+    Permission("requests", "read"),
+    Permission("requests", "write"),
+    # cms (public site content management)
+    Permission("cms", "read"),
+    Permission("cms", "write"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

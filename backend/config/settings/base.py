@@ -42,6 +42,7 @@ LOCAL_APPS = [
     "apps.payments",
     "apps.reports",
     "apps.requests",
+    "apps.site",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -396,3 +397,16 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+# ===========================================================================
+# PUBLIC SITE / CMS (ADR-0023)
+# ===========================================================================
+# UUID of the tenant that owns public-site data. Required when apps.site is installed.
+# Must be a valid UUID string. Override in local.py / prod.py from env.
+PUBLIC_SITE_TENANT_ID: str | None = None
+
+# Cloudflare Turnstile secret for server-side verification of lead form submissions.
+# See: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
+# Use "1x0000000000000000000000000000000AA" for dev (Turnstile always-pass test secret).
+CF_TURNSTILE_SECRET_KEY: str = ""
+

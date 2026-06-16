@@ -1,0 +1,108 @@
+'use client'
+
+import { use, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { useCan } from '@/shared/auth/hooks'
+import { useCmsPage, useSaveCmsPage } from '@/shared/api/cms'
+
+export default function CmsSectionPage({ params }: { params: Promise<{ section: string }> }) {
+  const { section } = use(params)
+  const router = useRouter()
+  const canWrite = useCan('cms.write')
+  const canRead = useCan('cms.read')
+
+  const { data: page, isLoading } = useCmsPage(section)
+  const { mutate: savePage, isPending: isSaving, isSuccess } = useSaveCmsPage(section)
+
+  const editor = useEditor({
+    extensions: [StarterKit],
+    editable: canWrite,
+    content: page?.content ?? { type: 'doc', content: [] },
+  })
+
+  useEffect(() => {
+    if (page?.content && editor && !editor.isDestroyed) {
+      editor.commands.setContent(page.content as Parameters<typeof editor.commands.setContent>[0])
+    }
+  }, [page?.content, editor])
+
+  useEffect(() => {
+    if (!canRead && !isLoading) {
+      router.replace('/dashboard')
+    }
+  }, [canRead, isLoading, router])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center text-muted-foreground">
+        Загрузка...
+      </div>
+    )
+  }
+
+  const handleSave = () => {
+    if (!editor) return
+    savePage({ content: editor.getJSON() as Record<string, unknown> })
+  }
+
+  const publicPath = section.startsWith('services-')
+    ? `/services/${section.replace('services-', '')}`
+    : `/${section === 'home' ? '' : section}`
+
+  return (
+    <div className="p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => router.back()}
+            className="mb-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← Назад к разделам
+          </button>
+          <h1 className="text-2xl font-semibold">{section}</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href={publicPath}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border px-4 py-2 text-sm hover:bg-muted"
+          >
+            Предпросмотр
+          </a>
+          {canWrite && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isSaving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isSuccess && (
+        <div className="mb-4 rounded-md bg-green-50 px-4 py-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-400">
+          Изменения сохранены
+        </div>
+      )}
+
+      <div className="rounded-lg border bg-card shadow-sm">
+        <div className="border-b p-3">
+          <p className="text-xs text-muted-foreground">
+            {canWrite ? 'Редактор контента' : 'Просмотр контента (нет прав на редактирование)'}
+          </p>
+        </div>
+        <div className="p-4">
+          <EditorContent
+            editor={editor}
+            className="prose prose-sm max-w-none min-h-[300px] focus-within:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[280px]"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
