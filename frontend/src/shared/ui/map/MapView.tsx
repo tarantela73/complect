@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import type { ObjectFeature, ObjectGeoJSON } from '@/shared/api/objects'
@@ -46,6 +46,7 @@ function MapClickHandler({ onClick }: MapClickHandlerProps) {
   return null
 }
 
+
 interface MapViewProps {
   geoJSON?: ObjectGeoJSON
   features?: ObjectFeature[]
@@ -55,6 +56,7 @@ interface MapViewProps {
   height?: string
   showCadastral?: boolean
   showInfra?: boolean
+  onCadastralUnavailable?: () => void
   flyTarget?: FlyToTarget | null
   highlightGeometry?: GeoJSON.Geometry | null
   highlightCenter?: { lat: number; lon: number } | null
@@ -75,11 +77,20 @@ export function MapView({
   highlightGeometry,
   highlightCenter,
   onClick,
+  onCadastralUnavailable,
   children,
 }: MapViewProps) {
   const mapRef = useRef<import('leaflet').Map | null>(null)
+  const cadastralErrorFiredRef = useRef(false)
   const features = featuresProp ?? geoJSON?.features ?? []
   const pointFeatures = features.filter((f) => f.geometry !== null && f.geometry !== undefined)
+
+  const handleCadastralTileError = () => {
+    if (!cadastralErrorFiredRef.current) {
+      cadastralErrorFiredRef.current = true
+      onCadastralUnavailable?.()
+    }
+  }
 
   return (
     <div style={{ height, width: '100%' }}>
@@ -105,6 +116,7 @@ export function MapView({
             opacity={PKK_TILES.opacity}
             maxZoom={PKK_TILES.maxZoom}
             minZoom={PKK_TILES.minZoom}
+            eventHandlers={{ tileerror: handleCadastralTileError }}
           />
         )}
 
