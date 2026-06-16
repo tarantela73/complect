@@ -116,6 +116,10 @@ CF_TURNSTILE_SECRET_KEY = os.getenv(
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 CORS_ALLOW_CREDENTIALS = True
+
+# Map / GIS integration
+DADATA_API_KEY = os.getenv("DADATA_API_KEY", "")
+MAP_ZOUIT_ENABLED = _env_bool("MAP_ZOUIT_ENABLED", default=True)
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",

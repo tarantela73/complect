@@ -276,7 +276,14 @@
       "Bash(rm /home/sever/projects/Complect/frontend/src/app/page.tsx && echo \"deleted\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; print\\('\\\\n'.join\\(k for k in deps if 'tiptap' in k or 'turnstile' in k\\)\\)\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\)}; print\\('\\\\n'.join\\(k+': '+v for k,v in deps.items\\(\\) if 'tiptap' in k or 'turnstile' in k\\)\\)\")",
-      "Bash(mkdir -p \"/home/sever/projects/Complect/frontend/src/app/dashboard/cms/[section]\")"
+      "Bash(mkdir -p \"/home/sever/projects/Complect/frontend/src/app/dashboard/cms/[section]\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login/ -H 'Content-Type: application/json' -H 'X-Gateway-Token: __CMDSUB_OUTPUT__')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login/ -H 'Content-Type: application/json' -H 'X-Gateway-Token: complect_internal_secure_mesh_token_2026' -d '{\"username\":\"testadmin\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -v -X POST http://localhost:8000/api/v1/auth/login/ -H 'Content-Type: application/json' -H 'X-Gateway-Token: complect_internal_secure_mesh_token_2026' -d '{\"username\":\"testadmin\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/ -H \"X-Gateway-Token: complect_internal_secure_mesh_token_2026\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/auth/token/ -X POST -H 'Content-Type: application/json' -H 'X-Gateway-Token: complect_internal_secure_mesh_token_2026' -d '{\"username\":\"testadmin\",\"password\":\"Admin123!\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -H 'X-Gateway-Token: complect_internal_secure_mesh_token_2026' -H 'X-Tenant-ID: 00000000-0000-0000-0000-000000000001' -H 'X-User-ID: 00000000-0000-0000-0000-000000000000' -d '{\"username\":\"testadmin\",\"password\":\"Admin123!\"}')",
+      "mcp__playwright__browser_tabs"
     ],
     "additionalDirectories": [
       "/home/sever/.claude",

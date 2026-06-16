@@ -1,10 +1,14 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useState } from 'react'
 import { useObjectsGeoJSON, RESOURCE_TYPE_LABELS, OBJECT_STATUS_LABELS } from '@/shared/api/objects'
 import { ALL_PROVIDERS } from '@/shared/ui/map/tile-providers'
 import type { TileProvider } from '@/shared/ui/map/tile-providers'
+import { MapSearchBar } from '@/shared/ui/map/MapSearchBar'
+import type { SearchResult } from '@/shared/ui/map/MapSearchBar'
+import type { FlyToTarget } from '@/shared/ui/map/MapFlyTo'
 
 const MapView = dynamic(() => import('@/shared/ui/map/MapView').then((m) => m.MapView), {
   ssr: false,
@@ -19,11 +23,17 @@ const RESOURCE_TYPES = Object.entries(RESOURCE_TYPE_LABELS)
 const OBJECT_STATUSES = Object.entries(OBJECT_STATUS_LABELS)
 
 export default function MapPage() {
+  const router = useRouter()
   const [resourceType, setResourceType] = useState('')
   const [status, setStatus] = useState('')
   const [providerId, setProviderId] = useState('osm')
   const [showCadastral, setShowCadastral] = useState(false)
   const [showInfra, setShowInfra] = useState(false)
+
+  // Search state
+  const [flyTarget, setFlyTarget] = useState<FlyToTarget | null>(null)
+  const [highlightGeometry, setHighlightGeometry] = useState<GeoJSON.Geometry | null>(null)
+  const [highlightCenter, setHighlightCenter] = useState<{ lat: number; lon: number } | null>(null)
 
   const { data: geoJSON, isLoading, isError } = useObjectsGeoJSON()
 
@@ -38,10 +48,52 @@ export default function MapPage() {
   const withCoords = filteredFeatures.filter((f) => f.geometry !== null && f.geometry !== undefined)
   const total = filteredFeatures.length
 
+  const handleSearchResult = useCallback(
+    (result: SearchResult) => {
+      if (result.type === 'address') {
+        setHighlightGeometry(null)
+        setHighlightCenter(null)
+        setFlyTarget({ lat: result.data.lat, lon: result.data.lon, zoom: 16 })
+      } else if (result.type === 'cadastre') {
+        const cad = result.data
+        setHighlightGeometry(cad.geometry)
+        setHighlightCenter({ lat: cad.center_lat, lon: cad.center_lon })
+        if (cad.geometry) {
+          // fitBounds via flyTarget with bounds extracted from geometry
+          setFlyTarget({ lat: cad.center_lat, lon: cad.center_lon, zoom: 17 })
+        } else {
+          setFlyTarget({ lat: cad.center_lat, lon: cad.center_lon, zoom: 17 })
+        }
+      } else if (result.type === 'object') {
+        router.push(`/dashboard/objects/${result.data.id}`)
+      }
+    },
+    [router],
+  )
+
+  const handleMapClick = useCallback(() => {
+    setHighlightGeometry(null)
+    setHighlightCenter(null)
+  }, [])
+
+  const handleGeolocate = useCallback(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFlyTarget({ lat: pos.coords.latitude, lon: pos.coords.longitude, zoom: 15 })
+      },
+      () => {
+        // silently ignore if user denies
+      },
+    )
+  }, [])
+
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-background shrink-0 flex-wrap">
         <span className="text-sm font-medium">Карта объектов</span>
+
+        <MapSearchBar onResult={handleSearchResult} />
 
         <select
           value={resourceType}
@@ -95,6 +147,15 @@ export default function MapPage() {
           Коммуникации
         </label>
 
+        <button
+          type="button"
+          onClick={handleGeolocate}
+          title="Моё местоположение"
+          className="text-xs border border-input rounded-md px-2 py-1 bg-background hover:bg-accent transition-colors"
+        >
+          📍 Моё место
+        </button>
+
         <span className="ml-auto text-xs text-muted-foreground">
           {isLoading
             ? 'Загрузка...'
@@ -115,6 +176,10 @@ export default function MapPage() {
             provider={provider}
             showCadastral={showCadastral}
             showInfra={showInfra}
+            flyTarget={flyTarget}
+            highlightGeometry={highlightGeometry}
+            highlightCenter={highlightCenter}
+            onClick={handleMapClick}
             height="100%"
           />
         )}

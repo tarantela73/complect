@@ -20,6 +20,7 @@ Callers that want a 403 JSON envelope should catch PermissionDenied:
 """
 from __future__ import annotations
 
+import asyncio
 import functools
 import uuid
 from typing import Callable
@@ -36,23 +37,38 @@ def require_permission(action: str, resource: str) -> Callable:
     Raises PermissionDenied if:
     - request has no jwt_user_id / jwt_tenant_id (unauthenticated)
     - RBAC mode is ENFORCE and the actor lacks the required permission
+
+    Supports both sync and async view functions.
     """
 
+    def _check(request) -> None:
+        actor_id: uuid.UUID | None = getattr(request, "jwt_user_id", None)
+        tenant_id: uuid.UUID | None = getattr(request, "jwt_tenant_id", None)
+
+        if actor_id is None or tenant_id is None:
+            raise PermissionDenied("Authentication required")
+
+        PolicyEngine.check(
+            actor_id=actor_id,
+            tenant_id=tenant_id,
+            action=action,
+            resource=resource,
+        )
+
     def decorator(func: Callable) -> Callable:
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(request, *args, **kwargs):
+                _check(request)
+                return await func(request, *args, **kwargs)
+
+            async_wrapper._rbac_action = action
+            async_wrapper._rbac_resource = resource
+            return async_wrapper
+
         @functools.wraps(func)
         def wrapper(request, *args, **kwargs):
-            actor_id: uuid.UUID | None = getattr(request, "jwt_user_id", None)
-            tenant_id: uuid.UUID | None = getattr(request, "jwt_tenant_id", None)
-
-            if actor_id is None or tenant_id is None:
-                raise PermissionDenied("Authentication required")
-
-            PolicyEngine.check(
-                actor_id=actor_id,
-                tenant_id=tenant_id,
-                action=action,
-                resource=resource,
-            )
+            _check(request)
             return func(request, *args, **kwargs)
 
         wrapper._rbac_action = action
