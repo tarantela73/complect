@@ -22,6 +22,8 @@ class ResourceType(models.TextChoices):
     GAS = "GAS", "Газоснабжение"
     WATER = "WATER", "Водоснабжение"
     HEAT = "HEAT", "Теплоснабжение"
+    SEWAGE = "SEWAGE", "Водоотведение"
+    CONSTRUCTION = "CONSTRUCTION", "Строительство"
     OTHER = "OTHER", "Прочее"
 
 

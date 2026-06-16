@@ -1,10 +1,17 @@
 # backend/apps/common/tenancy/middleware.py
+import uuid
+
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.http import JsonResponse
 
 from apps.common.api.errors import make_error_response
+from apps.common.context.core import set_tenant_id
 from apps.common.context.guard import ContextGuard
 from apps.common.context.propagation import apply_propagation_context
+
+# Prefix for anonymous public endpoints (Cloudflare Turnstile + tenant-from-config).
+PUBLIC_API_PREFIX = "/api/v1/public/"
 
 
 class AsgiTenantEnforcementMiddleware:
@@ -28,6 +35,21 @@ class AsgiTenantEnforcementMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
+        self._validate_public_site_settings()
+
+    @staticmethod
+    def _validate_public_site_settings() -> None:
+        raw = getattr(settings, "PUBLIC_SITE_TENANT_ID", None)
+        if raw is None:
+            raise ImproperlyConfigured(
+                "PUBLIC_SITE_TENANT_ID must be set in settings when apps.site is installed."
+            )
+        try:
+            uuid.UUID(str(raw))
+        except (ValueError, AttributeError) as exc:
+            raise ImproperlyConfigured(
+                f"PUBLIC_SITE_TENANT_ID is not a valid UUID: {raw!r}"
+            ) from exc
 
     def __call__(self, request):
         if request.method == "OPTIONS":
@@ -40,6 +62,12 @@ class AsgiTenantEnforcementMiddleware:
 
         try:
             ContextGuard.assert_clean()
+
+            # Public API: anonymous access with tenant injected from config (ADR-0023)
+            if path.startswith(PUBLIC_API_PREFIX):
+                tenant_id = uuid.UUID(str(settings.PUBLIC_SITE_TENANT_ID))
+                set_tenant_id(tenant_id)
+                return self.get_response(request)
 
             # GATEWAY TRUST BOUNDARY — enforced for all non-public paths
             expected_token = getattr(settings, "EXPECTED_GATEWAY_TOKEN", None)

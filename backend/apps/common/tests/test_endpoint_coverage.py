@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-# Prefixes whose endpoints establish identity rather than require it.
-# These are intentionally exempt from require_permission.
-EXEMPT_PREFIXES: tuple[str, ...] = ("/auth/",)
+# Prefixes whose endpoints establish identity rather than require it,
+# or are intentionally anonymous (public site endpoints — ADR-0023).
+EXEMPT_PREFIXES: tuple[str, ...] = ("/auth/", "/public/")
 
 
 def _collect_operations():

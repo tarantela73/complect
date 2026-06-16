@@ -102,6 +102,18 @@ REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
 EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_secure_mesh_token_2026")
 
+# Public site / CMS (ADR-0023). Dev defaults — override via env in production.
+# Use the first real tenant UUID from the DB, or keep this placeholder for fresh installs.
+PUBLIC_SITE_TENANT_ID = os.getenv(
+    "PUBLIC_SITE_TENANT_ID",
+    "00000000-0000-0000-0000-000000000001",
+)
+# Cloudflare Turnstile always-pass test secret (dev only, not production).
+CF_TURNSTILE_SECRET_KEY = os.getenv(
+    "CF_TURNSTILE_SECRET_KEY",
+    "1x0000000000000000000000000000000AA",
+)
+
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
