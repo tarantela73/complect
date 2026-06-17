@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useObjectContracts, useLinkObjectContract, useUnlinkObjectContract } from '@/shared/api/objects'
-import { useContracts, CONTRACT_STATUS_LABELS } from '@/shared/api/contracts'
+import { useContract } from '@/shared/api/contracts'
 import { useCan } from '@/shared/auth/hooks'
 import { Button } from '@/shared/ui/button'
 
@@ -55,13 +55,16 @@ function LinkContractModal({
 }
 
 function ContractRow({ contractId, objectId }: { contractId: string; objectId: string }) {
-  const { data } = useContracts({ limit: 1 })
+  const { data: contract } = useContract(contractId)
   const unlink = useUnlinkObjectContract(objectId)
   const canWrite = useCan('objects.write')
 
   return (
     <tr className="border-b border-border hover:bg-muted/30">
-      <td className="px-4 py-3 font-mono text-xs">{contractId}</td>
+      <td className="px-4 py-3">
+        <div className="text-sm font-medium">{contract?.title ?? '...'}</div>
+        <div className="text-xs text-muted-foreground font-mono">{contractId}</div>
+      </td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">
           <Link href={`/dashboard/contracts/${contractId}`}>
@@ -112,7 +115,7 @@ export function ContractsTab({ objectId }: { objectId: string }) {
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">UUID договора</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Договор</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
