@@ -192,6 +192,42 @@ export function useUnlinkObjectContract(objectId: string) {
   })
 }
 
+export const contractObjectKeys = {
+  byContract: (contractId: string) => ['objects', 'by-contract', contractId] as const,
+}
+
+export function useLinkContractObject(contractId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (objectId: string) => {
+      const { error } = await apiClient.POST('/api/v1/objects/{object_id}/contracts/', {
+        params: { path: { object_id: objectId } },
+        body: { contract_id: contractId },
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      })
+      if (error) throw new Error('Ошибка привязки объекта')
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: contractObjectKeys.byContract(contractId) }),
+  })
+}
+
+export function useUnlinkContractObject(contractId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (objectId: string) => {
+      const { error } = await apiClient.DELETE(
+        '/api/v1/objects/{object_id}/contracts/{contract_id}/',
+        {
+          params: { path: { object_id: objectId, contract_id: contractId } },
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+        },
+      )
+      if (error) throw new Error('Ошибка отвязки объекта')
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: contractObjectKeys.byContract(contractId) }),
+  })
+}
+
 export function useUpdateObjectStage(objectId: string) {
   const qc = useQueryClient()
   return useMutation({
