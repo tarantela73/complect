@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useObjectsGeoJSON, RESOURCE_TYPE_LABELS, OBJECT_STATUS_LABELS } from '@/shared/api/objects'
-import { ALL_PROVIDERS } from '@/shared/ui/map/tile-providers'
+import { ALL_PROVIDERS, MAP_CADASTRAL_AVAILABLE } from '@/shared/ui/map/tile-providers'
 import type { TileProvider } from '@/shared/ui/map/tile-providers'
 import { MapSearchBar } from '@/shared/ui/map/MapSearchBar'
 import type { SearchResult } from '@/shared/ui/map/MapSearchBar'
@@ -30,7 +30,6 @@ export default function MapPage() {
   const [status, setStatus] = useState('')
   const [providerId, setProviderId] = useState('osm')
   const [showCadastral, setShowCadastral] = useState(false)
-  const [showInfra, setShowInfra] = useState(false)
 
   // Search state
   const [flyTarget, setFlyTarget] = useState<FlyToTarget | null>(null)
@@ -145,26 +144,23 @@ export default function MapPage() {
         </select>
 
         <label
-          className="flex items-center gap-1 text-xs cursor-pointer"
-          title={cadastralUnavailable ? 'Сервис ПКК Росреестра недоступен' : 'Кадастровые границы (ПКК Росреестра)'}
+          className={`flex items-center gap-1 text-xs ${MAP_CADASTRAL_AVAILABLE ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+          title={
+            !MAP_CADASTRAL_AVAILABLE
+              ? 'Кадастровые тайлы временно недоступны — НСПД Росреестра не предоставляет публичный тайловый сервис'
+              : cadastralUnavailable
+                ? 'Сервис ПКК Росреестра недоступен'
+                : 'Кадастровые границы (ПКК Росреестра)'
+          }
         >
           <input
             type="checkbox"
             checked={showCadastral}
             onChange={(e) => { setShowCadastral(e.target.checked); setCadastralUnavailable(false) }}
             className="rounded"
+            disabled={!MAP_CADASTRAL_AVAILABLE}
           />
           Кадастр{cadastralUnavailable && <span className="text-destructive ml-0.5">(!)</span>}
-        </label>
-
-        <label className="flex items-center gap-1 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showInfra}
-            onChange={(e) => setShowInfra(e.target.checked)}
-            className="rounded"
-          />
-          Коммуникации
         </label>
 
         <button
@@ -195,7 +191,6 @@ export default function MapPage() {
             features={filteredFeatures}
             provider={provider}
             showCadastral={showCadastral}
-            showInfra={showInfra}
             flyTarget={flyTarget}
             highlightGeometry={highlightGeometry}
             highlightCenter={highlightCenter}

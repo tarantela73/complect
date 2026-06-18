@@ -6,6 +6,7 @@ export type CmsPageContentResponse = components['schemas']['CmsPageContentRespon
 export type CmsPageUpdateRequest = components['schemas']['CmsPageUpdateRequest']
 export type CmsImageResponse = components['schemas']['CmsImageResponse']
 export type CmsImageListResponse = components['schemas']['CmsImageListResponse']
+export type TiptapDocSchema = components['schemas']['TiptapDocSchema']
 
 export const cmsKeys = {
   all: ['cms'] as const,
@@ -53,6 +54,22 @@ export function useCmsGallery(section?: string) {
       })
       if (error) throw error
       return data
+    },
+  })
+}
+
+export function usePublishCmsPage(slug: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST('/api/v1/cms/pages/{slug}/publish/', {
+        params: { path: { slug } },
+      })
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: cmsKeys.page(slug) })
     },
   })
 }

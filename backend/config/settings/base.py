@@ -169,6 +169,7 @@ CELERY_IMPORTS = (
     "apps.files.tasks.recovery_scanner",
     "apps.notifications.consumer.notifications_consumer",
     "apps.integration.tasks.webhook_consumer",
+    "apps.site.tasks.publisher",
 )
 
 # rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
@@ -217,6 +218,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.integration.tasks.webhook_consumer.run_webhook_fanout_consumer_task",
         "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
         "options": {"queue": "integration"},
+    },
+    "cms-publish-scheduled": {
+        "task": "apps.site.tasks.publisher.publish_scheduled_pages_task",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "default"},
     },
 }
 
@@ -415,6 +421,9 @@ LOGGING = {
 # UUID of the tenant that owns public-site data. Required when apps.site is installed.
 # Must be a valid UUID string. Override in local.py / prod.py from env.
 PUBLIC_SITE_TENANT_ID: str | None = None
+
+# Base URL of the public site (no trailing slash). Used in sitemap.xml and robots.txt.
+PUBLIC_SITE_BASE_URL: str = "https://example.com"
 
 # Cloudflare Turnstile secret for server-side verification of lead form submissions.
 # See: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/

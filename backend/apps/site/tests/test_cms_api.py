@@ -128,7 +128,7 @@ class TestPatchCmsPage:
         with override_settings(RBAC_ENFORCEMENT_MODE="ENFORCE"):
             resp = Client().patch(
                 "/api/v1/cms/pages/about/",
-                data=json.dumps({"content": {}}),
+                data=json.dumps({"content": {"type": "doc", "content": []}}),
                 content_type="application/json",
                 **_auth_headers(user, token, mutating=True),
             )

@@ -31,12 +31,14 @@ class TestGetCmsPage:
         assert data["meta"] == {}
 
     def test_returns_content_when_record_exists(self):
-        """After creating SitePageContent, GET returns its content."""
+        """After creating PUBLISHED SitePageContent, GET returns its content."""
         from apps.site.models import SitePageContent
+        from apps.site.models.site_content import PagePublicationStatus
 
         SitePageContent.objects.create(
             tenant_id=uuid.UUID(PUBLIC_TENANT_ID),
             slug="about",
+            status=PagePublicationStatus.PUBLISHED,
             content={"type": "doc", "content": []},
             meta={"title": "О компании"},
         )

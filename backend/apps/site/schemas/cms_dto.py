@@ -3,18 +3,22 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from apps.site.schemas.meta_schema import MetaUpdateRequest
+from apps.site.schemas.tiptap_schema import TiptapDocSchema
+
 
 class CmsPageContentResponse(BaseModel):
     id: uuid.UUID
     slug: str
     content: dict
     meta: dict
+    status: str | None = None
     updated_at: datetime
 
 
 class CmsPageUpdateRequest(BaseModel):
-    content: dict | None = None
-    meta: dict | None = None
+    content: TiptapDocSchema | None = None
+    meta: MetaUpdateRequest | None = None
 
 
 class CmsImageResponse(BaseModel):

@@ -76,6 +76,7 @@ PERMISSIONS: tuple[Permission, ...] = (
     # cms (public site content management)
     Permission("cms", "read"),
     Permission("cms", "write"),
+    Permission("cms", "publish"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

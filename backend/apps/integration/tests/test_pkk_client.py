@@ -24,18 +24,32 @@ _PKK_RESPONSE_WITH_GEOMETRY = {
 _PKK_RESPONSE_EMPTY = {"features": []}
 
 
+def _mock_success_response(json_body):
+    mock_resp = MagicMock()
+    mock_resp.is_success = True
+    mock_resp.json = MagicMock(return_value=json_body)
+    return mock_resp
+
+
+def _mock_fail_response(status_code):
+    mock_resp = MagicMock()
+    mock_resp.is_success = False
+    mock_resp.status_code = status_code
+    return mock_resp
+
+
+def _make_client_mock(response):
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = AsyncMock(return_value=response)
+    return mock_client
+
+
 @pytest.mark.asyncio
 async def test_search_cadastre_returns_result():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json = MagicMock(return_value=_PKK_RESPONSE_WITH_GEOMETRY)
-
-    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        mock_client_cls.return_value = mock_client
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value = _make_client_mock(_mock_success_response(_PKK_RESPONSE_WITH_GEOMETRY))
 
         result = await search_cadastre("23:43:0123456:789")
 
@@ -48,16 +62,8 @@ async def test_search_cadastre_returns_result():
 
 @pytest.mark.asyncio
 async def test_search_cadastre_empty_features():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json = MagicMock(return_value=_PKK_RESPONSE_EMPTY)
-
-    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        mock_client_cls.return_value = mock_client
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value = _make_client_mock(_mock_success_response(_PKK_RESPONSE_EMPTY))
 
         result = await search_cadastre("00:00:0000000:000")
 
@@ -72,12 +78,12 @@ async def test_search_cadastre_empty_query():
 
 @pytest.mark.asyncio
 async def test_search_cadastre_timeout_returns_none():
-    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_client_cls:
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-        mock_client_cls.return_value = mock_client
+        mock_cls.return_value = mock_client
 
         result = await search_cadastre("23:43:0123456:789")
 
@@ -86,15 +92,37 @@ async def test_search_cadastre_timeout_returns_none():
 
 @pytest.mark.asyncio
 async def test_search_cadastre_http_error_returns_none():
-    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_client_cls:
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(
             side_effect=httpx.HTTPStatusError("error", request=MagicMock(), response=MagicMock())
         )
-        mock_client_cls.return_value = mock_client
+        mock_cls.return_value = mock_client
 
         result = await search_cadastre("23:43:0123456:789")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_search_cadastre_redirect_returns_none():
+    """pkk.rosreestr.ru → 301 redirect (НСПД migration). follow_redirects=False → is_success=False → None."""
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value = _make_client_mock(_mock_fail_response(301))
+
+        result = await search_cadastre("77:01:0001001:1")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_search_cadastre_forbidden_returns_none():
+    """НСПД /api/features returns 403 without session auth → None."""
+    with patch("apps.integration.pkk_client.httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value = _make_client_mock(_mock_fail_response(403))
+
+        result = await search_cadastre("77:01:0001001:1")
 
     assert result is None

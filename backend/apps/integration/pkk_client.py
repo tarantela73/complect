@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 
 _PKK_FEATURES_URL = "https://pkk.rosreestr.ru/api/features/1"
-_TIMEOUT = 5.0
+_TIMEOUT = 3.0
 
 
 @dataclass(slots=True, frozen=True)
@@ -21,9 +21,10 @@ async def search_cadastre(q: str) -> CadastreResult | None:
     params = {"text": q, "limit": 1}
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
             resp = await client.get(_PKK_FEATURES_URL, params=params)
-            resp.raise_for_status()
+            if not resp.is_success:
+                return None
             data = resp.json()
     except Exception:
         return None

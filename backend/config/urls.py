@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 from apps.common.api.dashboard import router as dashboard_router
+from apps.site.views.sitemap import robots_txt, sitemap_xml
 from apps.common.api.errors import (
     django_bad_request,
     django_page_not_found,
@@ -46,6 +47,8 @@ api.add_router("/cms/", cms_router)
 urlpatterns = [
     path("", include("config.health_urls")),
     path("api/v1/", api.urls),
+    path("sitemap.xml", sitemap_xml),
+    path("robots.txt", robots_txt),
 ]
 
 # Django fallback error handlers — enforce rule 6.6 envelope for all paths

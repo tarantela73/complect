@@ -22,6 +22,8 @@ class AsgiTenantEnforcementMiddleware:
         "/metrics/",
         "/health/",
         "/favicon.ico",
+        "/sitemap.xml",
+        "/robots.txt",
     )
 
     # Gateway token required, but no tenant/user context headers.
