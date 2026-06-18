@@ -13,6 +13,11 @@ from apps.site.schemas.cms_dto import (
     CmsPageContentResponse,
     CmsPageUpdateRequest,
 )
+from apps.site.services.cms_publish_service import (
+    CmsPublishService,
+    PageAlreadyPublishedError,
+    PageNotFoundError,
+)
 from apps.site.services.cms_update_service import CmsUpdateService
 
 router = Router(tags=["cms"])
@@ -32,14 +37,34 @@ def get_cms_page(request: HttpRequest, slug: str):
 def update_cms_page(request: HttpRequest, slug: str, body: CmsPageUpdateRequest):
     page = CmsUpdateService.upsert_page(
         slug=slug,
-        content=body.content,
-        meta=body.meta,
+        content=body.content.model_dump() if body.content is not None else None,
+        meta_update=body.meta,
     )
     return 200, CmsPageContentResponse(
         id=page.id,
         slug=page.slug,
         content=page.content,
         meta=page.meta,
+        status=page.status,
+        updated_at=page.updated_at,
+    )
+
+
+@router.post("/pages/{slug}/publish/", response={200: CmsPageContentResponse, 404: dict, 409: dict})
+@require_permission("publish", "cms")
+def publish_cms_page(request: HttpRequest, slug: str):
+    try:
+        page = CmsPublishService.publish_page(slug=slug)
+    except PageNotFoundError:
+        return 404, make_error_response("CMS_PAGE_NOT_FOUND", f"Страница '{slug}' не найдена.")
+    except PageAlreadyPublishedError:
+        return 409, make_error_response("CMS_PAGE_ALREADY_PUBLISHED", f"Страница '{slug}' уже опубликована.")
+    return 200, CmsPageContentResponse(
+        id=page.id,
+        slug=page.slug,
+        content=page.content,
+        meta=page.meta,
+        status=page.status,
         updated_at=page.updated_at,
     )
 

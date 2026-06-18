@@ -4,6 +4,30 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 
 ---
 
+## Site / CMS Domain
+
+### SitePageContent
+
+The core entity for public-site content management. Each record belongs to one tenant and identifies a named page section by `slug`. Holds `content` (Tiptap/ProseMirror JSON) and `meta` (structured SEO metadata). Status lifecycle: `DRAFT` → `PUBLISHED` | `SCHEDULED` → `PUBLISHED`. Only `PUBLISHED` records are visible on the public site.
+
+### PagePublicationStatus
+
+Publication state of a `SitePageContent` record. Three values: `DRAFT` (content is being edited, not publicly visible), `PUBLISHED` (live on the public site), `SCHEDULED` (will publish automatically when `publish_at ≤ now()`). Celery beat task `publish_scheduled_pages` performs the `SCHEDULED → PUBLISHED` transition with ±5-minute accuracy.
+
+### MetaSchema
+
+Structured SEO metadata stored in `SitePageContent.meta`. Fields: `title` (≤60 chars), `description` (≤160 chars), `canonical` (URL), `og_image` (S3 key), `schema_org` (JSON-LD object). Fields without a manual override are auto-derived from content on every save: `title` from the first H1 node, `description` from the first paragraph. See `is_manual_override` for field-level override control.
+
+### is_manual_override
+
+A per-field dict stored inside `SitePageContent.meta` (e.g., `{"title": true, "description": false}`) that controls which `MetaSchema` fields are protected from auto-derivation. Setting a meta field via the API marks that field's override as `true`; subsequent content saves skip auto-derivation for that field only. Unset keys are treated as `false` (auto-derive). Distinct from a per-page boolean toggle: a single boolean would permanently disable all auto-derivation the moment any one field is manually edited.
+
+### PagePublished
+
+A domain event emitted via the Transactional Outbox whenever a `SitePageContent` record transitions to `PUBLISHED` — whether via immediate publish (`cms.publish` action) or via the Celery beat scheduled-publish task. Written inside `transaction.atomic()` and dispatched via `transaction.on_commit()`. Consumed by the sitemap cache invalidation handler.
+
+---
+
 ## Integration Domain
 
 ### WebhookSubscription

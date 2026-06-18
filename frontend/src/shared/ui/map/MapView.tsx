@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import type { LatLngExpression } from 'leaflet'
 import type { ObjectFeature, ObjectGeoJSON } from '@/shared/api/objects'
 import type { TileProvider } from './tile-providers'
-import { PKK_TILES, OPENINFRA_TILES } from './tile-providers'
+import { PKK_TILES } from './tile-providers'
 import { ObjectMarker } from './ObjectMarker'
 import type { FlyToTarget } from './MapFlyTo'
 import { CadastralHighlight } from './CadastralHighlight'
@@ -59,6 +59,20 @@ function escapeHtml(s: string): string {
   )
 }
 
+function RussianAttributionPrefix() {
+  const map = useMap()
+  useEffect(() => {
+    map.attributionControl.setPrefix(
+      '<svg width="12" height="8" viewBox="0 0 12 8" xmlns="http://www.w3.org/2000/svg">' +
+      '<path fill="#FFFFFF" d="M0 0h12v3H0z"/>' +
+      '<path fill="#003DA5" d="M0 3h12v2H0z"/>' +
+      '<path fill="#D52B1E" d="M0 5h12v3H0z"/>' +
+      '</svg> <a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>'
+    )
+  }, [map])
+  return null
+}
+
 function ClickPopup({ point }: { point: ClickedPoint | null }) {
   const map = useMap()
   useEffect(() => {
@@ -96,7 +110,6 @@ interface MapViewProps {
   zoom?: number
   height?: string
   showCadastral?: boolean
-  showInfra?: boolean
   onCadastralUnavailable?: () => void
   flyTarget?: FlyToTarget | null
   highlightGeometry?: GeoJSON.Geometry | null
@@ -114,7 +127,6 @@ export function MapView({
   zoom = DEFAULT_ZOOM,
   height = '100%',
   showCadastral = false,
-  showInfra = false,
   flyTarget,
   highlightGeometry,
   highlightCenter,
@@ -156,12 +168,15 @@ export function MapView({
         ref={mapRef}
       >
         <FixLeafletIcons />
+        <RussianAttributionPrefix />
         {onClick && <MapClickHandler onClick={onClick} />}
 
         <TileLayer
+          key={provider.id}
           url={provider.url}
           attribution={provider.attribution}
           maxZoom={provider.maxZoom ?? 19}
+          {...(provider.subdomains ? { subdomains: provider.subdomains } : {})}
         />
 
         {showCadastral && (
@@ -172,16 +187,6 @@ export function MapView({
             maxZoom={PKK_TILES.maxZoom}
             minZoom={PKK_TILES.minZoom}
             eventHandlers={{ tileerror: handleCadastralTileError }}
-          />
-        )}
-
-        {showInfra && (
-          <TileLayer
-            url={OPENINFRA_TILES.url}
-            attribution={OPENINFRA_TILES.attribution}
-            opacity={OPENINFRA_TILES.opacity}
-            {...(OPENINFRA_TILES.subdomains ? { subdomains: OPENINFRA_TILES.subdomains } : {})}
-            maxZoom={OPENINFRA_TILES.maxZoom}
           />
         )}
 

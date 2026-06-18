@@ -3,8 +3,22 @@ from django.db import models
 from apps.common.models.base import BaseEnterpriseModel
 
 
+class PagePublicationStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
+    PUBLISHED = "PUBLISHED", "Published"
+    SCHEDULED = "SCHEDULED", "Scheduled"
+
+
 class SitePageContent(BaseEnterpriseModel):
     slug = models.CharField(max_length=50, db_index=True)
+    status = models.CharField(
+        max_length=20,
+        choices=PagePublicationStatus.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    publish_at = models.DateTimeField(null=True, blank=True)
     content = models.JSONField(default=dict)
     meta = models.JSONField(default=dict)
 

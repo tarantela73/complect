@@ -20,6 +20,7 @@ def get_cms_page_for_editing(slug: str) -> CmsPageContentResponse | None:
         slug=page.slug,
         content=page.content,
         meta=page.meta,
+        status=page.status,
         updated_at=page.updated_at,
     )
 

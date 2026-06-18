@@ -15,12 +15,23 @@ const OSM: TileProvider = {
   maxZoom: 19,
 }
 
-const YANDEX: TileProvider = {
-  id: 'yandex',
-  label: 'Яндекс',
-  url: 'https://core-sat.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
-  attribution: '&copy; <a href="https://yandex.ru/maps">Яндекс.Карты</a>',
-  maxZoom: 19,
+// Google Hybrid: satellite + Cyrillic labels/roads in one tile request.
+// Unofficial tile access — violates Google Maps ToS, but stable for internal tools.
+const GOOGLE_HYBRID: TileProvider = {
+  id: 'google-hybrid',
+  label: 'Google (гибрид)',
+  url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+  attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>',
+  maxZoom: 20,
+}
+
+// WGS84-accurate satellite, no CRS offset, free for limited use.
+const ESRI: TileProvider = {
+  id: 'esri',
+  label: 'Спутник (ESRI)',
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  attribution: '&copy; <a href="https://www.esri.com">Esri</a>, DigitalGlobe, GeoEye, USGS',
+  maxZoom: 18,
 }
 
 const GIS2: TileProvider = {
@@ -33,45 +44,26 @@ const GIS2: TileProvider = {
 
 export function getAvailableProviders(): TileProvider[] {
   const providers: TileProvider[] = [OSM]
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY) {
-    providers.push(YANDEX)
-  } else if (typeof window !== 'undefined') {
-    providers.push(YANDEX)
-  }
   if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_2GIS_API_KEY) {
     providers.push(GIS2)
   }
+  providers.push(GOOGLE_HYBRID, ESRI)
   return providers
 }
 
-export const ALL_PROVIDERS: TileProvider[] = [OSM, YANDEX, GIS2]
+export const ALL_PROVIDERS: TileProvider[] = [OSM, GIS2, GOOGLE_HYBRID, ESRI]
 
-// ArcGIS REST tile URL format: {z}/{y}/{x} = level/row/col (matches Leaflet XYZ scheme)
+// 2026-06-17: nspd.gov.ru returns SPA HTML (Content-Type: text/html, 15 KB) for ALL
+// /arcgis/rest/services/PKK6/.../tile/* paths — no ArcGIS tile server is exposed.
+// SSL cert is self-signed (blocked by browsers). No public alternative exists.
+// Flip MAP_CADASTRAL_AVAILABLE to true when a working tile endpoint is confirmed.
+export const MAP_CADASTRAL_AVAILABLE = false
+
 export const PKK_TILES = {
-  url: 'https://pkk.rosreestr.ru/arcgis/rest/services/PKK6/CadastreObjects/MapServer/tile/{z}/{y}/{x}',
-  attribution: '&copy; <a href="https://rosreestr.gov.ru">Росреестр ПКК</a>',
+  url: 'https://nspd.gov.ru/arcgis/rest/services/PKK6/CadastreObjects/MapServer/tile/{z}/{y}/{x}',
+  attribution: '&copy; <a href="https://nspd.gov.ru">Росреестр НСПД</a>',
   maxZoom: 20,
   minZoom: 5,
   opacity: 0.7,
 }
 
-// MAP_ZOUIT_ENABLED: true = Росреестр PKK6 ЗОУИТ охранные зоны (ЛЭП, газ, водоканал, связь)
-// false = fallback к OpenRailwayMap (ж/д коридоры). Toggle при недоступности сервиса Росреестра.
-export const MAP_ZOUIT_ENABLED = true
-
-export const OPENINFRA_TILES = MAP_ZOUIT_ENABLED
-  ? {
-      url: 'https://pkk.rosreestr.ru/arcgis/rest/services/PKK6/ZuitsPolygons/MapServer/tile/{z}/{y}/{x}',
-      attribution: '&copy; <a href="https://rosreestr.gov.ru">Росреестр ЗОУИТ</a>',
-      maxZoom: 18,
-      opacity: 0.65,
-      subdomains: undefined as string | undefined,
-    }
-  : {
-      url: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
-      attribution:
-        '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      subdomains: 'abc' as string | undefined,
-      maxZoom: 19,
-      opacity: 0.75,
-    }
