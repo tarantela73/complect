@@ -1,5 +1,3 @@
-import uuid
-from django.core.exceptions import PermissionDenied
 
 from apps.common.context.core import get_tenant_id
 from apps.site.models import SiteImage, SitePageContent
@@ -36,7 +34,9 @@ def get_cms_gallery(section: str | None = None) -> list[CmsImageResponse]:
             section=img.section,
             s3_key=img.s3_key,
             caption=img.caption,
+            alt=img.alt,
             order=img.order,
+            file_record_id=img.file_record_id,
             created_at=img.created_at,
         )
         for img in qs

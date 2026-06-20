@@ -4,7 +4,6 @@ import uuid
 from datetime import datetime, timezone
 
 from django.db import transaction
-from django.core.exceptions import ObjectDoesNotExist
 
 from apps.common.context.core import get_correlation_id, get_tenant_id
 from apps.common.services.outbox_service import TransactionalOutboxService

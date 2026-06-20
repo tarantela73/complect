@@ -37,7 +37,9 @@ class SiteImage(BaseEnterpriseModel):
     section = models.CharField(max_length=50, db_index=True)
     s3_key = models.CharField(max_length=500)
     caption = models.CharField(max_length=255, blank=True, default="")
+    alt = models.CharField(max_length=200, blank=True, default="")
     order = models.PositiveSmallIntegerField(default=0)
+    file_record_id = models.UUIDField(null=True, blank=True, db_index=True)
 
     class Meta:
         db_table = "site_images"

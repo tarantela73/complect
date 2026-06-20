@@ -7,7 +7,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useCan } from '@/shared/auth/hooks'
 import { useCmsPage, useSaveCmsPage, usePublishCmsPage } from '@/shared/api/cms'
 import type { TiptapDocSchema } from '@/shared/api/cms'
-import { MetaEditor, SerpPreview, StatusWidget } from '@/shared/ui/cms'
+import { GalleryManager, MetaEditor, RevisionHistoryDrawer, SerpPreview, StatusWidget } from '@/shared/ui/cms'
 import type { MetaFields } from '@/shared/ui/cms'
 
 export default function CmsSectionPage({ params }: { params: Promise<{ section: string }> }) {
@@ -22,6 +22,7 @@ export default function CmsSectionPage({ params }: { params: Promise<{ section: 
   const { mutate: publishPage, isPending: isPublishing } = usePublishCmsPage(section)
 
   const [metaFields, setMetaFields] = useState<MetaFields>({})
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
   useEffect(() => {
     if (page?.meta) {
@@ -99,6 +100,7 @@ export default function CmsSectionPage({ params }: { params: Promise<{ section: 
             canPublish={canPublish}
             isPublishing={isPublishing}
             onPublish={handlePublish}
+            onHistory={() => setIsHistoryOpen(true)}
           />
           <a
             href={publicPath}
@@ -156,7 +158,17 @@ export default function CmsSectionPage({ params }: { params: Promise<{ section: 
           description={metaFields.description ?? ''}
           url={pageUrl}
         />
+
+        <GalleryManager section={section} canWrite={canWrite} />
       </div>
+
+      <RevisionHistoryDrawer
+        slug={section}
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        canWrite={canWrite}
+        onRollbackSuccess={() => setIsHistoryOpen(false)}
+      />
     </div>
   )
 }
