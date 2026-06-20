@@ -18,7 +18,10 @@ class FileRepository:
 
     @classmethod
     def get_by_id(cls, file_id: uuid.UUID) -> FileRecord:
-        record = cls.get_queryset().filter(id=file_id).first()
+        # Command-side authoritative read-back (rule 4.12): always read primary so a
+        # fetch immediately following a CAS write (mark_*) cannot see stale state from
+        # the async replica. Query-side reads use get_queryset()/get_counts() directly.
+        record = cls.get_queryset().using("default").filter(id=file_id).first()
         if not record:
             raise PermissionDenied("Файл не найден или недоступен для текущего тенанта.")
         return record
