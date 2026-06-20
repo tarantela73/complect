@@ -417,6 +417,12 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
           </div>
         )}
         <Row label="Тип ресурса" value={RESOURCE_TYPE_LABELS[data.resource_type] ?? data.resource_type} />
+        {data.contract_date && (
+          <Row
+            label="Дата договора"
+            value={new Intl.DateTimeFormat('ru-RU').format(new Date(data.contract_date))}
+          />
+        )}
         <Row label="Сумма договора" value={formatAmount(data.total_amount)} />
         <Row label="Оплачено" value={formatAmount(data.paid_amount)} />
         <Row label="Остаток" value={formatAmount(data.remaining_amount)} />

@@ -16,6 +16,7 @@ export default function CreateContractPage() {
   const [title, setTitle] = useState('')
   const [resourceType, setResourceType] = useState(RESOURCE_TYPES[0])
   const [amountRub, setAmountRub] = useState('')
+  const [contractDate, setContractDate] = useState('')
   const [error, setError] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -32,7 +33,13 @@ export default function CreateContractPage() {
     const totalAmount = Math.round(parsed * 100)
 
     createMutation.mutate(
-      { contract_number: contractNumber.trim(), title: title.trim(), resource_type: resourceType, total_amount: totalAmount },
+      {
+        contract_number: contractNumber.trim(),
+        title: title.trim(),
+        resource_type: resourceType,
+        total_amount: totalAmount,
+        contract_date: contractDate || undefined,
+      },
       {
         onSuccess: (created) => router.push(`/dashboard/contracts/${created.id}`),
         onError: (e) => setError(e.message),
@@ -84,6 +91,16 @@ export default function CreateContractPage() {
               <option key={r} value={r}>{RESOURCE_TYPE_LABELS[r]}</option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="contractDate">Дата договора</Label>
+          <Input
+            id="contractDate"
+            type="date"
+            value={contractDate}
+            onChange={(e) => setContractDate(e.target.value)}
+          />
         </div>
 
         <div className="space-y-1.5">

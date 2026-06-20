@@ -47,9 +47,16 @@ export default function ContractsReportPage() {
 
   const contracts = data?.results ?? []
 
-  function handleExport() {
-    const qs = buildParams(filters)
-    downloadReport(`/api/v1/reports/contracts/export/${qs ? '?' + qs : ''}`, 'contracts_report.xlsx')
+  const [exportError, setExportError] = useState('')
+
+  async function handleExport() {
+    setExportError('')
+    try {
+      const qs = buildParams(filters)
+      await downloadReport(`/api/v1/reports/contracts/export/${qs ? '?' + qs : ''}`, 'contracts_report.xlsx')
+    } catch {
+      setExportError('Ошибка экспорта. Попробуйте снова.')
+    }
   }
 
   return (
@@ -63,6 +70,7 @@ export default function ContractsReportPage() {
           Экспорт в Excel
         </Button>
       </div>
+      {exportError && <p className="text-sm text-destructive mb-4">{exportError}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <select

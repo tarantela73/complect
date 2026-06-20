@@ -55,7 +55,7 @@ def upload_init(request: HttpRequest, body: UploadInitRequest):
 
 
 @router.post(
-    "/{file_id}/complete",
+    "/{file_id}/complete/",
     response={200: FileDetailResponse, 400: dict, 403: dict, 409: dict},
 )
 @require_permission("create", "files")
@@ -75,7 +75,7 @@ def upload_complete(request: HttpRequest, file_id: uuid.UUID, body: UploadComple
         return 409, make_error_response("CONCURRENT_UPDATE", str(exc))
 
 
-@router.get("/{file_id}", response={200: FileDetailResponse, 403: dict})
+@router.get("/{file_id}/", response={200: FileDetailResponse, 403: dict})
 @require_permission("read", "files")
 def get_file(request: HttpRequest, file_id: uuid.UUID):
     try:
@@ -85,7 +85,7 @@ def get_file(request: HttpRequest, file_id: uuid.UUID):
         return 403, make_error_response("FILE_NOT_FOUND", "Файл не найден.")
 
 
-@router.delete("/{file_id}", response={204: None, 403: dict, 422: dict})
+@router.delete("/{file_id}/", response={204: None, 403: dict, 404: dict, 422: dict})
 @require_permission("delete", "files")
 def delete_file(request: HttpRequest, file_id: uuid.UUID):
     try:
@@ -101,7 +101,7 @@ def delete_file(request: HttpRequest, file_id: uuid.UUID):
 
 
 @router.get(
-    "/{file_id}/download-url",
+    "/{file_id}/download-url/",
     response={200: DownloadUrlResponse, 403: dict, 422: dict},
 )
 @require_permission("download", "files")

@@ -30,14 +30,21 @@ export default function PaymentsReportPage() {
   const lines = data?.items ?? []
   const unmatchedCount = data?.unmatched_count ?? lines.filter((l) => l.match_status === 'UNMATCHED').length
 
-  function handleExport() {
-    const p = new URLSearchParams()
-    if (matchStatus) p.set('match_status', matchStatus)
-    if (dateFrom) p.set('date_from', dateFrom)
-    if (dateTo) p.set('date_to', dateTo)
-    if (statementId) p.set('statement_id', statementId)
-    const qs = p.toString()
-    downloadReport(`/api/v1/reports/payments/export/${qs ? '?' + qs : ''}`, 'payments_report.xlsx')
+  const [exportError, setExportError] = useState('')
+
+  async function handleExport() {
+    setExportError('')
+    try {
+      const p = new URLSearchParams()
+      if (matchStatus) p.set('match_status', matchStatus)
+      if (dateFrom) p.set('date_from', dateFrom)
+      if (dateTo) p.set('date_to', dateTo)
+      if (statementId) p.set('statement_id', statementId)
+      const qs = p.toString()
+      await downloadReport(`/api/v1/reports/payments/export/${qs ? '?' + qs : ''}`, 'payments_report.xlsx')
+    } catch {
+      setExportError('Ошибка экспорта. Попробуйте снова.')
+    }
   }
 
   return (
@@ -49,6 +56,7 @@ export default function PaymentsReportPage() {
         </div>
         <Button onClick={handleExport} size="sm">Экспорт в Excel</Button>
       </div>
+      {exportError && <p className="text-sm text-destructive mb-4">{exportError}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <select value={matchStatus} onChange={(e) => setMatchStatus(e.target.value)}

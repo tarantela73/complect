@@ -119,3 +119,15 @@ A logical isolated organisation within the multi-tenant ERP. Every DB row belong
 ### Transactional Outbox
 
 The mechanism for reliable at-least-once domain event delivery. Events are written to `common_outbox_records` inside `transaction.atomic()` alongside the state mutation. A Celery dispatcher (queue `outbox`) polls the table and publishes to Redis. The `transaction.on_commit()` hook triggers a fast-path wake-up signal after commit. Direct Celery task dispatch (bypassing the outbox) is forbidden for state-change notifications.
+
+---
+
+## Files Domain
+
+### FileRecord
+
+The core entity for uploaded or in-progress files within a tenant. Status lifecycle: `PENDING_UPLOAD` (presigned S3 URL issued, upload not yet confirmed) → `SCANNING` (ClamAV scan in progress) → `AVAILABLE` (scan passed, file accessible) | `QUARANTINED` (scan detected malware, file blocked). Only `AVAILABLE` records may be downloaded or linked to other domain entities. Legal Hold blocks deletion and mutation regardless of status.
+
+### FileStatus
+
+The scan and availability lifecycle of a FileRecord. Values: `PENDING_UPLOAD`, `SCANNING`, `AVAILABLE`, `QUARANTINED`. `QUARANTINED` files are read-blocked and retained for audit — they are not soft-deleted. Only `AVAILABLE` is safe to serve to clients.
