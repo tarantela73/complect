@@ -5,6 +5,7 @@ interface StatusWidgetProps {
   canPublish: boolean
   isPublishing: boolean
   onPublish: () => void
+  onHistory?: () => void
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -19,7 +20,7 @@ const STATUS_CLASSES: Record<string, string> = {
   SCHEDULED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
 }
 
-export function StatusWidget({ status, canPublish, isPublishing, onPublish }: StatusWidgetProps) {
+export function StatusWidget({ status, canPublish, isPublishing, onPublish, onHistory }: StatusWidgetProps) {
   const label = status ? (STATUS_LABELS[status] ?? status) : 'Без статуса'
   const cls = status ? (STATUS_CLASSES[status] ?? STATUS_CLASSES.DRAFT) : STATUS_CLASSES.DRAFT
   const isPublished = status === 'PUBLISHED'
@@ -29,6 +30,15 @@ export function StatusWidget({ status, canPublish, isPublishing, onPublish }: St
       <span className={`rounded-full px-3 py-1 text-xs font-medium ${cls}`}>
         {label}
       </span>
+      {onHistory && (
+        <button
+          type="button"
+          onClick={onHistory}
+          className="rounded-md border px-4 py-2 text-sm hover:bg-muted"
+        >
+          История
+        </button>
+      )}
       {canPublish && !isPublished && (
         <button
           type="button"

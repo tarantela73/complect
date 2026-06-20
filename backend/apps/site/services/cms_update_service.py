@@ -1,6 +1,10 @@
-from apps.common.context.core import get_tenant_id
+import uuid
+
+from django.db import transaction
+from django.utils import timezone
+
+from apps.common.context.core import get_tenant_id, get_user_id
 from apps.site.models import SiteImage, SitePageContent
-from apps.site.schemas.cms_dto import CmsImageResponse, CmsPageContentResponse
 from apps.site.schemas.meta_schema import MetaUpdateRequest
 
 
@@ -37,13 +41,21 @@ class CmsUpdateService:
         content: dict | None,
         meta_update: MetaUpdateRequest | None = None,
     ) -> SitePageContent:
+        from apps.site.services.cms_revision_service import CmsRevisionService
+
         tenant_id = get_tenant_id()
+
+        try:
+            user_id = get_user_id()
+        except Exception:
+            user_id = None
 
         existing = (
             SitePageContent.objects
             .filter(tenant_id=tenant_id, slug=slug, is_deleted=False)
             .first()
         )
+
         current_meta: dict = dict(existing.meta) if existing else {}
         overrides: dict = dict(current_meta.pop("_overrides", {}))
 
@@ -63,11 +75,30 @@ class CmsUpdateService:
         if content is not None:
             defaults["content"] = content
 
-        page, _ = SitePageContent.objects.update_or_create(
-            tenant_id=tenant_id,
-            slug=slug,
-            defaults=defaults,
-        )
+        if existing is None:
+            with transaction.atomic():
+                page = SitePageContent.objects.create(
+                    tenant_id=tenant_id,
+                    slug=slug,
+                    **defaults,
+                )
+        else:
+            with transaction.atomic():
+                revision_svc = CmsRevisionService()
+                revision_svc.create_revision(
+                    existing,
+                    created_by_id=user_id or uuid.UUID(int=0),
+                )
+                SitePageContent.objects.filter(
+                    pk=existing.pk,
+                    tenant_id=tenant_id,
+                ).update(
+                    updated_at=timezone.now(),
+                    **defaults,
+                )
+            existing.refresh_from_db()
+            page = existing
+
         return page
 
     @staticmethod

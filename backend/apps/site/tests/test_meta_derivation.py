@@ -112,10 +112,17 @@ class TestMetaAutoDerivation:
     def test_auto_derives_title_and_description_on_content_save(self):
         """AE5: when no override, content save populates title and description."""
         user, token = _make_editor()
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Подключение электричества"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "Мы помогаем с подключением."}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "heading",
+                    "attrs": {"level": 1},
+                    "content": [{"type": "text", "text": "Подключение электричества"}],
+                },
+                {"type": "paragraph", "content": [{"type": "text", "text": "Мы помогаем с подключением."}]},
+            ],
+        }
         resp = _patch("services", user, token, {"content": doc})
         assert resp.status_code == 200
         meta = resp.json()["meta"]

@@ -3,7 +3,6 @@ from django.http import HttpRequest
 from ninja import Router
 
 from apps.common.api.errors import make_error_response
-from apps.requests.queries.request_queries import get_request_detail
 from apps.requests.services.request_create_service import RequestCreateService
 from apps.site.queries.public_queries import get_page_content
 from apps.site.schemas.public_dto import (

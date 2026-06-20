@@ -1,6 +1,7 @@
 ---
 title: "Transactional Outbox: how to emit domain events"
 date: 2026-06-09
+last_updated: "2026-06-18"
 category: patterns
 module: common
 problem_type: architecture_pattern
@@ -105,6 +106,13 @@ with transaction.atomic():
 
 - Любой переход состояния, который должен быть виден другим доменам (reconciliation, notifications, webhooks)
 - Когда тест должен проверить факт отправки события — `OutboxRecord.objects.filter(event_type=...).count()`
+
+  > **`transaction=True` тесты**: `on_commit` срабатывает немедленно и вызывает `apply_async` в live
+  > Redis broker. Если `complect_celery_worker` запущен, он успевает захватить запись через
+  > `SELECT FOR UPDATE SKIP LOCKED` раньше прямого вызова диспетчера в тесте → `is_processed=False`.
+  > Обязателен глобальный autouse-патч из `backend/conftest.py` (`_block_outbox_live_dispatch`),
+  > заглушающий `apply_async`. Без него тест будет intermittently fail при запущенном Docker Compose.
+  > См. `docs/solutions/test-failures/outbox-live-worker-lock-contention-skips-test-dispatcher.md`
 
 ## Examples
 

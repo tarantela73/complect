@@ -1,7 +1,7 @@
 ---
 title: CMS Sprint #3 — SEO Meta, Publishing Workflow, Tiptap Validation
 type: feat
-status: active
+status: completed
 date: 2026-06-17
 origin: docs/brainstorms/2026-06-17-cms-sprint-3-requirements.md
 ---
