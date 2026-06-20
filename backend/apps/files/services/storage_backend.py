@@ -1,26 +1,9 @@
 from __future__ import annotations
 
-from typing import Protocol
-
-
-class StorageBackend(Protocol):
-    def generate_upload_url(
-        self,
-        *,
-        object_key: str,
-        content_type: str,
-        size_bytes: int,
-        expires_in: int,
-    ) -> str: ...
-
-    def generate_download_url(
-        self,
-        *,
-        object_key: str,
-        expires_in: int,
-    ) -> str: ...
-
-    def object_exists(self, *, object_key: str) -> bool: ...
+# Protocol and factory re-exported from apps/common for backward compatibility.
+# Other domains must import from apps.common.contracts.storage_contracts (ADR-0005).
+from apps.common.contracts.storage_contracts import StorageBackend as StorageBackend
+from apps.common.contracts.storage_contracts import get_storage_backend as get_storage_backend
 
 
 class StubStorageBackend:
@@ -86,9 +69,3 @@ class S3StorageBackend:
             raise
 
 
-def get_storage_backend() -> StorageBackend:
-    from django.conf import settings
-
-    if getattr(settings, "FILES_STORAGE_BACKEND", "STUB") == "S3":
-        return S3StorageBackend()
-    return StubStorageBackend()

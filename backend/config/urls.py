@@ -22,6 +22,7 @@ from apps.requests.api import router as requests_router
 from apps.map.api.search_api import router as map_router
 from apps.site.api.cms_api import router as cms_router
 from apps.site.api.public_api import router as public_router
+from apps.objects.api_public import router as public_objects_router
 from apps.users.api import router as auth_router
 from apps.users.api_admin import router as admin_users_router
 from config.api import api
@@ -42,6 +43,7 @@ api.add_router("/reports/", reports_router)
 api.add_router("/requests/", requests_router)
 api.add_router("/map/", map_router)
 api.add_router("/public/", public_router)
+api.add_router("/public/objects/", public_objects_router)
 api.add_router("/cms/", cms_router)
 
 urlpatterns = [

@@ -56,8 +56,9 @@ export function useFiles(params: { cursor?: string; limit?: number; status?: str
 export function useFile(id: string) {
   return useQuery({
     queryKey: fileKeys.detail(id),
+    enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await apiClient.GET('/api/v1/files/{file_id}', {
+      const { data, error } = await apiClient.GET('/api/v1/files/{file_id}/', {
         params: { path: { file_id: id } },
       })
       if (error) throw new Error(apiMsg(error, 'Файл не найден'))
@@ -105,7 +106,7 @@ export function useUploadFile() {
       }
 
       const { data: completed, error: completeErr } = await apiClient.POST(
-        '/api/v1/files/{file_id}/complete',
+        '/api/v1/files/{file_id}/complete/',
         {
           params: { path: { file_id: init.file_id } },
           body: { checksum_sha256: checksum },
@@ -126,7 +127,7 @@ export function useDeleteFile() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await apiClient.DELETE('/api/v1/files/{file_id}', {
+      const { error } = await apiClient.DELETE('/api/v1/files/{file_id}/', {
         params: { path: { file_id: id } },
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       })
@@ -142,7 +143,7 @@ export function useDeleteFile() {
 export function useDownloadUrl() {
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await apiClient.GET('/api/v1/files/{file_id}/download-url', {
+      const { data, error } = await apiClient.GET('/api/v1/files/{file_id}/download-url/', {
         params: { path: { file_id: id } },
       })
       if (error) throw new Error(apiMsg(error, 'Ошибка получения ссылки для скачивания'))

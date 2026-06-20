@@ -70,5 +70,10 @@ class SupplyObject(BaseEnterpriseModel):
     location = gis_models.PointField(null=True, blank=True, srid=4326, spatial_index=True)
     boundary = gis_models.PolygonField(null=True, blank=True, srid=4326, spatial_index=True)
 
+    # Public site fields
+    is_public = models.BooleanField(default=False, db_index=True)
+    slug = models.SlugField(max_length=255, null=True, blank=True, db_index=True)
+    cover_image_key = models.CharField(max_length=500, null=True, blank=True)
+
     class Meta:
         db_table = "objects_supply_objects"
