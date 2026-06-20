@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 import structlog
 
+from apps.common.context.core import is_primary_db_enforced, set_force_primary_db
 from apps.common.services.aggregate_sequence import AggregateSequenceFenceService
 from apps.common.services.consumer_idempotency import ConsumerIdempotencyService
 
@@ -157,6 +158,18 @@ class BaseDomainConsumer(ABC):
         """
         event = self._to_stream_event(record)
 
+        # Background workers bypass ReadYourOwnWritesStickyMiddleware, so command-side
+        # reads here (notably _verify_emission's inline SELECT) would otherwise route to
+        # the async replica and miss this consumer's own just-committed writes under
+        # replication lag — a false CausalEmissionMissingError. Pin reads to primary.
+        _prev_force_primary = is_primary_db_enforced()
+        set_force_primary_db(True)
+        try:
+            self._handle_inner(event)
+        finally:
+            set_force_primary_db(_prev_force_primary)
+
+    def _handle_inner(self, event: "StreamEvent") -> None:
         claimed = ConsumerIdempotencyService.claim(
             outbox_record_id=event.outbox_record_id,
             consumer=self.consumer_name,
