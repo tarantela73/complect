@@ -14,6 +14,7 @@ import { cn } from '@/shared/ui/utils'
 import { StagesChecklist } from './components/StagesChecklist'
 import { ContractsTab } from './components/ContractsTab'
 import { LocationSection } from './components/LocationSection'
+import { PublicSiteSection } from './components/PublicSiteSection'
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
   BUILDING: 'Здание',
@@ -176,6 +177,13 @@ export default function ObjectDetailPage({
           objectId={id}
           longitude={data.longitude}
           latitude={data.latitude}
+        />
+        <PublicSiteSection
+          objectId={id}
+          isPublic={data.is_public ?? false}
+          slug={data.slug}
+          coverImageKey={data.cover_image_key}
+          canEdit={canEdit}
         />
         </>
       )}

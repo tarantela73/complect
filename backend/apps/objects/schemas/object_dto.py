@@ -71,6 +71,9 @@ class SupplyObjectDetailResponse(BaseModel):
     stages: list[ObjectStageResponse] = []
     longitude: Optional[float] = None
     latitude: Optional[float] = None
+    is_public: bool = False
+    slug: Optional[str] = None
+    cover_image_key: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -89,6 +92,25 @@ class SupplyObjectUpdateRequest(BaseModel):
     planned_end_date: Optional[date] = None
     actual_start_date: Optional[date] = None
     actual_end_date: Optional[date] = None
+    is_public: Optional[bool] = None
+    slug: Optional[str] = Field(None, max_length=255)
+    cover_image_key: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        import re
+        if not v:
+            raise ValueError("Slug не может быть пустым")
+        if re.search(r'\s', v):
+            raise ValueError("Slug не может содержать пробелы")
+        if v != v.lower():
+            raise ValueError("Slug должен быть в нижнем регистре")
+        if not re.match(r'^[\w-]+$', v, re.UNICODE) or '_' in v:
+            raise ValueError("Slug: только строчные буквы, цифры и дефисы")
+        return v
 
     @field_validator("status")
     @classmethod
@@ -171,3 +193,30 @@ class ObjectContractLinkRequest(BaseModel):
 
 class ObjectContractResponse(BaseModel):
     contract_id: uuid.UUID
+
+
+# --- Public site schemas (no internal fields) ---
+
+class PublicObjectLocationSchema(BaseModel):
+    lat: float
+    lon: float
+
+
+class PublicObjectSchema(BaseModel):
+    id: uuid.UUID
+    slug: str
+    name: str
+    address: str
+    resource_type: str
+    object_type: str
+    description: str
+    cover_image_url: Optional[str] = None
+    location: Optional[PublicObjectLocationSchema] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PublicObjectListResponse(BaseModel):
+    results: list[PublicObjectSchema]
+    next_cursor: Optional[str] = None
+    count: int

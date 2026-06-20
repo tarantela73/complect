@@ -131,3 +131,23 @@ The core entity for uploaded or in-progress files within a tenant. Status lifecy
 ### FileStatus
 
 The scan and availability lifecycle of a FileRecord. Values: `PENDING_UPLOAD`, `SCANNING`, `AVAILABLE`, `QUARANTINED`. `QUARANTINED` files are read-blocked and retained for audit — they are not soft-deleted. Only `AVAILABLE` is safe to serve to clients.
+
+---
+
+## Objects Domain
+
+### SupplyObject
+
+The core entity for supply infrastructure — a physical object (building, pipeline, substation, etc.) managed by the tenant. Fields include `name`, `address`, `object_type`, `resource_type`, `status`, geographic coordinates (`location` point, `boundary` polygon). Cross-domain refs (contract, contragent, manager) are stored as plain UUIDs — no FK constraints (ADR-0005). `is_public` controls whether the object appears on the public site, independent of status.
+
+### ResourceType
+
+The type of energy or utility resource supplied at a SupplyObject or covered by a Contract. Values: `ELECTRICITY`, `GAS`, `WATER`, `HEAT`, `OTHER`. Used in both the Objects domain and the Contracts domain as the primary classification axis. Cross-domain: the same enum values appear on both `SupplyObject.resource_type` and `Contract.resource_type`.
+
+### ObjectStatus
+
+Operational lifecycle of a SupplyObject. Values: `NEW` (created, work not started), `IN_PROGRESS` (active work), `PAUSED` (temporarily stopped), `COMPLETED` (work finished), `CANCELLED` (abandoned). Status is independent of public visibility — an operator may publish or unpublish an object regardless of its status.
+
+### SupplyObjectType
+
+Physical classification of a SupplyObject. Values: `BUILDING`, `GRS` (gas distribution station), `PIPELINE`, `SUBSTATION`, `RESERVOIR`, `HEATING_POINT`, `OTHER`. Used for filtering and display in both the internal dashboard and the public site catalog.

@@ -3,6 +3,7 @@ import uuid
 from django.contrib.gis.geos import Point
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils.text import slugify
 
 from apps.objects.models.object_stage import ObjectStage
 from apps.objects.models.supply_object import SupplyObject
@@ -10,9 +11,30 @@ from apps.objects.repositories.object_repo import ObjectRepository
 from apps.objects.schemas.object_dto import SupplyObjectCreateRequest, UpdateLocationRequest
 
 
+def _generate_unique_slug(name: str, tenant_id: uuid.UUID, exclude_id: uuid.UUID | None = None) -> str:
+    base = slugify(name, allow_unicode=True)
+    if not base:
+        base = "object"
+    candidate = base
+    n = 2
+    qs = SupplyObject.objects.filter(tenant_id=tenant_id, slug=candidate, is_deleted=False)
+    if exclude_id is not None:
+        qs = qs.exclude(id=exclude_id)
+    while qs.exists():
+        candidate = f"{base}-{n}"
+        n += 1
+        qs = SupplyObject.objects.filter(tenant_id=tenant_id, slug=candidate, is_deleted=False)
+        if exclude_id is not None:
+            qs = qs.exclude(id=exclude_id)
+    return candidate
+
+
 class ObjectCreateService:
     @staticmethod
     def execute(data: SupplyObjectCreateRequest) -> SupplyObject:
+        from apps.common.tenancy.context_core import get_tenant_id
+        tenant_id = get_tenant_id()
+
         obj = SupplyObject(
             name=data.name,
             address=data.address,
@@ -25,6 +47,7 @@ class ObjectCreateService:
             obj.location = Point(data.longitude, data.latitude, srid=4326)
 
         with transaction.atomic():
+            obj.slug = _generate_unique_slug(data.name, tenant_id)
             ObjectRepository.create(obj)
             ObjectStage.objects.bulk_create(ObjectStage.build_initial_stages(obj))
 
@@ -43,6 +66,9 @@ class ObjectLocationService:
 class ObjectUpdateService:
     @staticmethod
     def execute(object_id: uuid.UUID, data) -> None:
+        from apps.common.tenancy.context_core import get_tenant_id
+        tenant_id = get_tenant_id()
+
         obj = ObjectRepository.get_by_id(object_id)
         if obj.is_legal_hold:
             raise PermissionDenied("Объект под юридическим удержанием — изменение запрещено.")
@@ -71,10 +97,21 @@ class ObjectUpdateService:
         if data.actual_end_date is not None:
             fields["actual_end_date"] = data.actual_end_date
 
+        # Public site fields
+        if data.is_public is not None:
+            fields["is_public"] = data.is_public
+        if data.cover_image_key is not None:
+            fields["cover_image_key"] = data.cover_image_key
+
+        # Slug handling: explicit override takes precedence; else regenerate if name changed
+        if data.slug is not None:
+            fields["slug"] = data.slug
+        elif data.name is not None and data.name != obj.name:
+            fields["slug"] = _generate_unique_slug(data.name, tenant_id, exclude_id=object_id)
+
         if fields:
-            from apps.common.tenancy.context_core import get_tenant_id
             SupplyObject.objects.filter(
-                id=object_id, tenant_id=get_tenant_id(), is_deleted=False
+                id=object_id, tenant_id=tenant_id, is_deleted=False
             ).update(**fields)
 
 
