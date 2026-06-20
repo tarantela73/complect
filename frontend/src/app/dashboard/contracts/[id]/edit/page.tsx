@@ -17,12 +17,14 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
 
   const [title, setTitle] = useState('')
   const [amountRub, setAmountRub] = useState('')
+  const [contractDate, setContractDate] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (data) {
       setTitle(data.title)
       setAmountRub((data.total_amount / 100).toFixed(2))
+      setContractDate(data.contract_date ?? '')
     }
   }, [data])
 
@@ -69,10 +71,11 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
     if (isNaN(parsed) || parsed <= 0) { setError('Сумма должна быть положительным числом'); return }
 
     const totalAmount = Math.round(parsed * 100)
-    const updates: { title?: string; total_amount?: number } = {}
+    const updates: { title?: string; total_amount?: number; contract_date?: string } = {}
 
     if (title.trim() !== data.title) updates.title = title.trim()
     if (totalAmount !== data.total_amount) updates.total_amount = totalAmount
+    if (contractDate !== (data.contract_date ?? '')) updates.contract_date = contractDate || undefined
 
     if (Object.keys(updates).length === 0) {
       router.push(`/dashboard/contracts/${id}`)
@@ -111,6 +114,16 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={255}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="contractDate">Дата договора</Label>
+          <Input
+            id="contractDate"
+            type="date"
+            value={contractDate}
+            onChange={(e) => setContractDate(e.target.value)}
           />
         </div>
 

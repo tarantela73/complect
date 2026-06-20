@@ -131,3 +131,59 @@ class TestGetFilesPage:
         set_tenant_context(self.tenant)
         result = get_files_page()
         assert result["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/files/{id}/ endpoint
+# ---------------------------------------------------------------------------
+
+from apps.users.services.auth_service import _pk_to_uuid4  # noqa: E402
+
+GW_TOKEN = "complect_internal_secure_mesh_token_2026"
+
+
+@pytest.mark.django_db(transaction=True)
+class TestDeleteFileEndpoint:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from apps.users.models import User
+
+        self.tenant_id = uuid.uuid4()
+        self.user = User.objects.create_user(
+            username="test_delete_file",
+            email="test_delete_file@example.com",
+            password="TestPass123!",
+            tenant_id=self.tenant_id,
+        )
+
+    def _auth(self):
+        return {
+            "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
+            "HTTP_X_TENANT_ID": str(self.tenant_id),
+            "HTTP_X_USER_ID": _pk_to_uuid4(self.user.pk),
+            "HTTP_IDEMPOTENCY_KEY": str(uuid.uuid4()),
+        }
+
+    def test_delete_available_file_returns_204(self, client):
+        from django.test import override_settings
+        f = _make_file(self.tenant_id, status=FileStatus.AVAILABLE)
+        with override_settings(RBAC_ENFORCEMENT_MODE="OFF"):
+            resp = client.delete(f"/api/v1/files/{f.id}/", **self._auth())
+        assert resp.status_code == 204
+        f.refresh_from_db()
+        assert f.is_deleted is True
+
+    def test_delete_legal_hold_returns_403(self, client):
+        from django.test import override_settings
+        f = _make_file(self.tenant_id, status=FileStatus.AVAILABLE)
+        f.is_legal_hold = True
+        f.save(update_fields=["is_legal_hold"])
+        with override_settings(RBAC_ENFORCEMENT_MODE="OFF"):
+            resp = client.delete(f"/api/v1/files/{f.id}/", **self._auth())
+        assert resp.status_code == 403
+
+    def test_delete_unknown_file_returns_404(self, client):
+        from django.test import override_settings
+        with override_settings(RBAC_ENFORCEMENT_MODE="OFF"):
+            resp = client.delete(f"/api/v1/files/{uuid.uuid4()}/", **self._auth())
+        assert resp.status_code == 404

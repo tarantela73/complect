@@ -11,11 +11,13 @@ class ContractCreateRequestSchema(BaseModel):
     resource_type: str = Field(..., description="ELECTRICITY, GAS, WATER, HEAT, OTHER")
     total_amount: int = Field(..., description="Общая сумма договора в копейках", gt=0)
     contragent_id: Optional[uuid.UUID] = None
+    contract_date: Optional[date] = None
 
 
 class ContractUpdateSchema(BaseModel):
     title: Optional[str] = Field(None, max_length=255)
     total_amount: Optional[int] = Field(None, description="Общая сумма договора в копейках", gt=0)
+    contract_date: Optional[date] = None
 
 
 class ContractResponseSchema(BaseModel):
@@ -29,6 +31,7 @@ class ContractResponseSchema(BaseModel):
     remaining_amount: int = 0
     created_at: Optional[datetime] = None
     contragent_id: Optional[uuid.UUID] = None
+    contract_date: Optional[date] = None
 
     model_config = {"from_attributes": True}
 

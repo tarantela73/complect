@@ -29,14 +29,21 @@ export default function FinanceReportPage() {
 
   const transactions = data?.results ?? []
 
-  function handleExport() {
-    const p = new URLSearchParams()
-    if (dateFrom) p.set('date_from', dateFrom)
-    if (dateTo) p.set('date_to', dateTo)
-    if (txnType) p.set('transaction_type', txnType)
-    if (status) p.set('status', status)
-    const qs = p.toString()
-    downloadReport(`/api/v1/reports/finance/export/${qs ? '?' + qs : ''}`, 'finance_report.xlsx')
+  const [exportError, setExportError] = useState('')
+
+  async function handleExport() {
+    setExportError('')
+    try {
+      const p = new URLSearchParams()
+      if (dateFrom) p.set('date_from', dateFrom)
+      if (dateTo) p.set('date_to', dateTo)
+      if (txnType) p.set('transaction_type', txnType)
+      if (status) p.set('status', status)
+      const qs = p.toString()
+      await downloadReport(`/api/v1/reports/finance/export/${qs ? '?' + qs : ''}`, 'finance_report.xlsx')
+    } catch {
+      setExportError('Ошибка экспорта. Попробуйте снова.')
+    }
   }
 
   return (
@@ -48,6 +55,7 @@ export default function FinanceReportPage() {
         </div>
         <Button onClick={handleExport} size="sm">Экспорт в Excel</Button>
       </div>
+      {exportError && <p className="text-sm text-destructive mb-4">{exportError}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}

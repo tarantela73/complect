@@ -92,17 +92,17 @@ def create_contragent(request: HttpRequest, body: ContragentCreateRequest):
 @require_permission("write", "contragents")
 def update_contragent(request: HttpRequest, contragent_id: uuid.UUID, body: ContragentUpdateRequest):
     tenant_id = get_tenant_id()
-    try:
-        contragent = Contragent.objects.select_for_update().get(
-            id=contragent_id, tenant_id=tenant_id, is_deleted=False
-        )
-    except Contragent.DoesNotExist:
-        return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
-
-    if contragent.is_legal_hold:
-        return 422, make_error_response("LEGAL_HOLD", "Изменение заблокировано: юридическое удержание.")
-
     with transaction.atomic():
+        try:
+            contragent = Contragent.objects.select_for_update().get(
+                id=contragent_id, tenant_id=tenant_id, is_deleted=False
+            )
+        except Contragent.DoesNotExist:
+            return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
+
+        if contragent.is_legal_hold:
+            return 422, make_error_response("LEGAL_HOLD", "Изменение заблокировано: юридическое удержание.")
+
         contragent.name = body.name
         contragent.version += 1
         contragent.save(update_fields=["name", "version", "updated_at"])
