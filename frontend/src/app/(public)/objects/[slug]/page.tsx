@@ -1,12 +1,7 @@
 import { notFound } from 'next/navigation'
-import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { LeadForm } from '../../components/LeadForm'
-
-const MiniMap = dynamic(
-  () => import('./components/MiniMap').then((m) => m.MiniMap),
-  { ssr: false },
-)
+import { ClientMiniMap } from './components/ClientMiniMap'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://backend:8000'
 
@@ -97,7 +92,7 @@ export default async function ObjectDetailPage({ params }: PageProps) {
       {obj.location && (
         <div className="mb-10">
           <h2 className="mb-3 text-xl font-semibold">Местоположение</h2>
-          <MiniMap lat={obj.location.lat} lon={obj.location.lon} />
+          <ClientMiniMap lat={obj.location.lat} lon={obj.location.lon} />
         </div>
       )}
 
