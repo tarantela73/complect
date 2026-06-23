@@ -1,8 +1,22 @@
+import uuid
+from datetime import date
+from decimal import Decimal
+
 from django.http import HttpRequest
 from ninja import Router, Schema
 
 from apps.common.api.permissions import require_permission
-from apps.common.cache.dashboard_cache import get_cached_dashboard, set_cached_dashboard
+from apps.common.cache.dashboard_cache import (
+    get_cached_dashboard,
+    get_cached_director_dashboard,
+    set_cached_dashboard,
+    set_cached_director_dashboard,
+)
+from apps.common.queries.director_queries import (
+    get_objects_summary,
+    get_open_contracts_count,
+    get_payments_month_summary,
+)
 from apps.common.queries.outbox_queries import get_outbox_health
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contracts.queries.contract_queries import get_contract_counts, get_stuck_drafts_count
@@ -62,4 +76,49 @@ def get_dashboard_summary(request: HttpRequest):
         ),
     )
     set_cached_dashboard(tenant_id, summary.model_dump())
+    return 200, summary
+
+
+class ObjectSummaryItem(Schema):
+    id: uuid.UUID
+    name: str
+
+
+class DirectorDashboardSchema(Schema):
+    objects_in_progress_count: int
+    objects_top5: list[ObjectSummaryItem]
+    overdue_objects_count: int
+    payments_credit_month: Decimal
+    payments_debit_month: Decimal
+    open_contracts_count: int
+    period_from: date
+    period_to: date
+
+
+@router.get("/director/", response={200: DirectorDashboardSchema, 403: dict})
+@require_permission("read", "dashboard")
+def get_director_dashboard(request: HttpRequest):
+    tenant_id = get_tenant_id()
+
+    cached = get_cached_director_dashboard(tenant_id)
+    if cached is not None:
+        return 200, DirectorDashboardSchema.model_validate(cached)
+
+    today = date.today()
+    period_from = today.replace(day=1)
+
+    objects = get_objects_summary()
+    payments = get_payments_month_summary()
+
+    summary = DirectorDashboardSchema(
+        objects_in_progress_count=objects["in_progress_count"],
+        objects_top5=[ObjectSummaryItem(id=o["id"], name=o["name"]) for o in objects["top5"]],
+        overdue_objects_count=objects["overdue_count"],
+        payments_credit_month=payments["credit"],
+        payments_debit_month=payments["debit"],
+        open_contracts_count=get_open_contracts_count(),
+        period_from=period_from,
+        period_to=today,
+    )
+    set_cached_director_dashboard(tenant_id, summary.model_dump())
     return 200, summary
