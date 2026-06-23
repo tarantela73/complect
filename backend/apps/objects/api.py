@@ -13,6 +13,7 @@ from apps.objects.queries.object_queries import (
     get_objects_page,
 )
 from apps.objects.schemas.object_dto import (
+    ContragentLinkRequest,
     FeatureCollectionSchema,
     FeatureSchema,
     ObjectContractLinkRequest,
@@ -63,6 +64,7 @@ def list_objects(
     status: Optional[str] = Query(None),
     manager_id: Optional[uuid.UUID] = Query(None),
     bbox: Optional[str] = Query(None, description="lon_min,lat_min,lon_max,lat_max"),
+    q: Optional[str] = Query(None),
 ):
     result = get_objects_page(
         cursor=cursor,
@@ -74,6 +76,7 @@ def list_objects(
         manager_id=manager_id,
         bbox=_parse_bbox(bbox),
         user_info=_user_info,
+        q=q,
     )
     return 200, result
 
@@ -224,3 +227,38 @@ def objects_by_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 200, LR(results=[], count=0)
     result = get_objects_page(object_ids=object_ids, limit=100, user_info=_user_info)
     return 200, result
+
+
+@router.patch(
+    "/{object_id}/contragent/",
+    response={200: SupplyObjectDetailResponse, 400: dict, 403: dict, 404: dict, 422: dict},
+)
+@require_permission("write", "objects")
+def link_object_contragent(request: HttpRequest, object_id: uuid.UUID, body: ContragentLinkRequest):
+    from django.db import connection, transaction as tx
+    from apps.common.tenancy.context_core import get_tenant_id
+    from apps.objects.repositories.object_repo import ObjectRepository
+    from apps.objects.models.supply_object import SupplyObject
+
+    tenant_id = get_tenant_id()
+
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None or obj.is_deleted:
+        return 404, make_error_response("OBJECT_NOT_FOUND", "Объект не найден.")
+    if obj.is_legal_hold:
+        return 422, make_error_response("LEGAL_HOLD", "Объект заблокирован юридическим удержанием.")
+
+    if body.contragent_id is not None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM contragents_contragents"
+                " WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
+                [body.contragent_id, tenant_id],
+            )
+            if cursor.fetchone() is None:
+                return 400, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден в текущем тенанте.")
+
+    SupplyObject.objects.filter(id=object_id, tenant_id=tenant_id, is_deleted=False).update(
+        contragent_id=body.contragent_id
+    )
+    return 200, get_object_detail(object_id)

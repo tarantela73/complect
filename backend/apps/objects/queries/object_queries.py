@@ -98,6 +98,7 @@ def get_objects_page(
     bbox: Optional[tuple[float, float, float, float]] = None,
     user_info: Optional[UserInfoProtocol] = None,
     object_ids: Optional[list[uuid.UUID]] = None,
+    q: Optional[str] = None,
 ) -> dict:
     qs = ObjectRepository.get_queryset().order_by("-id")
 
@@ -117,6 +118,8 @@ def get_objects_page(
         qs = ObjectRepository.bbox_filter(qs, bbox)
     if object_ids is not None:
         qs = qs.filter(id__in=object_ids)
+    if q:
+        qs = qs.filter(name__icontains=q)
 
     rows = list(qs[: limit + 1])
     has_next = len(rows) > limit

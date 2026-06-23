@@ -1,20 +1,27 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCan } from '@/shared/auth/hooks'
 import {
   useObject,
+  useLinkObjectContragent,
   OBJECT_STATUS_LABELS,
   RESOURCE_TYPE_LABELS,
 } from '@/shared/api/objects'
+import { useContragent } from '@/shared/api/contragents'
+import { apiClient } from '@/shared/api/client'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/ui/utils'
+import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/AsyncSelect'
 import { StagesChecklist } from './components/StagesChecklist'
 import { ContractsTab } from './components/ContractsTab'
 import { LocationSection } from './components/LocationSection'
 import { PublicSiteSection } from './components/PublicSiteSection'
+import type { components } from '@/shared/api/generated/schema'
+
+type ContragentResponse = components['schemas']['ContragentResponse']
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
   BUILDING: 'Здание',
@@ -47,6 +54,103 @@ function Row({ label, value, mono }: { label: string; value?: string | null; mon
     <div className="flex px-4 py-3 gap-4">
       <dt className="w-40 shrink-0 text-sm text-muted-foreground">{label}</dt>
       <dd className={cn('text-sm', mono && 'font-mono')}>{value || '—'}</dd>
+    </div>
+  )
+}
+
+function ContragentSection({
+  objectId,
+  contragentId,
+  canEdit,
+}: {
+  objectId: string
+  contragentId: string | null | undefined
+  canEdit: boolean
+}) {
+  const { data: contragent, isLoading } = useContragent(contragentId ?? '')
+  const linkMutation = useLinkObjectContragent(objectId)
+  const [showPicker, setShowPicker] = useState(false)
+  const [selected, setSelected] = useState<AsyncSelectOption | null>(null)
+
+  const searchContragents = useCallback(async (q: string): Promise<AsyncSelectOption[]> => {
+    const { data, error } = await apiClient.GET('/api/v1/contragents/', {
+      params: { query: { q, limit: 20 } },
+    })
+    if (error || !data) return []
+    return (data as { results: ContragentResponse[] }).results.map((c) => ({
+      value: c.id,
+      label: `${c.name} (${c.inn})`,
+    }))
+  }, [])
+
+  const handleLink = async () => {
+    if (!selected) return
+    await linkMutation.mutateAsync(selected.value)
+    setShowPicker(false)
+    setSelected(null)
+  }
+
+  const handleUnlink = async () => {
+    if (!confirm('Отвязать контрагента от объекта?')) return
+    await linkMutation.mutateAsync(null)
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-medium">Контрагент</h2>
+        {canEdit && !showPicker && (
+          <Button variant="outline" size="sm" onClick={() => setShowPicker(true)}>
+            {contragentId ? 'Изменить' : 'Привязать'}
+          </Button>
+        )}
+        {canEdit && showPicker && (
+          <Button variant="ghost" size="sm" onClick={() => { setShowPicker(false); setSelected(null) }}>
+            Отмена
+          </Button>
+        )}
+      </div>
+
+      {showPicker && (
+        <div className="mb-3 space-y-2">
+          <AsyncSelect
+            placeholder="Поиск по названию или ИНН..."
+            onSearch={searchContragents}
+            onSelect={setSelected}
+            value={selected}
+          />
+          <Button size="sm" disabled={!selected} loading={linkMutation.isPending} onClick={handleLink}>
+            Привязать
+          </Button>
+        </div>
+      )}
+
+      {!showPicker && contragentId ? (
+        isLoading ? (
+          <p className="text-sm text-muted-foreground">Загрузка...</p>
+        ) : contragent ? (
+          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+            <Link
+              href={`/dashboard/contragents/${contragent.id}`}
+              className="text-sm font-medium hover:underline"
+            >
+              {contragent.name}
+              <span className="ml-2 text-xs text-muted-foreground font-mono">{contragent.inn}</span>
+            </Link>
+            {canEdit && (
+              <button
+                onClick={handleUnlink}
+                disabled={linkMutation.isPending}
+                className="text-xs text-destructive hover:underline ml-4"
+              >
+                Отвязать
+              </button>
+            )}
+          </div>
+        ) : null
+      ) : (
+        !showPicker && <p className="text-sm text-muted-foreground">Контрагент не привязан</p>
+      )}
     </div>
   )
 }
@@ -173,6 +277,7 @@ export default function ObjectDetailPage({
           />
           <Row label="ID" value={data.id} mono />
         </dl>
+        <ContragentSection objectId={id} contragentId={data.contragent_id} canEdit={canEdit} />
         <LocationSection
           objectId={id}
           longitude={data.longitude}

@@ -62,6 +62,22 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
 
 const MUTABLE_CONTRACT_STATUSES = new Set(['DRAFT', 'ACTIVE'])
 
+const ATTACHMENT_TYPE_LABELS: Record<string, string> = {
+  CONTRACT_SIGNED: 'Подписанный договор',
+  ACT_COMPLETED: 'Акт выполненных работ',
+  ESTIMATE: 'Смета',
+  INVOICE: 'Счёт',
+  OTHER: 'Прочее',
+}
+
+const ATTACHMENT_TYPE_COLORS: Record<string, string> = {
+  CONTRACT_SIGNED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  ACT_COMPLETED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  ESTIMATE: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+  INVOICE: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  OTHER: 'bg-muted text-muted-foreground',
+}
+
 const EVENT_COLORS: Record<string, string> = {
   'contracts.ContractCreated': 'bg-blue-500',
   'contracts.ContractActivated': 'bg-green-500',
@@ -109,6 +125,7 @@ function AttachmentsSection({
 }) {
   const [showPicker, setShowPicker] = useState(false)
   const [attachError, setAttachError] = useState('')
+  const [pendingType, setPendingType] = useState<Record<string, string>>({})
 
   const { data: attachments, isLoading } = useContractAttachments(contractId)
   const { data: files } = useFiles({ status: 'AVAILABLE', limit: 100 })
@@ -121,10 +138,16 @@ function AttachmentsSection({
 
   const handleAttach = (fileId: string) => {
     setAttachError('')
-    attachMutation.mutate(fileId, {
-      onSuccess: () => setShowPicker(false),
-      onError: (e) => setAttachError(e.message),
-    })
+    attachMutation.mutate(
+      { fileId, attachmentType: pendingType[fileId] ?? 'OTHER' },
+      {
+        onSuccess: () => {
+          setShowPicker(false)
+          setPendingType({})
+        },
+        onError: (e) => setAttachError(e.message),
+      },
+    )
   }
 
   const handleDetach = (fileId: string, name: string) => {
@@ -166,11 +189,20 @@ function AttachmentsSection({
               <Link href="/dashboard/files" className="underline">Файлы</Link>.
             </p>
           ) : (
-            <ul className="space-y-1 max-h-48 overflow-y-auto">
+            <ul className="space-y-2 max-h-56 overflow-y-auto">
               {availableToAttach.map((f) => (
-                <li key={f.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate">{f.original_name}</span>
+                <li key={f.id} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 truncate">{f.original_name}</span>
                   <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(f.size_bytes)}</span>
+                  <select
+                    className="rounded border border-border bg-background px-1.5 py-1 text-xs"
+                    value={pendingType[f.id] ?? 'OTHER'}
+                    onChange={(e) => setPendingType((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                  >
+                    {Object.entries(ATTACHMENT_TYPE_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
                   <Button
                     size="sm"
                     variant="outline"
@@ -208,6 +240,15 @@ function AttachmentsSection({
                       </a>
                     ) : (
                       <span className="text-muted-foreground">{a.name}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {a.attachment_type && (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ATTACHMENT_TYPE_COLORS[a.attachment_type] ?? 'bg-muted text-muted-foreground'}`}
+                      >
+                        {ATTACHMENT_TYPE_LABELS[a.attachment_type] ?? a.attachment_type}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground text-right">
@@ -328,7 +369,16 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const isDraft = data.status === 'DRAFT'
   const isActive = data.status === 'ACTIVE'
   const isMutable = isDraft || isActive
-  const hasAttachments = (attachments?.results.length ?? 0) > 0
+
+  const attachmentTypes = new Set(
+    (attachments?.results ?? []).map((a) => a.attachment_type).filter(Boolean),
+  )
+  const closureConditions = {
+    paid: data.paid_amount >= data.total_amount,
+    has_signed: attachmentTypes.has('CONTRACT_SIGNED'),
+    has_act: attachmentTypes.has('ACT_COMPLETED'),
+  }
+  const canClose = closureConditions.paid && closureConditions.has_signed && closureConditions.has_act
 
   const handleActivate = () => {
     if (!confirm(`Активировать договор «${data.title}»?`)) return
@@ -393,16 +443,29 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
                 </>
               )}
               {isActive && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  loading={closeMutation.isPending}
-                  disabled={!hasAttachments}
-                  title={!hasAttachments ? 'Прикрепите хотя бы один файл перед закрытием' : undefined}
-                  onClick={handleClose}
-                >
-                  Закрыть
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    loading={closeMutation.isPending}
+                    disabled={!canClose}
+                    title={!canClose ? 'Не выполнены условия закрытия' : undefined}
+                    onClick={handleClose}
+                  >
+                    Закрыть
+                  </Button>
+                  <ul className="text-xs space-y-0.5 text-right">
+                    <li className={closureConditions.paid ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}>
+                      {closureConditions.paid ? '✓' : '○'} Оплата завершена
+                    </li>
+                    <li className={closureConditions.has_signed ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}>
+                      {closureConditions.has_signed ? '✓' : '○'} Подписанный договор
+                    </li>
+                    <li className={closureConditions.has_act ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}>
+                      {closureConditions.has_act ? '✓' : '○'} Акт выполненных работ
+                    </li>
+                  </ul>
+                </div>
               )}
             </>
           )}

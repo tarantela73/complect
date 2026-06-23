@@ -6,6 +6,10 @@ export type Contragent = components['schemas']['ContragentResponse']
 export type ContragentList = components['schemas']['ContragentListResponse']
 export type ContragentCreateRequest = components['schemas']['ContragentCreateRequest']
 export type ContragentUpdateRequest = components['schemas']['ContragentUpdateRequest']
+export type ContragentAttachment = components['schemas']['ContragentAttachmentResponse']
+export type ContragentAttachmentList = components['schemas']['ContragentAttachmentListResponse']
+export type ContragentTimelineEntry = components['schemas']['ContragentTimelineEntrySchema']
+export type ContragentTimeline = components['schemas']['ContragentTimelineResponse']
 
 export const CONTRAGENT_TYPE_LABELS: Record<string, string> = {
   LEGAL_ENTITY: 'Юридическое лицо',
@@ -25,6 +29,8 @@ export const contragentKeys = {
   list: (params: Record<string, unknown>) => [...contragentKeys.lists(), params] as const,
   details: () => [...contragentKeys.all, 'detail'] as const,
   detail: (id: string) => [...contragentKeys.details(), id] as const,
+  attachments: (id: string) => [...contragentKeys.all, 'attachments', id] as const,
+  timeline: (id: string) => [...contragentKeys.all, 'timeline', id] as const,
 }
 
 export function useContragents(params?: {
@@ -94,6 +100,80 @@ export function useUpdateContragent(id: string) {
       qc.setQueryData(contragentKeys.detail(id), updated)
       qc.invalidateQueries({ queryKey: contragentKeys.lists() })
     },
+  })
+}
+
+export function useContragentAttachments(contragentId: string) {
+  return useQuery({
+    queryKey: contragentKeys.attachments(contragentId),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        '/api/v1/contragents/{contragent_id}/attachments/',
+        { params: { path: { contragent_id: contragentId } } },
+      )
+      if (error) throw new Error('Ошибка загрузки файлов')
+      return data as ContragentAttachmentList
+    },
+    enabled: !!contragentId,
+  })
+}
+
+export function useAttachContragentFile(contragentId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (fileId: string) => {
+      const { error, response } = await apiClient.POST(
+        '/api/v1/contragents/{contragent_id}/attachments/',
+        {
+          params: { path: { contragent_id: contragentId } },
+          body: { file_id: fileId },
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+        },
+      )
+      if (response.status === 422) throw new Error(apiMsg(error, 'Файл недоступен'))
+      if (response.status === 403) throw new Error(apiMsg(error, 'Доступ запрещён'))
+      if (error) throw new Error(apiMsg(error, 'Ошибка прикрепления'))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: contragentKeys.attachments(contragentId) })
+      qc.invalidateQueries({ queryKey: contragentKeys.timeline(contragentId) })
+    },
+  })
+}
+
+export function useDetachContragentFile(contragentId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (fileId: string) => {
+      const { error, response } = await apiClient.DELETE(
+        '/api/v1/contragents/{contragent_id}/attachments/{file_id}/',
+        {
+          params: { path: { contragent_id: contragentId, file_id: fileId } },
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+        },
+      )
+      if (response.status === 422) throw new Error(apiMsg(error, 'Удаление заблокировано'))
+      if (response.status !== 204 && error) throw new Error(apiMsg(error, 'Ошибка открепления'))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: contragentKeys.attachments(contragentId) })
+      qc.invalidateQueries({ queryKey: contragentKeys.timeline(contragentId) })
+    },
+  })
+}
+
+export function useContragentTimeline(contragentId: string) {
+  return useQuery({
+    queryKey: contragentKeys.timeline(contragentId),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        '/api/v1/contragents/{contragent_id}/timeline/',
+        { params: { path: { contragent_id: contragentId } } },
+      )
+      if (error) throw new Error('Ошибка загрузки истории')
+      return data as ContragentTimeline
+    },
+    enabled: !!contragentId,
   })
 }
 

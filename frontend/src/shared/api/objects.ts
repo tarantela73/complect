@@ -286,3 +286,18 @@ export function useUpdateObjectLocation(objectId: string) {
     },
   })
 }
+
+export function useLinkObjectContragent(objectId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (contragentId: string | null) => {
+      const { error } = await apiClient.PATCH('/api/v1/objects/{object_id}/contragent/', {
+        params: { path: { object_id: objectId } },
+        body: { contragent_id: contragentId ?? null },
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      })
+      if (error) throw new Error(apiMsg(error, 'Ошибка привязки контрагента'))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: objectKeys.detail(objectId) }),
+  })
+}

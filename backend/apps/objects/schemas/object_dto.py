@@ -220,3 +220,8 @@ class PublicObjectListResponse(BaseModel):
     results: list[PublicObjectSchema]
     next_cursor: Optional[str] = None
     count: int
+
+
+
+class ContragentLinkRequest(BaseModel):
+    contragent_id: Optional[uuid.UUID] = None
