@@ -118,8 +118,10 @@ def _make_contract(
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardPermissionOff:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
     def test_returns_200_with_gateway_context(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -154,8 +156,11 @@ class TestDirectorDashboardPermissionOff:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="ENFORCE", RBAC_POLICY_CACHE_TTL=60)
 class TestDirectorDashboardPermissionEnforce:
+    @pytest.fixture(autouse=True)
+    def _rbac_enforce(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "ENFORCE"
+        settings.RBAC_POLICY_CACHE_TTL = 60
     def test_no_permission_returns_403(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -184,8 +189,10 @@ class TestDirectorDashboardPermissionEnforce:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardPayments:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
     def _call(self, tenant_id: uuid.UUID) -> dict:
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
@@ -254,8 +261,10 @@ class TestDirectorDashboardPayments:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardOpenContracts:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
     def _call(self, tenant_id: uuid.UUID) -> dict:
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
@@ -304,8 +313,11 @@ class TestDirectorDashboardOpenContracts:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardObjectsSummary:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def _call(self, tenant_id: uuid.UUID) -> dict:
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
@@ -313,14 +325,12 @@ class TestDirectorDashboardObjectsSummary:
         assert resp.status_code == 200
         return resp.json()
 
-    def test_in_progress_count_is_zero(self):
-        """SupplyObject has no status field — in_progress_count is always 0."""
+    def test_in_progress_count_is_zero_when_no_objects(self):
         tenant_id = uuid.uuid4()
         data = self._call(tenant_id)
         assert data["objects_in_progress_count"] == 0
 
-    def test_overdue_count_is_zero(self):
-        """SupplyObject has no planned_end_date field — overdue_count is always 0."""
+    def test_overdue_count_is_zero_when_no_objects(self):
         tenant_id = uuid.uuid4()
         data = self._call(tenant_id)
         assert data["overdue_objects_count"] == 0
@@ -338,8 +348,10 @@ class TestDirectorDashboardObjectsSummary:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardPeriod:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
     def test_period_from_is_first_day_of_month(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -361,8 +373,10 @@ class TestDirectorDashboardPeriod:
 
 
 @pytest.mark.django_db
-@override_settings(RBAC_ENFORCEMENT_MODE="OFF")
 class TestDirectorDashboardCache:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
     def test_second_call_uses_cache(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
