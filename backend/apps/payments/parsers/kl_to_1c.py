@@ -48,7 +48,8 @@ def _parse_date(value: str) -> date | None:
 
 def _parse_amount(value: str) -> Decimal | None:
     try:
-        return Decimal(value.strip().replace(",", "."))
+        normalized = value.strip().replace(" ", "").replace(",", ".")
+        return Decimal(normalized)
     except InvalidOperation:
         return None
 
