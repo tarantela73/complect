@@ -1,17 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/shared/api/client'
 import {
   OBJECT_STATUS_LABELS,
-  useObjects,
   useLinkContractObject,
   useUnlinkContractObject,
 } from '@/shared/api/objects'
 import { useCan } from '@/shared/auth/hooks'
 import { Button } from '@/shared/ui/button'
+import { AsyncSelect, type AsyncSelectOption } from '@/shared/ui/AsyncSelect'
 import type { components } from '@/shared/api/generated/schema'
 
 type SupplyObject = components['schemas']['SupplyObjectDetailResponse']
@@ -48,16 +48,23 @@ function LinkObjectModal({
   onClose: () => void
 }) {
   const link = useLinkContractObject(contractId)
-  const { data: allObjects, isLoading } = useObjects({ limit: 100 })
-  const [selectedId, setSelectedId] = useState('')
+  const [selected, setSelected] = useState<AsyncSelectOption | null>(null)
 
-  const available = (allObjects?.results ?? []).filter((o) => !linkedIds.has(o.id))
+  const searchObjects = useCallback(async (query: string): Promise<AsyncSelectOption[]> => {
+    const { data, error } = await apiClient.GET('/api/v1/objects/', {
+      params: { query: { q: query, limit: 20 } },
+    })
+    if (error || !data) return []
+    return (data as { results: SupplyObject[] }).results
+      .filter((o) => !linkedIds.has(o.id))
+      .map((o) => ({ value: o.id, label: o.name }))
+  }, [linkedIds])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedId) return
+    if (!selected) return
     try {
-      await link.mutateAsync(selectedId)
+      await link.mutateAsync(selected.value)
       onClose()
     } catch (err) {
       alert((err as Error).message)
@@ -71,25 +78,12 @@ function LinkObjectModal({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Объект</label>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Загрузка...</p>
-            ) : available.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Все объекты уже привязаны</p>
-            ) : (
-              <select
-                required
-                value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">— выберите —</option>
-                {available.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <AsyncSelect
+              placeholder="Введите название объекта..."
+              onSearch={searchObjects}
+              onSelect={setSelected}
+              value={selected}
+            />
           </div>
           {link.isError && (
             <p className="text-xs text-destructive">{(link.error as Error).message}</p>
@@ -99,7 +93,7 @@ function LinkObjectModal({
             <Button
               type="submit"
               size="sm"
-              disabled={!selectedId || link.isPending || available.length === 0}
+              disabled={!selected || link.isPending}
             >
               {link.isPending ? 'Привязка...' : 'Привязать'}
             </Button>

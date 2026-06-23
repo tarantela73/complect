@@ -26,6 +26,7 @@ from apps.contracts.schemas.contract_dto import (
     ContractResponseSchema,
     ContractUpdateSchema,
 )
+from apps.contracts.policies.closure_policy import ContractClosurePolicyViolation
 from apps.contracts.services.attachment_service import AttachmentService
 from apps.contracts.services.contract_activate_service import ContractActivateService
 from apps.contracts.services.contract_closure import ContractClosureService
@@ -126,10 +127,10 @@ def activate_contract(request: HttpRequest, contract_id: uuid.UUID):
     except PermissionDenied:
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
     except ValidationError as exc:
-        return 422, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
+        return 422, make_error_response("BUSINESS_RULE_VIOLATION", exc.message)
 
 
-@router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
+@router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict, 422: dict})
 @require_permission("write", "contracts")
 def close_contract(request: HttpRequest, contract_id: uuid.UUID):
     from apps.common.tenancy.context_core import get_context
@@ -144,8 +145,14 @@ def close_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 200, get_contract_detail(contract_id)
     except PermissionDenied:
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    except ContractClosurePolicyViolation as exc:
+        return 422, make_error_response(
+            "CONTRACT_MISSING_REQUIRED_DOCUMENT",
+            exc.message,
+            detail=exc.closure_detail,
+        )
     except ValidationError as exc:
-        return 400, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
+        return 400, make_error_response("BUSINESS_RULE_VIOLATION", exc.message)
 
 
 # ── Contract Event Log ────────────────────────────────────────────────────────
@@ -198,6 +205,7 @@ def attach_file(request: HttpRequest, contract_id: uuid.UUID, body: AttachFileRe
             file_id=body.file_id,
             actor_id=actor_id,
             tenant_id=tenant_id,
+            attachment_type=body.attachment_type,
         )
         return 201, {"status": "attached"}
     except PermissionDenied as exc:

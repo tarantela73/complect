@@ -35,6 +35,7 @@ class AttachmentRepository:
         contract_id: uuid.UUID,
         file_id: uuid.UUID,
         attached_by: uuid.UUID,
+        attachment_type: str = "OTHER",
     ) -> ContractAttachment:
         tenant_id = get_tenant_id()
         attachment = ContractAttachment(
@@ -42,6 +43,7 @@ class AttachmentRepository:
             file_id=file_id,
             attached_by=attached_by,
             tenant_id=tenant_id,
+            attachment_type=attachment_type,
         )
         attachment.save()
         return attachment
@@ -75,3 +77,21 @@ class AttachmentRepository:
             .order_by("-created_at")
             .values_list("file_id", flat=True)
         )
+
+    @staticmethod
+    def has_type(contract_id: uuid.UUID, attachment_type: str) -> bool:
+        tenant_id = get_tenant_id()
+        return ContractAttachment.objects.filter(
+            contract_id=contract_id,
+            tenant_id=tenant_id,
+            attachment_type=attachment_type,
+            is_deleted=False,
+        ).exists()
+
+    @staticmethod
+    def get_closure_conditions(contract_id: uuid.UUID) -> dict[str, bool]:
+        """Returns {has_signed, has_act} for closure gate evaluation."""
+        return {
+            "has_signed": AttachmentRepository.has_type(contract_id, "CONTRACT_SIGNED"),
+            "has_act": AttachmentRepository.has_type(contract_id, "ACT_COMPLETED"),
+        }

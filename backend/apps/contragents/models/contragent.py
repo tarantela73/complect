@@ -1,4 +1,5 @@
 # backend/apps/contragents/models/contragent.py
+from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 
@@ -38,6 +39,9 @@ class Contragent(BaseEnterpriseModel):
                 fields=["tenant_id", "inn"],
                 name="unique_tenant_inn",
             )
+        ]
+        indexes = [
+            GinIndex(fields=["search_vector"], name="contragents_search_gin"),
         ]
 
 

@@ -30,6 +30,7 @@ class AttachmentService:
         file_id: uuid.UUID,
         actor_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        attachment_type: str = "OTHER",
     ) -> None:
         """
         Прикрепляет файл к договору.
@@ -61,6 +62,7 @@ class AttachmentService:
                 contract_id=contract_id,
                 file_id=file_id,
                 attached_by=actor_id,
+                attachment_type=attachment_type,
             )
         except IntegrityError as exc:
             raise ValidationError("Файл уже прикреплён к этому договору.") from exc

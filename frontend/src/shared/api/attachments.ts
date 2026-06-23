@@ -32,12 +32,12 @@ export function useContractAttachments(contractId: string) {
 export function useAttachFile(contractId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (fileId: string) => {
+    mutationFn: async ({ fileId, attachmentType = 'OTHER' }: { fileId: string; attachmentType?: string }) => {
       const { error, response } = await apiClient.POST(
         '/api/v1/contracts/{contract_id}/attachments/',
         {
           params: { path: { contract_id: contractId } },
-          body: { file_id: fileId },
+          body: { file_id: fileId, attachment_type: attachmentType },
           headers: { 'Idempotency-Key': crypto.randomUUID() },
         },
       )
