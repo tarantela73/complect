@@ -35,7 +35,7 @@ def unseed_tasks_permissions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0021_seed_payments_permission"),
+        ("common", "0024_seed_files_delete_manager"),
     ]
 
     operations = [

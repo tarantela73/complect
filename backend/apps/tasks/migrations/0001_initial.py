@@ -74,8 +74,8 @@ class Migration(migrations.Migration):
             options={
                 "db_table": "tasks_tasks",
                 "indexes": [
-                    models.Index(fields=["tenant_id", "status", "is_deleted"]),
-                    models.Index(fields=["tenant_id", "assigned_to_id", "is_deleted"]),
+                    models.Index(fields=["tenant_id", "status", "is_deleted"], name="tasks_tasks_tenant_status_idx"),
+                    models.Index(fields=["tenant_id", "assigned_to_id", "is_deleted"], name="tasks_tasks_tenant_assigned_idx"),
                 ],
             },
         ),
