@@ -2,10 +2,6 @@
 CQRS Query Side — Director Dashboard KPI metrics.
 Read-only projections, no writes.
 All QuerySets use get_tenant_id() from the request context (set by JWTAuth middleware).
-
-Note: SupplyObject has no status or planned_end_date fields in the current schema.
-objects_in_progress_count and overdue_objects_count always return 0 until the schema
-gains those fields (Expand & Contract migration, ADR-0002).
 """
 from __future__ import annotations
 
@@ -16,7 +12,7 @@ from django.db.models import Q, Sum
 
 from apps.common.tenancy.context_core import get_tenant_id
 from apps.contracts.models.contract import Contract, ContractStatus
-from apps.objects.models.supply_object import SupplyObject
+from apps.objects.models.supply_object import ObjectStatus, SupplyObject
 from apps.payments.models.bank_statement import BankStatement, BankStatementStatus
 from apps.payments.models.bank_statement_line import BankStatementLine
 
@@ -35,20 +31,26 @@ def get_open_contracts_count() -> int:
 
 
 def get_objects_summary() -> dict:
-    """
-    Returns in_progress_count, top5 list, and overdue_count.
-
-    SupplyObject currently has no status or planned_end_date fields.
-    in_progress_count and overdue_count return 0; top5 returns the 5 most-recently
-    created objects as a fallback until the schema is extended.
-    """
+    """Returns in_progress_count, top5 (by name), and overdue_count."""
     tenant_id = get_tenant_id()
-    qs = SupplyObject.objects.filter(tenant_id=tenant_id, is_deleted=False).order_by("name")
-    top5 = list(qs.values("id", "name")[:5])
+    today = date.today()
+
+    in_progress_qs = SupplyObject.objects.filter(
+        tenant_id=tenant_id,
+        status=ObjectStatus.IN_PROGRESS,
+        is_deleted=False,
+    )
+    in_progress_count = in_progress_qs.count()
+    top5 = list(in_progress_qs.order_by("name").values("id", "name")[:5])
+    overdue_count = in_progress_qs.filter(
+        planned_end_date__lt=today,
+        planned_end_date__isnull=False,
+    ).count()
+
     return {
-        "in_progress_count": 0,
+        "in_progress_count": in_progress_count,
         "top5": top5,
-        "overdue_count": 0,
+        "overdue_count": overdue_count,
     }
 
 

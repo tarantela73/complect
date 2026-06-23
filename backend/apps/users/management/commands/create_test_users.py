@@ -4,15 +4,19 @@ Management command: create_test_users
 Creates 4 test users with fixed credentials and assigns RBAC roles
 for the public-site tenant. Idempotent — safe to run multiple times.
 
+Runs ONLY in DEBUG=True environments unless --force is passed.
+
 Usage:
-    python manage.py create_test_users
+    python manage.py create_test_users          # dev only (DEBUG=True required)
+    python manage.py create_test_users --force  # bypass env guard (CI, staging)
 """
 from __future__ import annotations
 
 import uuid
 
 import structlog
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 PUBLIC_SITE_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -49,7 +53,19 @@ logger = structlog.get_logger(__name__)
 class Command(BaseCommand):
     help = "Create test users with RBAC roles for Sprint C role validation (idempotent)"
 
+    def add_arguments(self, parser) -> None:
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Allow running outside DEBUG environments (use for CI/staging only)",
+        )
+
     def handle(self, *args, **options) -> None:
+        if not settings.DEBUG and not options.get("force"):
+            raise CommandError(
+                "create_test_users is disabled in non-DEBUG environments. "
+                "Pass --force to override (CI/staging only)."
+            )
         from apps.common.models.rbac import Role, RoleBinding
         from apps.users.models import User
 
