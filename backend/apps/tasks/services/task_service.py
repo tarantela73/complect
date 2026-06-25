@@ -30,6 +30,10 @@ _TERMINAL_STATUSES = {TaskStatus.DONE, TaskStatus.CANCELLED}
 _UNSET = object()
 
 
+class AttachmentNotFoundError(Exception):
+    pass
+
+
 class TaskService:
     @staticmethod
     def create(
@@ -71,9 +75,9 @@ class TaskService:
         task: Task,
         *,
         actor_id: uuid.UUID,
-        title: str | None = None,
-        description: str | None = None,
-        priority: str | None = None,
+        title: str | None = _UNSET,  # type: ignore[assignment]
+        description: str | None = _UNSET,  # type: ignore[assignment]
+        priority: str | None = _UNSET,  # type: ignore[assignment]
         assigned_to_id: uuid.UUID | None = _UNSET,  # type: ignore[assignment]
         due_date: date | None = _UNSET,  # type: ignore[assignment]
     ) -> Task:
@@ -84,19 +88,23 @@ class TaskService:
             raise PermissionDenied("LEGAL_HOLD")
 
         if task.created_by_id != actor_id and task.assigned_to_id != actor_id:
-            raise PermissionDenied("Только создатель или исполнитель могут редактировать задачу.")
+            raise PermissionDenied("NOT_TASK_PARTICIPANT")
 
-        if priority is not None and priority not in TaskPriority.values:
+        if priority is not _UNSET and priority is not None and priority not in TaskPriority.values:
             raise ValidationError(f"Неверный приоритет: {priority}. Допустимые: {TaskPriority.values}")
 
-        if assigned_to_id is not _UNSET and assigned_to_id is not None and not user_exists_in_tenant(assigned_to_id, task.tenant_id):
+        if (
+            assigned_to_id is not _UNSET
+            and assigned_to_id is not None
+            and not user_exists_in_tenant(assigned_to_id, task.tenant_id)
+        ):
             raise ValidationError(f"Пользователь {assigned_to_id} не найден в данном тенанте.")
 
-        if title is not None:
+        if title is not _UNSET and title is not None:
             task.title = title
-        if description is not None:
-            task.description = description
-        if priority is not None:
+        if description is not _UNSET:
+            task.description = description if description is not None else ""
+        if priority is not _UNSET and priority is not None:
             task.priority = priority
         if assigned_to_id is not _UNSET:
             task.assigned_to_id = assigned_to_id
@@ -119,7 +127,7 @@ class TaskService:
             raise ValueError(f"Переход {task.status} → {new_status} недопустим.")
 
         if changed_by != task.created_by_id and changed_by != task.assigned_to_id:
-            raise PermissionDenied("Только создатель или исполнитель могут менять статус задачи.")
+            raise PermissionDenied("NOT_TASK_PARTICIPANT")
 
         with transaction.atomic():
             task.status = new_status
@@ -160,6 +168,8 @@ class TaskService:
     def attach_file(task: Task, file_id: uuid.UUID, attached_by: uuid.UUID) -> TaskAttachment:
         if task.is_legal_hold:
             raise PermissionDenied("LEGAL_HOLD")
+        if task.created_by_id != attached_by and task.assigned_to_id != attached_by:
+            raise PermissionDenied("NOT_TASK_PARTICIPANT")
         try:
             with transaction.atomic():
                 existing = TaskAttachment.objects.select_for_update().filter(
@@ -194,7 +204,7 @@ class TaskService:
             is_deleted=False,
         ).first()
         if attachment is None:
-            raise PermissionDenied("ATTACHMENT_NOT_FOUND")
+            raise AttachmentNotFoundError
 
         if attachment.attached_by_id != actor_id:
             raise PermissionDenied("NOT_ATTACHMENT_OWNER")

@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -102,7 +103,7 @@ def get_director_dashboard(request: HttpRequest):
 
     cached = get_cached_director_dashboard(tenant_id)
     if cached is not None:
-        return 200, DirectorDashboardSchema.model_validate(cached)
+        return 200, DirectorDashboardSchema.model_validate(json.loads(cached))
 
     today = datetime.now(tz=UTC).date()
     period_from = today.replace(day=1)
@@ -120,5 +121,5 @@ def get_director_dashboard(request: HttpRequest):
         period_from=period_from,
         period_to=today,
     )
-    set_cached_director_dashboard(tenant_id, summary.model_dump())
+    set_cached_director_dashboard(tenant_id, summary.model_dump_json())
     return 200, summary

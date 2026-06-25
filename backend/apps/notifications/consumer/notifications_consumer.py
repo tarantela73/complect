@@ -3,7 +3,8 @@ from __future__ import annotations
 import uuid
 
 import structlog
-from django.db import transaction
+from django.db import IntegrityError, OperationalError, transaction
+from redis.exceptions import RedisError
 
 from apps.common.services.consumer_base import BaseDomainConsumer, StreamEvent
 from apps.common.tasks import BaseEnterpriseTask
@@ -106,6 +107,10 @@ class NotificationsConsumer(BaseDomainConsumer):
     name="apps.notifications.consumer.notifications_consumer.run_notifications_consumer_task",
     queue="notifications",
     ignore_result=True,
+    autoretry_for=(OperationalError, RedisError, IntegrityError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def run_notifications_consumer_task() -> None:
     NotificationsConsumer().run_batch(100)
