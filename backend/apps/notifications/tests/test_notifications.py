@@ -51,11 +51,14 @@ class TestHandlerRegistry:
         from apps.common.events.contracts import ContractActivatedEvent, ContractClosedEvent
         from apps.common.events.files import FileQuarantinedEvent
         from apps.common.events.finance import TransactionPostedEvent
+        from apps.common.events.tasks import TaskCancelledEvent, TaskCompletedEvent
 
         assert ContractActivatedEvent.EVENT_TYPE in NOTIFICATION_ROUTES
         assert ContractClosedEvent.EVENT_TYPE in NOTIFICATION_ROUTES
         assert FileQuarantinedEvent.EVENT_TYPE in NOTIFICATION_ROUTES
         assert TransactionPostedEvent.EVENT_TYPE in NOTIFICATION_ROUTES
+        assert TaskCompletedEvent.EVENT_TYPE in NOTIFICATION_ROUTES
+        assert TaskCancelledEvent.EVENT_TYPE in NOTIFICATION_ROUTES
 
     def test_contract_activated_recipient_from_user_id(self):
         from apps.common.events.contracts import ContractActivatedEvent
