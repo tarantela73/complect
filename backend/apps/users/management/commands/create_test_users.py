@@ -18,7 +18,7 @@ import structlog
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-PUBLIC_SITE_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+PUBLIC_SITE_TENANT_ID = uuid.UUID("a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5")
 
 _TEST_USERS = [
     {
@@ -63,7 +63,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         if not settings.DEBUG and not options.get("force"):
             raise CommandError(
-                "create_test_users is disabled in non-DEBUG environments. "
+                "create_test_users is disabled when DEBUG=False. "
                 "Pass --force to override (CI/staging only)."
             )
         from apps.common.models.rbac import Role, RoleBinding

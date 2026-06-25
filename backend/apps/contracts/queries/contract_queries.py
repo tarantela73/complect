@@ -1,6 +1,8 @@
 """
 CQRS Query Side — read-only projections, no business logic, no writes.
-Cursor pagination: WHERE id < cursor ORDER BY id DESC (ADR rule 4.11).
+Cursor pagination (ADR rule 4.11): OFFSET запрещён. Используется составной курсор
+(created_at DESC, id DESC) — UUID v4 PK не монотонен, ORDER BY id даёт
+недетерминированный порядок. См. docs/solutions/patterns/cursor-pagination.md.
 """
 import uuid
 from datetime import timedelta
@@ -8,7 +10,7 @@ from typing import Optional
 
 import structlog
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.common.contracts.file_service_protocol import FileServiceProtocol
@@ -55,13 +57,23 @@ def get_contracts_page(
     if q:
         search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
         qs = qs.filter(search_vector=search_query).order_by(
-            SearchRank("search_vector", search_query).desc(), "-id"
+            SearchRank("search_vector", search_query).desc(), "-created_at", "-id"
         )
     else:
-        qs = qs.order_by("-id")
+        qs = qs.order_by("-created_at", "-id")
 
     if cursor:
-        qs = qs.filter(id__lt=cursor)
+        ctx = get_context()
+        anchor = (
+            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id)
+            .values("created_at", "id")
+            .first()
+        )
+        if anchor:
+            qs = qs.filter(
+                Q(created_at__lt=anchor["created_at"])
+                | Q(created_at=anchor["created_at"], id__lt=anchor["id"])
+            )
 
     if status:
         qs = qs.filter(status=status)
@@ -159,6 +171,10 @@ def get_contract_counts() -> dict:
         "legal_hold": by_status.get("LEGAL_HOLD", 0),
         "closed": by_status.get("CLOSED", 0),
     }
+
+
+def get_open_contracts_count() -> int:
+    return ContractRepository.get_queryset().exclude(status=ContractStatus.CLOSED).count()
 
 
 def get_stuck_drafts_count(threshold_days: int = 30) -> int:

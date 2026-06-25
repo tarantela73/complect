@@ -15,6 +15,11 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 DEBUG = _env_bool("DEBUG", default=True)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+
+# Gradual rollout: log denials without blocking during development.
+# Production overrides this to "ENFORCE" via prod.py.
+RBAC_ENFORCEMENT_MODE = "LOG_ONLY"
 
 # ===========================================================================
 # DATABASE
