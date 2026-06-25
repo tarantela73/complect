@@ -246,6 +246,113 @@ class TestNotificationsConsumer:
         count = InAppNotification.objects.filter(tenant_id=tenant_id).count()
         assert count == 0
 
+    def test_task_completed_notifies_creator(self):
+        from apps.common.events.tasks import TaskCompletedEvent
+
+        tenant_id = uuid.uuid4()
+        creator_id = uuid.uuid4()
+        payload = {
+            "task_id": str(uuid.uuid4()),
+            "task_title": "Закрыть сделку",
+            "creator_id": str(creator_id),
+            "assigned_to_id": None,
+            "correlation_id": str(uuid.uuid4()),
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "event_version": 1,
+        }
+
+        with (
+            patch("apps.notifications.consumer.notifications_consumer.push_notification_ws"),
+            patch("apps.notifications.consumer.notifications_consumer.send_notification_email_task"),
+        ):
+            consumer = NotificationsConsumer()
+            consumer.process(_make_stream_event(TaskCompletedEvent.EVENT_TYPE, payload, tenant_id=tenant_id))
+
+        notif = InAppNotification.objects.filter(tenant_id=tenant_id, user_id=creator_id).first()
+        assert notif is not None
+        assert "Закрыть сделку" in notif.body
+
+    def test_task_completed_notifies_both_creator_and_assignee(self):
+        from apps.common.events.tasks import TaskCompletedEvent
+
+        tenant_id = uuid.uuid4()
+        creator_id = uuid.uuid4()
+        assignee_id = uuid.uuid4()
+        payload = {
+            "task_id": str(uuid.uuid4()),
+            "task_title": "Проверить отчёт",
+            "creator_id": str(creator_id),
+            "assigned_to_id": str(assignee_id),
+            "correlation_id": str(uuid.uuid4()),
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "event_version": 1,
+        }
+
+        with (
+            patch("apps.notifications.consumer.notifications_consumer.push_notification_ws"),
+            patch("apps.notifications.consumer.notifications_consumer.send_notification_email_task"),
+        ):
+            consumer = NotificationsConsumer()
+            consumer.process(_make_stream_event(TaskCompletedEvent.EVENT_TYPE, payload, tenant_id=tenant_id))
+
+        assert InAppNotification.objects.filter(tenant_id=tenant_id, user_id=creator_id).exists()
+        assert InAppNotification.objects.filter(tenant_id=tenant_id, user_id=assignee_id).exists()
+
+    def test_task_cancelled_notifies_creator(self):
+        from apps.common.events.tasks import TaskCancelledEvent
+
+        tenant_id = uuid.uuid4()
+        creator_id = uuid.uuid4()
+        payload = {
+            "task_id": str(uuid.uuid4()),
+            "task_title": "Созвониться с клиентом",
+            "creator_id": str(creator_id),
+            "assigned_to_id": None,
+            "correlation_id": str(uuid.uuid4()),
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "event_version": 1,
+        }
+
+        with (
+            patch("apps.notifications.consumer.notifications_consumer.push_notification_ws"),
+            patch("apps.notifications.consumer.notifications_consumer.send_notification_email_task"),
+        ):
+            consumer = NotificationsConsumer()
+            consumer.process(_make_stream_event(TaskCancelledEvent.EVENT_TYPE, payload, tenant_id=tenant_id))
+
+        notif = InAppNotification.objects.filter(tenant_id=tenant_id, user_id=creator_id).first()
+        assert notif is not None
+        assert "Созвониться с клиентом" in notif.body
+
+    def test_task_completed_deduplicates_when_creator_is_assignee(self):
+        from apps.common.events.tasks import TaskCompletedEvent
+
+        tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        payload = {
+            "task_id": str(uuid.uuid4()),
+            "task_title": "Самоназначение",
+            "creator_id": str(user_id),
+            "assigned_to_id": str(user_id),
+            "correlation_id": str(uuid.uuid4()),
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "event_version": 1,
+        }
+
+        with (
+            patch("apps.notifications.consumer.notifications_consumer.push_notification_ws"),
+            patch("apps.notifications.consumer.notifications_consumer.send_notification_email_task"),
+        ):
+            consumer = NotificationsConsumer()
+            consumer.process(_make_stream_event(TaskCompletedEvent.EVENT_TYPE, payload, tenant_id=tenant_id))
+
+        count = InAppNotification.objects.filter(tenant_id=tenant_id, user_id=user_id).count()
+        assert count == 1
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # API
