@@ -105,7 +105,7 @@ ENABLE_OTEL = _env_bool("ENABLE_OTEL", default=False)
 
 REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
-EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_secure_mesh_token_2026")
+EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "dev-local-insecure-gateway-token")
 
 # Public site / CMS (ADR-0023). Dev defaults — override via env in production.
 # Use the first real tenant UUID from the DB, or keep this placeholder for fresh installs.

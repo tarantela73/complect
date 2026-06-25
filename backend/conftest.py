@@ -5,6 +5,11 @@ import pytest
 from django.db import connection
 
 
+@pytest.fixture(autouse=True)
+def _pin_gateway_token(settings):
+    settings.EXPECTED_GATEWAY_TOKEN = "complect_internal_secure_mesh_token_2026"
+
+
 @pytest.fixture(scope="session", autouse=True)
 def install_pgcrypto(django_db_blocker):
     with django_db_blocker.unblock():

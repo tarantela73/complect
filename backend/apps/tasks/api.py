@@ -21,7 +21,7 @@ from apps.tasks.schemas.task_dto import (
     TaskStatusChangeIn,
     TaskUpdateIn,
 )
-from apps.tasks.services.task_service import TaskService
+from apps.tasks.services.task_service import AttachmentNotFoundError, TaskService, _UNSET
 
 router = Router(tags=["Tasks"])
 
@@ -94,9 +94,9 @@ def update_task(request: HttpRequest, task_id: uuid.UUID, payload: TaskUpdateIn)
         return 404, make_error_response("TASK_NOT_FOUND", "Задача не найдена.")
     fields = payload.model_fields_set
     update_kwargs: dict = {
-        "title": payload.title if "title" in fields else None,
-        "description": payload.description if "description" in fields else None,
-        "priority": payload.priority if "priority" in fields else None,
+        "title": payload.title if "title" in fields else _UNSET,
+        "description": payload.description if "description" in fields else _UNSET,
+        "priority": payload.priority if "priority" in fields else _UNSET,
     }
     if "assigned_to_id" in fields:
         update_kwargs["assigned_to_id"] = payload.assigned_to_id
@@ -107,7 +107,7 @@ def update_task(request: HttpRequest, task_id: uuid.UUID, payload: TaskUpdateIn)
     except ConcurrentModificationError:
         return 409, make_error_response("CONCURRENT_MODIFICATION", "Задача была изменена параллельным запросом.")
     except PermissionDenied as exc:
-        return 403, make_error_response("FORBIDDEN", str(exc))
+        return 403, make_error_response(str(exc), "Доступ запрещён.")
     except ValidationError as exc:
         return 400, make_error_response("VALIDATION_ERROR", str(exc))
     return 200, get_task_detail(task_id, tenant_id)
@@ -126,7 +126,7 @@ def change_task_status(request: HttpRequest, task_id: uuid.UUID, payload: TaskSt
     except ConcurrentModificationError:
         return 409, make_error_response("CONCURRENT_MODIFICATION", "Задача была изменена параллельным запросом.")
     except PermissionDenied as exc:
-        return 403, make_error_response("FORBIDDEN", str(exc))
+        return 403, make_error_response(str(exc), "Доступ запрещён.")
     except ValueError as exc:
         return 422, make_error_response("INVALID_TRANSITION", str(exc))
     except ValidationError as exc:
@@ -147,7 +147,7 @@ def cancel_task(request: HttpRequest, task_id: uuid.UUID):
     except ConcurrentModificationError:
         return 409, make_error_response("CONCURRENT_MODIFICATION", "Задача была изменена параллельным запросом.")
     except PermissionDenied as exc:
-        return 403, make_error_response("FORBIDDEN", str(exc))
+        return 403, make_error_response(str(exc), "Доступ запрещён.")
     except ValueError as exc:
         return 422, make_error_response("INVALID_TRANSITION", str(exc))
     return 200, get_task_detail(task_id, tenant_id)
@@ -195,11 +195,10 @@ def detach_file(request: HttpRequest, task_id: uuid.UUID, file_id: uuid.UUID):
         return 404, make_error_response("TASK_NOT_FOUND", "Задача не найдена.")
     try:
         TaskService.detach_file(task, file_id, actor_id)
+    except AttachmentNotFoundError:
+        return 404, make_error_response("ATTACHMENT_NOT_FOUND", "Вложение не найдено.")
     except PermissionDenied as exc:
-        code = str(exc)
-        if code == "ATTACHMENT_NOT_FOUND":
-            return 404, make_error_response("ATTACHMENT_NOT_FOUND", "Вложение не найдено.")
-        return 403, make_error_response(code, "Доступ запрещён.")
+        return 403, make_error_response(str(exc), "Доступ запрещён.")
     except ConcurrentModificationError:
         return 409, make_error_response("CONFLICT", "Конкурентное изменение: повторите запрос.")
     return 204, None
