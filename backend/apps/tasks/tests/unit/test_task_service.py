@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 from django.core.exceptions import PermissionDenied, ValidationError
 
+from apps.common.models.outbox import OutboxRecord
 from apps.tasks.models.task import TaskStatus
 from apps.tasks.services.task_service import TaskService
 
@@ -129,3 +130,51 @@ class TestTaskServiceComment:
         task = TaskService.cancel(task, actor)
         with pytest.raises(ValidationError, match="закрытую"):
             TaskService.add_comment(task, actor, "Late comment")
+
+
+@pytest.mark.django_db
+class TestTaskServiceOutbox:
+    def test_done_transition_emits_completed_event(self):
+        from apps.common.events.tasks import TaskCompletedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        task = TaskService.change_status(task, TaskStatus.IN_PROGRESS, actor)
+        TaskService.change_status(task, TaskStatus.DONE, actor)
+
+        assert OutboxRecord.objects.filter(event_type=TaskCompletedEvent.EVENT_TYPE).exists()
+
+    def test_cancel_emits_cancelled_event(self):
+        from apps.common.events.tasks import TaskCancelledEvent
+
+        task = _create()
+        actor = task.created_by_id
+        TaskService.cancel(task, actor)
+
+        assert OutboxRecord.objects.filter(event_type=TaskCancelledEvent.EVENT_TYPE).exists()
+
+    def test_done_event_payload_contains_tenant_id(self):
+        from apps.common.events.tasks import TaskCompletedEvent
+        from apps.common.tenancy.context import set_tenant_context
+
+        tenant_id = uuid.uuid4()
+        set_tenant_context(tenant_id)
+        task = _create(tenant_id=tenant_id)
+        actor = task.created_by_id
+        task = TaskService.change_status(task, TaskStatus.IN_PROGRESS, actor)
+        TaskService.change_status(task, TaskStatus.DONE, actor)
+
+        record = OutboxRecord.objects.filter(event_type=TaskCompletedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert str(tenant_id) == record.payload_json.get("tenant_id")
+
+    def test_no_outbox_event_on_intermediate_transition(self):
+        from apps.common.events.tasks import TaskCancelledEvent, TaskCompletedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        TaskService.change_status(task, TaskStatus.IN_PROGRESS, actor)
+
+        assert not OutboxRecord.objects.filter(
+            event_type__in=[TaskCompletedEvent.EVENT_TYPE, TaskCancelledEvent.EVENT_TYPE]
+        ).exists()
