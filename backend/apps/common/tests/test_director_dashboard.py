@@ -169,12 +169,12 @@ class TestDirectorDashboardPermissionEnforce:
 
         assert resp.status_code == 403
 
-    def test_with_dashboard_read_permission_returns_200(self):
+    def test_with_director_dashboard_read_permission_returns_200(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
 
-        perm = _make_permission("read", "dashboard")
+        perm = _make_permission("read", "director_dashboard")
         role = _make_role(f"director_{uuid.uuid4().hex[:6]}", perm)
         _bind(user_id, tenant_id, role)
 

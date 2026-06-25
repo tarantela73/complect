@@ -1,9 +1,10 @@
 import uuid
+from datetime import UTC, datetime
 from typing import Optional
 
 from apps.common.contracts.user_info_contracts import UserDisplayDTO, UserInfoProtocol
 from apps.objects.models.object_stage import ObjectStage
-from apps.objects.models.supply_object import SupplyObject
+from apps.objects.models.supply_object import ObjectStatus, SupplyObject
 from apps.objects.repositories.object_repo import ObjectRepository
 from apps.objects.schemas.object_dto import (
     FeatureCollectionSchema,
@@ -85,6 +86,25 @@ def _to_detail(
         longitude=obj.location.x if obj.location else None,
         latitude=obj.location.y if obj.location else None,
     )
+
+
+def get_objects_summary(tenant_id: uuid.UUID) -> dict:
+    """Returns in_progress_count, top5 (by name), and overdue_count for director dashboard."""
+    today = datetime.now(tz=UTC).date()
+    qs = SupplyObject.objects.filter(
+        tenant_id=tenant_id, is_deleted=False, status=ObjectStatus.IN_PROGRESS
+    )
+    in_progress_count = qs.count()
+    top5 = list(qs.order_by("name").values("id", "name")[:5])
+    overdue_count = qs.filter(
+        planned_end_date__lt=today,
+        planned_end_date__isnull=False,
+    ).count()
+    return {
+        "in_progress_count": in_progress_count,
+        "top5": top5,
+        "overdue_count": overdue_count,
+    }
 
 
 def get_objects_page(

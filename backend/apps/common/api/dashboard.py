@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from django.http import HttpRequest
@@ -96,7 +96,7 @@ class DirectorDashboardSchema(Schema):
 
 
 @router.get("/director/", response={200: DirectorDashboardSchema, 403: dict})
-@require_permission("read", "dashboard")
+@require_permission("read", "director_dashboard")
 def get_director_dashboard(request: HttpRequest):
     tenant_id = get_tenant_id()
 
@@ -104,11 +104,11 @@ def get_director_dashboard(request: HttpRequest):
     if cached is not None:
         return 200, DirectorDashboardSchema.model_validate(cached)
 
-    today = date.today()
+    today = datetime.now(tz=UTC).date()
     period_from = today.replace(day=1)
 
-    objects = get_objects_summary()
-    payments = get_payments_month_summary()
+    objects = get_objects_summary(tenant_id)
+    payments = get_payments_month_summary(tenant_id)
 
     summary = DirectorDashboardSchema(
         objects_in_progress_count=objects["in_progress_count"],

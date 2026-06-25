@@ -60,6 +60,8 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("dlq", "write"),
     # dashboard (overview summary — all authenticated roles)
     Permission("dashboard", "read"),
+    # director_dashboard (KPI screen — director + admin only)
+    Permission("director_dashboard", "read"),
     # notifications (in-app notification feed — all authenticated roles)
     Permission("notifications", "read"),
     # ops (platform runtime observability — platform admin only)
@@ -77,6 +79,10 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("cms", "read"),
     Permission("cms", "write"),
     Permission("cms", "publish"),
+    # tasks (assignments module — sprint C)
+    Permission("tasks", "read"),
+    Permission("tasks", "write"),
+    Permission("tasks", "delete"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature

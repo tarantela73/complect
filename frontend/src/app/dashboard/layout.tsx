@@ -17,6 +17,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Главная', permission: 'dashboard.read', exact: true },
+  { href: '/dashboard/director', label: 'Дашборд руководителя', permission: 'director_dashboard.read' },
   { href: '/dashboard/contragents', label: 'Контрагенты', permission: 'contragents.read' },
   { href: '/dashboard/contracts', label: 'Договоры', permission: 'contracts.read' },
   { href: '/dashboard/finance', label: 'Финансы', permission: 'finance.read' },
