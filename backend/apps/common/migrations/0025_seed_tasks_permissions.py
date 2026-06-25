@@ -30,7 +30,11 @@ def seed_tasks_permissions(apps, schema_editor):
 
 def unseed_tasks_permissions(apps, schema_editor):
     Permission = apps.get_model("common", "Permission")
-    Permission.objects.filter(resource="tasks").delete()
+    RolePermission = apps.get_model("common", "RolePermission")
+
+    task_perms = Permission.objects.filter(resource="tasks")
+    RolePermission.objects.filter(permission__in=task_perms).delete()
+    task_perms.delete()
 
 
 class Migration(migrations.Migration):
