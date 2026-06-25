@@ -329,10 +329,10 @@ POSTGRES_REPLICA_MAX_LAG = 1.0
 # ===========================================================================
 # RBAC
 # ===========================================================================
-# OFF       — bypass all checks (use during initial rollout or in tests that don't need RBAC)
-# LOG_ONLY  — evaluate and log denials, never block (default; safe for gradual rollout)
-# ENFORCE   — raise PermissionDenied on denial
-RBAC_ENFORCEMENT_MODE = "LOG_ONLY"
+# OFF       — bypass all checks (use in tests that don't need RBAC)
+# LOG_ONLY  — evaluate and log denials, never block (override in local.py for gradual rollout)
+# ENFORCE   — raise PermissionDenied on denial (production default)
+RBAC_ENFORCEMENT_MODE = "ENFORCE"
 # Per-user permission set cache TTL in seconds. Short enough for security, long for perf.
 RBAC_POLICY_CACHE_TTL = 60
 

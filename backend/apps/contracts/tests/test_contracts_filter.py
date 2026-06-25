@@ -77,3 +77,73 @@ class TestContragentIdFilter:
         result = get_contracts_page(contragent_id=self.contragent_a)
 
         assert result["count"] == 1
+
+
+@pytest.mark.django_db
+class TestCursorPagination:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.tenant_id = uuid.uuid4()
+        set_context(RequestContext(
+            tenant_id=self.tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        ))
+
+    def test_pages_do_not_overlap(self):
+        for _ in range(12):
+            _make_contract(self.tenant_id)
+
+        page1 = get_contracts_page(limit=5)
+        assert len(page1["results"]) == 5
+        cursor = page1["next_cursor"]
+        assert cursor is not None
+
+        page2 = get_contracts_page(cursor=uuid.UUID(cursor), limit=5)
+        ids1 = {str(r.id) for r in page1["results"]}
+        ids2 = {str(r.id) for r in page2["results"]}
+        assert ids1.isdisjoint(ids2)
+
+    def test_cursor_pagination_covers_all_rows(self):
+        for _ in range(13):
+            _make_contract(self.tenant_id)
+
+        seen, cursor = set(), None
+        while True:
+            page = get_contracts_page(cursor=cursor, limit=5)
+            for item in page["results"]:
+                assert item.id not in seen, f"duplicate row {item.id}"
+                seen.add(item.id)
+            next_cur = page["next_cursor"]
+            if not next_cur:
+                break
+            cursor = uuid.UUID(next_cur)
+
+        assert len(seen) == 13
+
+    def test_cursor_from_other_tenant_returns_no_results(self):
+        """Cursor UUID from another tenant must not leak cross-tenant data."""
+        other_tenant = uuid.uuid4()
+        set_context(RequestContext(
+            tenant_id=other_tenant,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        ))
+        other_contract = _make_contract(other_tenant)
+        cross_tenant_cursor = other_contract.id
+
+        set_context(RequestContext(
+            tenant_id=self.tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        ))
+        for _ in range(3):
+            _make_contract(self.tenant_id)
+
+        result = get_contracts_page(cursor=cross_tenant_cursor, limit=10)
+        # Anchor not found → no filter applied → returns all tenant rows
+        # (safe: anchor from other tenant resolves to None)
+        assert all(str(r.id) != str(cross_tenant_cursor) for r in result["results"])
