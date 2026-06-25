@@ -11,4 +11,3 @@ class TaskAttachment(BaseEnterpriseModel):
 
     class Meta:
         db_table = "tasks_attachments"
-        unique_together = [["task_id", "file_id", "is_deleted"]]

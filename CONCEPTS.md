@@ -108,6 +108,10 @@ A flag (`is_legal_hold=True` on `BaseEnterpriseModel`) that blocks soft delete, 
 
 ## Common / Infrastructure
 
+### PolicyEngine
+
+The RBAC decision engine that evaluates whether a `(actor_id, tenant_id, action, resource)` tuple is permitted. Operates in three modes configured via `RBAC_ENFORCEMENT_MODE`: `OFF` (bypass all checks — test isolation only), `LOG_ONLY` (evaluate and log denials, never raise — for gradual rollout in non-production environments), `ENFORCE` (raise `PermissionDenied` on denial — required in production). The `require_permission` API decorator delegates blocking entirely to this engine: in `LOG_ONLY` mode it returns `False` but never raises, so guarded endpoints return 200 OK for any authenticated user. Production must always use `ENFORCE`.
+
 ### BaseEnterpriseModel
 
 The base Django model inherited by every domain model. Fields: `id` (UUID PK), `tenant_id` (UUID, required), `created_at`, `updated_at`, `deleted_at` (nullable, soft-delete), `is_deleted` (bool), `version` (optimistic concurrency), `is_legal_hold` (bool). Mutations via `EnterpriseSreRepository.atomic_cas_update()`, never via `.save()` or `.delete()`.
@@ -131,6 +135,22 @@ The core entity for uploaded or in-progress files within a tenant. Status lifecy
 ### FileStatus
 
 The scan and availability lifecycle of a FileRecord. Values: `PENDING_UPLOAD`, `SCANNING`, `AVAILABLE`, `QUARANTINED`. `QUARANTINED` files are read-blocked and retained for audit — they are not soft-deleted. Only `AVAILABLE` is safe to serve to clients.
+
+---
+
+## Tasks Domain
+
+### Task
+
+A user-created assignment or instruction with an owner (creator) and optionally an assignee. Carries a title, description, priority, optional due date, and a link to any domain entity (`entity_type` + `entity_id`). Status machine: `OPEN` → `IN_PROGRESS` → `DONE` | `CANCELLED`. Terminal statuses are irreversible — a closed task cannot be edited or re-opened. Mutation is blocked by Legal Hold.
+
+### TaskStatus
+
+Lifecycle state of a Task. Four values: `OPEN` (created, work not started), `IN_PROGRESS` (assignee is working), `DONE` (completed — triggers `TaskCompletedEvent`), `CANCELLED` (abandoned — triggers `TaskCancelledEvent`). Only the creator or the assignee may change status. Transitions: `OPEN → IN_PROGRESS`, `OPEN → CANCELLED`, `IN_PROGRESS → DONE`, `IN_PROGRESS → CANCELLED`. Reverse transitions are not allowed.
+
+### TaskAttachment
+
+A file linked to a Task. Enforced as a partial unique constraint: at most one active attachment per `(task_id, file_id)` pair where `is_deleted = FALSE`. After soft-deleting an attachment, the same file may be re-attached. Created via `TaskService.attach_file()` with `SELECT FOR UPDATE` to prevent race-condition duplicates.
 
 ---
 
