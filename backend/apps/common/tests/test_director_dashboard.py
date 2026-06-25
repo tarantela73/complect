@@ -18,12 +18,13 @@ from decimal import Decimal
 
 import pytest
 from django.core.cache import cache
-from django.test import Client, override_settings
+from django.test import Client
 
 from apps.common.cache.dashboard_cache import _director_key
 from apps.common.models.rbac import Permission, Role, RoleBinding, RolePermission
 from apps.common.tenancy.context import set_tenant_context
 from apps.contracts.models.contract import Contract, ContractStatus
+from apps.objects.models.supply_object import ObjectStatus, SupplyObject, SupplyObjectType
 from apps.payments.models.bank_statement import BankStatement, BankStatementStatus
 from apps.payments.models.bank_statement_line import BankStatementLine
 
@@ -340,6 +341,83 @@ class TestDirectorDashboardObjectsSummary:
         data = self._call(tenant_id)
         assert isinstance(data["objects_top5"], list)
         assert len(data["objects_top5"]) <= 5
+
+    def _make_supply_object(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str = ObjectStatus.IN_PROGRESS,
+        planned_end_date: date | None = None,
+        name: str = "Test Object",
+    ) -> SupplyObject:
+        return SupplyObject.objects.create(
+            tenant_id=tenant_id,
+            name=name,
+            object_type=SupplyObjectType.OTHER,
+            resource_type="OTHER",
+            status=status,
+            planned_end_date=planned_end_date,
+        )
+
+    def test_in_progress_object_counted(self):
+        tenant_id = uuid.uuid4()
+        self._make_supply_object(tenant_id, status=ObjectStatus.IN_PROGRESS)
+
+        data = self._call(tenant_id)
+
+        assert data["objects_in_progress_count"] == 1
+
+    def test_completed_object_not_counted_as_in_progress(self):
+        tenant_id = uuid.uuid4()
+        self._make_supply_object(tenant_id, status=ObjectStatus.COMPLETED)
+
+        data = self._call(tenant_id)
+
+        assert data["objects_in_progress_count"] == 0
+
+    def test_overdue_object_counted(self):
+        tenant_id = uuid.uuid4()
+        past_date = date(2000, 1, 1)
+        self._make_supply_object(tenant_id, status=ObjectStatus.IN_PROGRESS, planned_end_date=past_date)
+
+        data = self._call(tenant_id)
+
+        assert data["overdue_objects_count"] == 1
+
+    def test_in_progress_without_end_date_not_overdue(self):
+        tenant_id = uuid.uuid4()
+        self._make_supply_object(tenant_id, status=ObjectStatus.IN_PROGRESS, planned_end_date=None)
+
+        data = self._call(tenant_id)
+
+        assert data["overdue_objects_count"] == 0
+
+    def test_objects_top5_contains_in_progress_name(self):
+        tenant_id = uuid.uuid4()
+        self._make_supply_object(tenant_id, status=ObjectStatus.IN_PROGRESS, name="Alpha Object")
+
+        data = self._call(tenant_id)
+
+        names = [item["name"] for item in data["objects_top5"]]
+        assert "Alpha Object" in names
+
+    def test_objects_top5_max_five_items(self):
+        tenant_id = uuid.uuid4()
+        for i in range(7):
+            self._make_supply_object(tenant_id, name=f"Object {i:02d}")
+
+        data = self._call(tenant_id)
+
+        assert len(data["objects_top5"]) <= 5
+
+    def test_different_tenant_objects_not_counted(self):
+        tenant_a = uuid.uuid4()
+        tenant_b = uuid.uuid4()
+        self._make_supply_object(tenant_b, status=ObjectStatus.IN_PROGRESS)
+
+        data = self._call(tenant_a)
+
+        assert data["objects_in_progress_count"] == 0
 
 
 # ---------------------------------------------------------------------------
