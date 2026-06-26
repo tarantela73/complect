@@ -173,8 +173,12 @@ def get_contract_counts() -> dict:
     }
 
 
-def get_open_contracts_count() -> int:
-    return ContractRepository.get_queryset().exclude(status=ContractStatus.CLOSED).count()
+def get_open_contracts_count(tenant_id: uuid.UUID) -> int:
+    return (
+        Contract.objects.filter(tenant_id=tenant_id, is_deleted=False)
+        .exclude(status=ContractStatus.CLOSED)
+        .count()
+    )
 
 
 def get_stuck_drafts_count(threshold_days: int = 30) -> int:

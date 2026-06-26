@@ -26,7 +26,7 @@ class TaskRepository:
         """Atomic CAS update via version increment. Raises ConcurrentModificationError on conflict."""
         current_version = task.version
 
-        if not task.pk or not Task.objects.filter(pk=task.pk).exists():
+        if task._state.adding:
             task.save()
             return task
 

@@ -1,30 +1,26 @@
 import redis
+from django.conf import settings
 
-from apps.common.context.core import ContextCore, get_tenant_id
+from apps.common.context.core import get_tenant_id, set_force_primary_db
 
 
 class ReadYourOwnWritesStickyMiddleware:
     """
-    [ФИНАЛЬНЫЙ PRODUCTION КАНОН v3.7.4]
-    Липкий CQRS роутинг (Sticky Read-Your-Own-Writes Strategy).
-    Если тенант совершил мутацию (POST/PUT/DELETE), флаг переключает
-    его чтение со слабой реплики на мастер-БД для предотвращения лага данных.
+    Sticky Read-Your-Own-Writes (rule 4.13): после мутации тенанта
+    переключает чтение на primary DB на 5 секунд для предотвращения replica lag.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
-        self.context_core = ContextCore()
-        # Используем ленивое подключение к кэш-базе Redis №1 из нашей топологии
-        self.redis_client = redis.Redis(host="redis", port=6379, db=1, decode_responses=True)
+        self.redis_client = redis.from_url(settings.REDIS_CACHE_URL, decode_responses=True)
 
     def __call__(self, request):
         try:
             tenant_id = get_tenant_id()
             redis_key = f"cqrs:sticky:{tenant_id}"
 
-            # [ИСПРАВЛЕНО]: Взводим липкость к мастеру через нативное свойство дескриптора ядра
             if self.redis_client.exists(redis_key):
-                self.context_core.force_primary = True
+                set_force_primary_db(True)
         except Exception:
             # Публичные роуты выполняются без CQRS-обвязки
             pass

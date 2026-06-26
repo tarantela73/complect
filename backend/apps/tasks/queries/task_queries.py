@@ -1,7 +1,9 @@
 """CQRS Query Side — read-only projections, no writes."""
 from __future__ import annotations
 
+import base64
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from django.db.models import Q
@@ -12,6 +14,20 @@ from apps.tasks.models.task_comment import TaskComment
 from apps.tasks.schemas.task_dto import TaskAttachmentOut, TaskCommentOut, TaskListOut, TaskOut
 
 
+def _encode_cursor(created_at: datetime, task_id: uuid.UUID) -> str:
+    raw = f"{created_at.isoformat()}:{task_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID] | None:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        ts_str, id_str = raw.rsplit(":", 1)
+        return datetime.fromisoformat(ts_str), uuid.UUID(id_str)
+    except Exception:
+        return None
+
+
 def _task_qs(tenant_id: uuid.UUID):
     return Task.objects.filter(tenant_id=tenant_id, is_deleted=False).order_by("-created_at", "-id")
 
@@ -19,7 +35,7 @@ def _task_qs(tenant_id: uuid.UUID):
 def get_tasks_page(
     tenant_id: uuid.UUID,
     *,
-    cursor: Optional[uuid.UUID] = None,
+    cursor: Optional[str] = None,
     limit: int = 20,
     status: Optional[str] = None,
     assigned_to_id: Optional[uuid.UUID] = None,
@@ -30,12 +46,13 @@ def get_tasks_page(
     qs = _task_qs(tenant_id)
 
     if cursor:
-        anchor = Task.objects.filter(id=cursor, tenant_id=tenant_id).values("created_at", "id").first()
+        anchor = _decode_cursor(cursor)
         if anchor is None:
             return TaskListOut(items=[], next_cursor=None)
+        anchor_ts, anchor_id = anchor
         qs = qs.filter(
-            Q(created_at__lt=anchor["created_at"])
-            | Q(created_at=anchor["created_at"], id__lt=anchor["id"])
+            Q(created_at__lt=anchor_ts)
+            | Q(created_at=anchor_ts, id__lt=anchor_id)
         )
     if status:
         qs = qs.filter(status=status)
@@ -52,10 +69,11 @@ def get_tasks_page(
     has_next = len(rows) > limit
     rows = rows[:limit]
 
-    return TaskListOut(
-        items=[_task_to_out(t) for t in rows],
-        next_cursor=rows[-1].id if has_next and rows else None,
+    next_cursor = (
+        _encode_cursor(rows[-1].created_at, rows[-1].id) if has_next and rows else None
     )
+
+    return TaskListOut(items=[_task_to_out(t) for t in rows], next_cursor=next_cursor)
 
 
 def get_task_detail(task_id: uuid.UUID, tenant_id: uuid.UUID) -> Optional[TaskOut]:
