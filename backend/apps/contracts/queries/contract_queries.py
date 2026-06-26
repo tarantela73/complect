@@ -65,7 +65,7 @@ def get_contracts_page(
     if cursor:
         ctx = get_context()
         anchor = (
-            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id)
+            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id, is_deleted=False)
             .values("created_at", "id")
             .first()
         )

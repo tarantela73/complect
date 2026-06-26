@@ -8,7 +8,13 @@ from ninja import Query, Router
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.common.repository.sre_engine import ConcurrentModificationError
-from apps.tasks.queries.task_queries import get_task_attachments, get_task_comments, get_task_detail, get_tasks_page
+from apps.tasks.queries.task_queries import (
+    _decode_cursor,
+    get_task_attachments,
+    get_task_comments,
+    get_task_detail,
+    get_tasks_page,
+)
 from apps.tasks.repositories.task_repo import TaskRepository
 from apps.tasks.schemas.task_dto import (
     TaskAttachFileIn,
@@ -21,12 +27,12 @@ from apps.tasks.schemas.task_dto import (
     TaskStatusChangeIn,
     TaskUpdateIn,
 )
-from apps.tasks.services.task_service import AttachmentNotFoundError, TaskService, _UNSET
+from apps.tasks.services.task_service import _UNSET, AttachmentNotFoundError, TaskService
 
 router = Router(tags=["Tasks"])
 
 
-@router.get("/", response={200: TaskListOut, 403: dict})
+@router.get("/", response={200: TaskListOut, 400: dict, 403: dict})
 @require_permission("read", "tasks")
 def list_tasks(
     request: HttpRequest,
@@ -39,6 +45,8 @@ def list_tasks(
     created_by_id: Optional[uuid.UUID] = Query(None),  # noqa: B008
 ):
     tenant_id = request.jwt_tenant_id
+    if cursor is not None and _decode_cursor(cursor) is None:
+        return 400, make_error_response("INVALID_CURSOR", "Недопустимый cursor пагинации.")
     result = get_tasks_page(
         tenant_id,
         cursor=cursor,
