@@ -70,7 +70,7 @@ class TaskOut(BaseModel):
 
 class TaskListOut(BaseModel):
     items: list[TaskOut]
-    next_cursor: Optional[uuid.UUID] = None
+    next_cursor: Optional[str] = None
 
 
 class TaskAttachmentOut(BaseModel):

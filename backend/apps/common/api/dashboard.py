@@ -117,7 +117,7 @@ def get_director_dashboard(request: HttpRequest):
         overdue_objects_count=objects["overdue_count"],
         payments_credit_month=payments["credit"],
         payments_debit_month=payments["debit"],
-        open_contracts_count=get_open_contracts_count(),
+        open_contracts_count=get_open_contracts_count(tenant_id),
         period_from=period_from,
         period_to=today,
     )

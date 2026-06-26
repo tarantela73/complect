@@ -30,7 +30,7 @@ router = Router(tags=["Tasks"])
 @require_permission("read", "tasks")
 def list_tasks(
     request: HttpRequest,
-    cursor: Optional[uuid.UUID] = Query(None),  # noqa: B008
+    cursor: Optional[str] = Query(None),  # noqa: B008
     limit: int = Query(20, ge=1, le=100),  # noqa: B008
     status: Optional[str] = Query(None),  # noqa: B008
     assigned_to_id: Optional[uuid.UUID] = Query(None),  # noqa: B008
