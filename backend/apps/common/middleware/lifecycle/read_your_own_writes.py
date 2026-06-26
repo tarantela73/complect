@@ -8,6 +8,11 @@ class ReadYourOwnWritesStickyMiddleware:
     """
     Sticky Read-Your-Own-Writes (rule 4.13): после мутации тенанта
     переключает чтение на primary DB на 5 секунд для предотвращения replica lag.
+
+    Sync-реализация корректна в Django ASGI: async_to_sync при вызове внутренней
+    async-цепочки копирует текущий contextvars.Context (включая force_primary=True),
+    поэтому мутация ContextVar видна view. Аналогично работают
+    ContextIsolationMiddleware и AsgiTenantEnforcementMiddleware.
     """
 
     def __init__(self, get_response):

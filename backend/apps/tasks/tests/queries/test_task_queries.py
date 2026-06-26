@@ -86,7 +86,7 @@ class TestGetTasksPage:
     def test_invalid_cursor_returns_empty(self):
         tenant_id = uuid.uuid4()
         _make_task(tenant_id)
-        result = get_tasks_page(tenant_id, limit=10, cursor=uuid.uuid4())
+        result = get_tasks_page(tenant_id, limit=10, cursor="not-a-valid-cursor")
         assert result.items == []
 
 
