@@ -6,7 +6,7 @@ from apps.common.events.contracts import (
 from apps.common.events.files import FileAvailableEvent, FileQuarantinedEvent, FileUploadedEvent
 from apps.common.events.finance import TransactionPostedEvent
 from apps.common.events.slo import SLOStateChangedEvent
-from apps.common.events.tasks import TaskAssignedEvent
+from apps.common.events.tasks import TaskAssignedEvent, TaskStatusChangedEvent
 
 # Canonical set of subscribable domain event types.
 # Webhook subscriptions can only reference types listed here.
@@ -21,4 +21,5 @@ ALL_DOMAIN_EVENT_TYPES: frozenset[str] = frozenset({
     FileQuarantinedEvent.EVENT_TYPE,
     SLOStateChangedEvent.EVENT_TYPE,
     TaskAssignedEvent.EVENT_TYPE,
+    TaskStatusChangedEvent.EVENT_TYPE,
 })

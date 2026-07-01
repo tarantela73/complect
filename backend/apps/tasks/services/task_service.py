@@ -8,7 +8,7 @@ import django.utils.timezone as tz
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 
-from apps.common.events.tasks import TaskAssignedEvent, TaskCancelledEvent, TaskCompletedEvent
+from apps.common.events.tasks import TaskAssignedEvent, TaskCancelledEvent, TaskCompletedEvent, TaskStatusChangedEvent
 from apps.common.repository.sre_engine import EnterpriseSreRepository
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.utils.user_utils import user_exists_in_tenant
@@ -155,12 +155,28 @@ class TaskService:
             raise PermissionDenied("NOT_TASK_PARTICIPANT")
 
         with transaction.atomic():
+            old_status = task.status
             task.status = new_status
             if new_status in _TERMINAL_STATUSES:
                 task.closed_at = datetime.now(UTC)
                 task.closed_by_id = changed_by
             saved = TaskRepository.save(task)
             correlation_id = uuid.uuid4()
+
+            TransactionalOutboxService.push_to_outbox(
+                TaskStatusChangedEvent.create(
+                    correlation_id=correlation_id,
+                    task_id=saved.id,
+                    tenant_id=saved.tenant_id,
+                    task_title=saved.title,
+                    old_status=old_status,
+                    new_status=new_status,
+                    changed_by_id=changed_by,
+                    creator_id=saved.created_by_id,
+                    assigned_to_id=saved.assigned_to_id,
+                )
+            )
+
             if new_status == TaskStatus.DONE:
                 TransactionalOutboxService.push_to_outbox(
                     TaskCompletedEvent.create(

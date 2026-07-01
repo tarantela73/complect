@@ -2,6 +2,39 @@ import uuid
 
 from apps.notifications.handlers.base import BaseNotificationHandler, NotificationContext
 
+_STATUS_LABELS = {
+    "open": "Открыта",
+    "in_progress": "В работе",
+    "done": "Выполнена",
+    "cancelled": "Отменена",
+}
+
+
+class TaskStatusChangedHandler(BaseNotificationHandler):
+    default_in_app_enabled = True
+
+    def get_recipient_ids(self, ctx: NotificationContext) -> list[uuid.UUID]:
+        changed_by_str = ctx.payload.get("changed_by_id", "")
+        recipients = []
+        for key in ("creator_id", "assigned_to_id"):
+            uid_str = ctx.payload.get(key)
+            if uid_str and uid_str != changed_by_str:
+                try:
+                    recipients.append(uuid.UUID(str(uid_str)))
+                except (ValueError, AttributeError):
+                    pass
+        return list(dict.fromkeys(recipients))
+
+    def get_title(self, ctx: NotificationContext) -> str:
+        new_status = ctx.payload.get("new_status", "")
+        return f"Статус задачи: {_STATUS_LABELS.get(new_status, new_status)}"
+
+    def get_body(self, ctx: NotificationContext) -> str:
+        title = ctx.payload.get("task_title", "")
+        old = _STATUS_LABELS.get(ctx.payload.get("old_status", ""), ctx.payload.get("old_status", ""))
+        new = _STATUS_LABELS.get(ctx.payload.get("new_status", ""), ctx.payload.get("new_status", ""))
+        return f"Задача «{title}»: {old} → {new}"
+
 
 class TaskAssignedHandler(BaseNotificationHandler):
     default_in_app_enabled = True

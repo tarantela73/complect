@@ -2,14 +2,24 @@ from apps.common.events.contracts import ContractActivatedEvent, ContractClosedE
 from apps.common.events.files import FileQuarantinedEvent
 from apps.common.events.finance import TransactionPostedEvent
 from apps.common.events.slo import SLOStateChangedEvent
-from apps.common.events.tasks import TaskAssignedEvent, TaskCancelledEvent, TaskCompletedEvent
+from apps.common.events.tasks import (
+    TaskAssignedEvent,
+    TaskCancelledEvent,
+    TaskCompletedEvent,
+    TaskStatusChangedEvent,
+)
 
 from .base import BaseNotificationHandler, NotificationContext
 from .contract_handlers import ContractActivatedHandler, ContractClosedHandler
 from .file_handlers import FileQuarantinedHandler
 from .finance_handlers import TransactionPostedHandler
 from .slo_handlers import SLOStateChangedHandler
-from .task_handlers import TaskAssignedHandler, TaskCancelledHandler, TaskCompletedHandler
+from .task_handlers import (
+    TaskAssignedHandler,
+    TaskCancelledHandler,
+    TaskCompletedHandler,
+    TaskStatusChangedHandler,
+)
 
 NOTIFICATION_ROUTES: dict[str, BaseNotificationHandler] = {
     ContractActivatedEvent.EVENT_TYPE: ContractActivatedHandler(),
@@ -18,6 +28,7 @@ NOTIFICATION_ROUTES: dict[str, BaseNotificationHandler] = {
     TransactionPostedEvent.EVENT_TYPE: TransactionPostedHandler(),
     SLOStateChangedEvent.EVENT_TYPE: SLOStateChangedHandler(),
     TaskAssignedEvent.EVENT_TYPE: TaskAssignedHandler(),
+    TaskStatusChangedEvent.EVENT_TYPE: TaskStatusChangedHandler(),
     TaskCompletedEvent.EVENT_TYPE: TaskCompletedHandler(),
     TaskCancelledEvent.EVENT_TYPE: TaskCancelledHandler(),
 }
