@@ -194,3 +194,6 @@ CLAUDE.md
 .compound-engineering/*.local.yaml
 .compound-engineering/config.local.example.yaml
 .compound-engineering/scrin/
+
+
+opencode.json
