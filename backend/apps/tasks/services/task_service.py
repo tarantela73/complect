@@ -8,7 +8,7 @@ import django.utils.timezone as tz
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 
-from apps.common.events.tasks import TaskCancelledEvent, TaskCompletedEvent
+from apps.common.events.tasks import TaskAssignedEvent, TaskCancelledEvent, TaskCompletedEvent
 from apps.common.repository.sre_engine import EnterpriseSreRepository
 from apps.common.services.outbox_service import TransactionalOutboxService
 from apps.common.utils.user_utils import user_exists_in_tenant
@@ -68,6 +68,17 @@ class TaskService:
         )
         with transaction.atomic():
             task = TaskRepository.save(task)
+            if assigned_to_id is not None:
+                TransactionalOutboxService.push_to_outbox(
+                    TaskAssignedEvent.create(
+                        correlation_id=uuid.uuid4(),
+                        task_id=task.id,
+                        tenant_id=tenant_id,
+                        task_title=title,
+                        assigned_to_id=assigned_to_id,
+                        assigned_by_id=created_by,
+                    )
+                )
         return task
 
     @staticmethod
@@ -106,13 +117,27 @@ class TaskService:
             task.description = description if description is not None else ""
         if priority is not _UNSET and priority is not None:
             task.priority = priority
+
+        prev_assigned_to = task.assigned_to_id
         if assigned_to_id is not _UNSET:
             task.assigned_to_id = assigned_to_id
         if due_date is not _UNSET:
             task.due_date = due_date
 
         with transaction.atomic():
-            return TaskRepository.save(task)
+            saved = TaskRepository.save(task)
+            if assigned_to_id is not _UNSET and assigned_to_id != prev_assigned_to and assigned_to_id is not None:
+                TransactionalOutboxService.push_to_outbox(
+                    TaskAssignedEvent.create(
+                        correlation_id=uuid.uuid4(),
+                        task_id=saved.id,
+                        tenant_id=saved.tenant_id,
+                        task_title=saved.title,
+                        assigned_to_id=assigned_to_id,
+                        assigned_by_id=actor_id,
+                    )
+                )
+            return saved
 
     @staticmethod
     def change_status(task: Task, new_status: str, changed_by: uuid.UUID) -> Task:

@@ -5,6 +5,41 @@ from typing import ClassVar, Optional
 
 
 @dataclass(slots=True, frozen=True)
+class TaskAssignedEvent:
+    EVENT_TYPE: ClassVar[str] = "tasks.TaskAssigned"
+    event_id: uuid.UUID
+    correlation_id: uuid.UUID
+    occurred_at: datetime
+    task_id: uuid.UUID
+    tenant_id: uuid.UUID
+    task_title: str
+    assigned_to_id: uuid.UUID
+    assigned_by_id: uuid.UUID
+    event_version: int = 1
+
+    @classmethod
+    def create(
+        cls,
+        correlation_id: uuid.UUID,
+        task_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        task_title: str,
+        assigned_to_id: uuid.UUID,
+        assigned_by_id: uuid.UUID,
+    ) -> "TaskAssignedEvent":
+        return cls(
+            event_id=uuid.uuid4(),
+            correlation_id=correlation_id,
+            occurred_at=datetime.now(tz=timezone.utc),
+            task_id=task_id,
+            tenant_id=tenant_id,
+            task_title=task_title,
+            assigned_to_id=assigned_to_id,
+            assigned_by_id=assigned_by_id,
+        )
+
+
+@dataclass(slots=True, frozen=True)
 class TaskCompletedEvent:
     EVENT_TYPE: ClassVar[str] = "tasks.TaskCompleted"
     event_id: uuid.UUID
