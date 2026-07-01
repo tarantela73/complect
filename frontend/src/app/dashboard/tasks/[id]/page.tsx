@@ -22,6 +22,7 @@ import {
   type TaskComment,
   type TaskAttachment,
 } from '@/shared/api/tasks'
+import { useUsers } from '@/shared/api/users'
 import { useFiles } from '@/shared/api/files'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -58,12 +59,16 @@ function OverviewTab({ task }: { task: Task }) {
   const updateTask = useUpdateTask(task.id)
   const changeStatus = useChangeTaskStatus(task.id)
   const cancelTask = useCancelTask(task.id)
+  const { data: usersData } = useUsers()
+  const users = usersData?.items ?? []
+  const userMap = Object.fromEntries(users.map((u) => [u.user_uuid, u.full_name || u.email]))
 
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [priority, setPriority] = useState(task.priority)
   const [dueDate, setDueDate] = useState(task.due_date ?? '')
+  const [assignedTo, setAssignedTo] = useState(task.assigned_to_id ?? '')
 
   const isParticipant = userId === task.created_by || userId === task.assigned_to_id
   const transitions = ALLOWED_TRANSITIONS[task.status] ?? []
@@ -71,7 +76,13 @@ function OverviewTab({ task }: { task: Task }) {
 
   const handleSave = async () => {
     try {
-      await updateTask.mutateAsync({ title, description, priority, due_date: dueDate || undefined })
+      await updateTask.mutateAsync({
+        title,
+        description,
+        priority,
+        due_date: dueDate || undefined,
+        assigned_to_id: assignedTo || undefined,
+      })
       setEditing(false)
     } catch {}
   }
@@ -100,6 +111,11 @@ function OverviewTab({ task }: { task: Task }) {
           <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', TASK_PRIORITY_COLORS[task.priority])}>
             {TASK_PRIORITY_LABELS[task.priority]}
           </span>
+        } />
+        <Row label="Ответственный" value={
+          task.assigned_to_id
+            ? (userMap[task.assigned_to_id] ?? task.assigned_to_id.slice(0, 8))
+            : '—'
         } />
         <Row label="Срок" value={task.due_date ?? '—'} />
         <Row label="Создано" value={task.created_at ? new Date(task.created_at).toLocaleString('ru-RU') : '—'} />
@@ -142,6 +158,15 @@ function OverviewTab({ task }: { task: Task }) {
               <Label>Срок</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Ответственный</Label>
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+              <option value="">Не назначен</option>
+              {users.map((u) => (
+                <option key={u.user_uuid} value={u.user_uuid}>{u.full_name || u.email}</option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave} disabled={updateTask.isPending}>Сохранить</Button>

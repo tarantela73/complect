@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useTasks, useCreateTask, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_PRIORITY_LABELS, TASK_PRIORITY_COLORS } from '@/shared/api/tasks'
+import { useUsers } from '@/shared/api/users'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
@@ -26,6 +27,10 @@ export default function TasksPage() {
     limit: 20,
     cursor,
   })
+
+  const { data: usersData } = useUsers()
+  const users = usersData?.items ?? []
+  const userMap = Object.fromEntries(users.map((u) => [u.user_uuid, u.full_name || u.email]))
 
   const tasks = data?.items ?? []
   const nextCursor = data?.next_cursor
@@ -63,6 +68,7 @@ export default function TasksPage() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Заголовок</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Ответственный</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Приоритет</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Статус</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Срок</th>
@@ -76,6 +82,9 @@ export default function TasksPage() {
                     <Link href={`/dashboard/tasks/${task.id}`} className="text-sm font-medium hover:underline">
                       {task.title}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">
+                    {task.assigned_to_id ? (userMap[task.assigned_to_id] ?? task.assigned_to_id.slice(0, 8)) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', TASK_PRIORITY_COLORS[task.priority])}>
@@ -114,9 +123,12 @@ function CreateTaskForm({ onCreated }: { onCreated: () => void }) {
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('normal')
   const [dueDate, setDueDate] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const createTask = useCreateTask()
+  const { data: usersData } = useUsers()
+  const users = usersData?.items ?? []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,6 +139,7 @@ function CreateTaskForm({ onCreated }: { onCreated: () => void }) {
         description,
         priority,
         due_date: dueDate || undefined,
+        assigned_to_id: assignedTo || undefined,
         entity_type: '',
       })
       onCreated()
@@ -174,6 +187,21 @@ function CreateTaskForm({ onCreated }: { onCreated: () => void }) {
           <Label htmlFor="due_date">Срок</Label>
           <Input id="due_date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="assigned_to">Ответственный</Label>
+        <select
+          id="assigned_to"
+          value={assignedTo}
+          onChange={(e) => setAssignedTo(e.target.value)}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        >
+          <option value="">Не назначен</option>
+          {users.map((u) => (
+            <option key={u.user_uuid} value={u.user_uuid}>{u.full_name || u.email}</option>
+          ))}
+        </select>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
