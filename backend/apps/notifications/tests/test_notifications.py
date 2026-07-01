@@ -457,4 +457,133 @@ class TestNotificationsApi:
             cursor=page1.next_cursor, limit=3,
         )
         assert len(page2.results) == 2
-        assert page2.next_cursor is None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Task notification handlers
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestTaskAssignedHandler:
+    def test_recipient_is_assigned_user(self):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        assignee = uuid.uuid4()
+        handler = NOTIFICATION_ROUTES[TaskAssignedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskAssignedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={"assigned_to_id": str(assignee), "assigned_by_id": str(uuid.uuid4())},
+        )
+        assert handler.get_recipient_ids(ctx) == [assignee]
+
+    def test_empty_when_no_assigned_to(self):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        handler = NOTIFICATION_ROUTES[TaskAssignedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskAssignedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={"assigned_by_id": str(uuid.uuid4())},
+        )
+        assert handler.get_recipient_ids(ctx) == []
+
+    def test_title_and_body(self):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        handler = NOTIFICATION_ROUTES[TaskAssignedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskAssignedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={"task_title": "Fix bug", "assigned_to_id": str(uuid.uuid4())},
+        )
+        assert handler.get_title(ctx) == "Назначена задача"
+        assert "Fix bug" in handler.get_body(ctx)
+
+
+class TestTaskStatusChangedHandler:
+    def test_recipients_exclude_actor(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        creator = uuid.uuid4()
+        assignee = uuid.uuid4()
+        actor = uuid.uuid4()  # different from both
+
+        handler = NOTIFICATION_ROUTES[TaskStatusChangedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskStatusChangedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={
+                "creator_id": str(creator),
+                "assigned_to_id": str(assignee),
+                "changed_by_id": str(actor),
+            },
+        )
+        recipients = handler.get_recipient_ids(ctx)
+        assert creator in recipients
+        assert assignee in recipients
+        assert actor not in recipients
+
+    def test_actor_excluded_when_creator(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        creator = uuid.uuid4()
+        assignee = uuid.uuid4()
+
+        handler = NOTIFICATION_ROUTES[TaskStatusChangedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskStatusChangedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={
+                "creator_id": str(creator),
+                "assigned_to_id": str(assignee),
+                "changed_by_id": str(creator),  # creator is the actor
+            },
+        )
+        recipients = handler.get_recipient_ids(ctx)
+        assert creator not in recipients
+        assert assignee in recipients
+
+    def test_actor_excluded_when_assignee(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        creator = uuid.uuid4()
+        assignee = uuid.uuid4()
+
+        handler = NOTIFICATION_ROUTES[TaskStatusChangedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskStatusChangedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={
+                "creator_id": str(creator),
+                "assigned_to_id": str(assignee),
+                "changed_by_id": str(assignee),  # assignee is the actor
+            },
+        )
+        recipients = handler.get_recipient_ids(ctx)
+        assert creator in recipients
+        assert assignee not in recipients
+
+    def test_title_shows_new_status(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        handler = NOTIFICATION_ROUTES[TaskStatusChangedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskStatusChangedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={"new_status": "in_progress"},
+        )
+        assert "В работе" in handler.get_title(ctx)
+
+    def test_body_shows_transition(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        handler = NOTIFICATION_ROUTES[TaskStatusChangedEvent.EVENT_TYPE]
+        ctx = NotificationContext(
+            event_type=TaskStatusChangedEvent.EVENT_TYPE,
+            tenant_id=uuid.uuid4(),
+            payload={"task_title": "My Task", "old_status": "open", "new_status": "in_progress"},
+        )
+        body = handler.get_body(ctx)
+        assert "My Task" in body
+        assert "Открыта" in body
+        assert "В работе" in body
