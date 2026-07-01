@@ -18,6 +18,18 @@ def install_pgcrypto(django_db_blocker):
 
 
 @pytest.fixture(autouse=True)
+def _ensure_pgcrypto():
+    """Ensure pgcrypto extension is available for each test.
+
+    The session-scoped install_pgcrypto should cover this, but transaction=True
+    tests may use connections where the extension isn't visible. This function-scoped
+    fixture guarantees availability without error on every test run.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+
+
+@pytest.fixture(autouse=True)
 def _block_outbox_live_dispatch():
     """Prevent on_commit _fire_dispatcher from queuing tasks to the live celery_worker.
 
