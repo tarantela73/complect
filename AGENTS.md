@@ -12,8 +12,9 @@ ERP «Комплект» — событийно-ориентированный �
 
 Архитектурная спецификация: `docs/Project_architecture.md`
 Глоссарий доменов: `CONCEPTS.md`
-ADR (22 штуки): `docs/adr/`
+ADR (23 штуки): `docs/adr/`
 Solution docs: `docs/solutions/` (patterns, database-issues, test-failures, dev-experience и др.)
+OpenCode plugin: `opencode.json` → compound-engineering plugin
 
 ---
 
@@ -26,8 +27,11 @@ make up              # Запуск всего стека (--build -d)
 make down            # Остановка
 make rebuild         # Пересборка (down + up --build)
 make destroy         # Остановка + удаление volumes
+make logs            # Все логи (--tail=200)
+make restart         # Перезапуск контейнеров
 
 make test-all        # Все тесты (pytest -v)
+make test            # Только apps/common/tests/test_context_leakage.py
 make test-fast       # Быстрые тесты (pytest -x, остановка на первом падении)
 make test-failed     # Только упавшие (--lf)
 make test-common     # Тесты apps/common/tests/
@@ -52,6 +56,7 @@ make shell           # Django shell внутри контейнера
 make psql            # PostgreSQL консоль
 make redis-cli       # Redis консоль
 make health          # curl http://localhost:8010/health/
+make celery-status   # ping celery worker
 ```
 
 ---
@@ -127,7 +132,7 @@ Expand & Contract — 3 релиза:
 3. **Release N+2**: `NOT NULL` через `NOT VALID` → `VALIDATE CONSTRAINT`
 
 Запрещено: `AddField(NOT NULL, no default)`, `RemoveField` на активных столбцах, индексы без `CONCURRENTLY`.
-Линтер: `infra/scripts/migration_linter.py`.
+Линтеры: `infra/scripts/migration_linter.py`, `infra/scripts/ddd_boundary_linter.py`, `infra/scripts/openapi_contract_linter.py`.
 
 ### PII (ADR-0009)
 
@@ -254,9 +259,10 @@ backend/
 
 - **pytest внутри Docker контейнера** (не локально!)
 - **SQLite в тестах категорически запрещён** — только PostgreSQL + PostGIS
-- `conftest.py`: автоматически устанавливает `pgcrypto` extension и добавляет `replica` DB ко всем тестам
 - `asyncio_mode = auto` — async-тесты не требуют декоратора
+- `conftest.py` автоматически: (1) устанавливает `pgcrypto`, (2) добавляет `replica` DB ко всем django_db тестам, (3) блокирует `apply_async` на outbox dispatcher чтобы live celery не крал задачи из тестов
 - E2E: `cd frontend/e2e && npx playwright test` (Playwright, Chromium, headless, `ru-RU`, `Europe/Moscow`)
+- Playwright `baseURL` = `http://localhost:3000` (container port, не host-mapped 8080)
 - Frontend unit: `vitest run`
 
 ---
@@ -266,7 +272,7 @@ backend/
 | Сервис | Порт | Описание |
 |---|---|---|
 | backend | 8010 | Granian ASGI (Django) |
-| frontend | 3000 | Next.js dev server |
+| frontend | 8080 (host) → 3000 (container) | Next.js dev server |
 | api_gateway (Kong) | 8000 | API Gateway (JWT, rate limiting, CORS) |
 | postgres_primary | 5432 | PostgreSQL 16 + PostGIS |
 | postgres_replica | 5433 | Read replica |
@@ -329,9 +335,11 @@ Chain Completeness SLO: 99.9% за 5 минут.
 ### Быстрый старт
 
 ```bash
-make up                    # Запустить стек
+make up                    # Запустить стек (backend автоматически делает migrate)
 make createsuperuser       # Создать админа (если нет)
 ```
+
+Backend контейнер автоматически выполняет `migrate --noinput` при старте (перед запуском Granian).
 
 ### Логин через curl (для проверки API)
 
