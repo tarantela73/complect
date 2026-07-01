@@ -3,6 +3,27 @@ import uuid
 from apps.notifications.handlers.base import BaseNotificationHandler, NotificationContext
 
 
+class TaskAssignedHandler(BaseNotificationHandler):
+    default_in_app_enabled = True
+
+    def get_recipient_ids(self, ctx: NotificationContext) -> list[uuid.UUID]:
+        uid_str = ctx.payload.get("assigned_to_id")
+        if uid_str:
+            try:
+                return [uuid.UUID(str(uid_str))]
+            except (ValueError, AttributeError):
+                pass
+        return []
+
+    def get_title(self, ctx: NotificationContext) -> str:
+        return "Назначена задача"
+
+    def get_body(self, ctx: NotificationContext) -> str:
+        title = ctx.payload.get("task_title", "")
+        assigned_by = ctx.payload.get("assigned_by_id", "")
+        return f"Вы назначены ответственным за задачу «{title}»."
+
+
 class TaskCompletedHandler(BaseNotificationHandler):
     default_in_app_enabled = True
 
