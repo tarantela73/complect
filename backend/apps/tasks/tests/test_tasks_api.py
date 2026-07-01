@@ -496,3 +496,111 @@ class TestTaskComments:
             **_headers(tenant_b, user_id),
         )
         assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+class TestTaskAssigneeFilter:
+    @pytest.fixture(autouse=True)
+    def _rbac_off(self, settings):
+        settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
+    def _make_user(self, tenant_id: uuid.UUID) -> uuid.UUID:
+        from apps.users.models import User
+        from apps.users.services.auth_service import _pk_to_uuid4
+
+        user = User.objects.create_user(
+            username=f"user_{uuid.uuid4().hex[:8]}",
+            email=f"user_{uuid.uuid4().hex[:8]}@test.com",
+            password="Test123!",
+            tenant_id=tenant_id,
+        )
+        return _pk_to_uuid4(user.pk)
+
+    def test_list_filter_by_assigned_to(self):
+        tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        assignee_id = self._make_user(tenant_id)
+
+        # Create task without assignee
+        Client().post(
+            BASE_URL,
+            data={"title": "Unassigned"},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        # Create task with assignee
+        Client().post(
+            BASE_URL,
+            data={"title": "Assigned", "assigned_to_id": str(assignee_id)},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+
+        resp = Client().get(f"{BASE_URL}?assigned_to_id={assignee_id}", **_headers(tenant_id, user_id))
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["title"] == "Assigned"
+        assert items[0]["assigned_to_id"] == str(assignee_id)
+
+    def test_create_with_assignee(self):
+        tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        assignee_id = self._make_user(tenant_id)
+
+        resp = Client().post(
+            BASE_URL,
+            data={"title": "With assignee", "assigned_to_id": str(assignee_id)},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        assert resp.status_code == 201
+        assert resp.json()["assigned_to_id"] == str(assignee_id)
+
+    def test_update_assignee(self):
+        tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        assignee_id = self._make_user(tenant_id)
+
+        # Create
+        resp = Client().post(
+            BASE_URL,
+            data={"title": "Update assignee"},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        task_id = resp.json()["id"]
+
+        # Update assignee
+        resp = Client().patch(
+            f"{BASE_URL}{task_id}/",
+            data={"assigned_to_id": str(assignee_id)},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["assigned_to_id"] == str(assignee_id)
+
+    def test_unassign_via_update(self):
+        tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        assignee_id = self._make_user(tenant_id)
+
+        # Create with assignee
+        resp = Client().post(
+            BASE_URL,
+            data={"title": "Will unassign", "assigned_to_id": str(assignee_id)},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        task_id = resp.json()["id"]
+
+        # Unassign
+        resp = Client().patch(
+            f"{BASE_URL}{task_id}/",
+            data={"assigned_to_id": None},
+            content_type="application/json",
+            **_mut_headers(tenant_id, user_id),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["assigned_to_id"] is None

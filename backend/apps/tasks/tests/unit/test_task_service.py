@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -168,6 +169,45 @@ class TestTaskServiceOutbox:
         assert record is not None
         assert str(tenant_id) == record.payload_json.get("tenant_id")
 
+    def test_status_changed_event_emitted_on_every_transition(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        TaskService.change_status(task, TaskStatus.IN_PROGRESS, actor)
+
+        record = OutboxRecord.objects.filter(event_type=TaskStatusChangedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert record.payload_json.get("old_status") == "open"
+        assert record.payload_json.get("new_status") == "in_progress"
+        assert record.payload_json.get("changed_by_id") == str(actor)
+
+    def test_status_changed_event_on_done(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        TaskService.change_status(task, TaskStatus.IN_PROGRESS, actor)
+        TaskService.change_status(task, TaskStatus.DONE, actor)
+
+        records = OutboxRecord.objects.filter(event_type=TaskStatusChangedEvent.EVENT_TYPE)
+        assert records.count() == 2
+        last = records.order_by("-created_at").first()
+        assert last.payload_json.get("old_status") == "in_progress"
+        assert last.payload_json.get("new_status") == "done"
+
+    def test_status_changed_event_on_cancel(self):
+        from apps.common.events.tasks import TaskStatusChangedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        TaskService.cancel(task, actor)
+
+        record = OutboxRecord.objects.filter(event_type=TaskStatusChangedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert record.payload_json.get("old_status") == "open"
+        assert record.payload_json.get("new_status") == "cancelled"
+
     def test_no_outbox_event_on_intermediate_transition(self):
         from apps.common.events.tasks import TaskCancelledEvent, TaskCompletedEvent
 
@@ -178,3 +218,96 @@ class TestTaskServiceOutbox:
         assert not OutboxRecord.objects.filter(
             event_type__in=[TaskCompletedEvent.EVENT_TYPE, TaskCancelledEvent.EVENT_TYPE]
         ).exists()
+
+
+@pytest.mark.django_db
+class TestTaskServiceAssigneeNotification:
+    @patch("apps.tasks.services.task_service.user_exists_in_tenant", return_value=True)
+    def test_create_with_assignee_emits_assigned_event(self, _mock):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        assignee = uuid.uuid4()
+        creator = uuid.uuid4()
+        tenant = uuid.uuid4()
+        TaskService.create(
+            tenant_id=tenant,
+            created_by=creator,
+            title="Assigned task",
+            assigned_to_id=assignee,
+        )
+
+        record = OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert record.payload_json.get("assigned_to_id") == str(assignee)
+        assert record.payload_json.get("assigned_by_id") == str(creator)
+        assert record.payload_json.get("task_title") == "Assigned task"
+
+    def test_create_without_assignee_no_assigned_event(self):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        TaskService.create(
+            tenant_id=uuid.uuid4(),
+            created_by=uuid.uuid4(),
+            title="No assignee",
+        )
+
+        assert not OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).exists()
+
+    @patch("apps.tasks.services.task_service.user_exists_in_tenant", return_value=True)
+    def test_update_assignee_emits_assigned_event(self, _mock):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        task = _create()
+        actor = task.created_by_id
+        new_assignee = uuid.uuid4()
+
+        TaskService.update(task, actor_id=actor, assigned_to_id=new_assignee)
+
+        record = OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert record.payload_json.get("assigned_to_id") == str(new_assignee)
+
+    @patch("apps.tasks.services.task_service.user_exists_in_tenant", return_value=True)
+    def test_update_same_assignee_no_new_event(self, _mock):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        assignee = uuid.uuid4()
+        task = _create()
+        actor = task.created_by_id
+        task.assigned_to_id = assignee
+        task.save()
+
+        TaskService.update(task, actor_id=actor, assigned_to_id=assignee)
+
+        assert not OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).exists()
+
+    def test_unassign_does_not_emit_event(self):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        assignee = uuid.uuid4()
+        task = _create()
+        actor = task.created_by_id
+        task.assigned_to_id = assignee
+        task.save()
+
+        TaskService.update(task, actor_id=actor, assigned_to_id=None)
+
+        assert not OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).exists()
+
+    @patch("apps.tasks.services.task_service.user_exists_in_tenant", return_value=True)
+    def test_reassign_emits_event_with_new_assignee(self, _mock):
+        from apps.common.events.tasks import TaskAssignedEvent
+
+        old_assignee = uuid.uuid4()
+        new_assignee = uuid.uuid4()
+        task = _create()
+        actor = task.created_by_id
+        task.assigned_to_id = old_assignee
+        task.save()
+
+        TaskService.update(task, actor_id=actor, assigned_to_id=new_assignee)
+
+        record = OutboxRecord.objects.filter(event_type=TaskAssignedEvent.EVENT_TYPE).first()
+        assert record is not None
+        assert record.payload_json.get("assigned_to_id") == str(new_assignee)
+        assert record.payload_json.get("assigned_by_id") == str(actor)
