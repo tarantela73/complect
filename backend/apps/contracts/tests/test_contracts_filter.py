@@ -147,3 +147,26 @@ class TestCursorPagination:
         # Anchor not found → no filter applied → returns all tenant rows
         # (safe: anchor from other tenant resolves to None)
         assert all(str(r.id) != str(cross_tenant_cursor) for r in result["results"])
+
+    def test_pagination_survives_soft_delete_of_anchor(self):
+        """Soft-delete якоря между страницами не должен приводить к дублям.
+
+        Repro для регрессии is_deleted=False в anchor lookup (contract_queries.py:68):
+        удалённый якорь перестаёт резолвиться → фильтр границы пропущен →
+        page2 стартует с начала → дубли page1.
+        """
+        for _ in range(6):
+            _make_contract(self.tenant_id)
+
+        page1 = get_contracts_page(limit=3)
+        assert len(page1["results"]) == 3
+        cursor = page1["next_cursor"]
+        assert cursor is not None
+
+        # Якорь = последний элемент page1 (его id ушёл в next_cursor). Soft-delete его.
+        Contract.objects.filter(id=uuid.UUID(cursor)).update(is_deleted=True)
+
+        page2 = get_contracts_page(cursor=uuid.UUID(cursor), limit=3)
+        ids1 = {str(r.id) for r in page1["results"]}
+        ids2 = {str(r.id) for r in page2["results"]}
+        assert ids1.isdisjoint(ids2), f"дубли между страницами: {ids1 & ids2}"

@@ -64,8 +64,14 @@ def get_contracts_page(
 
     if cursor:
         ctx = get_context()
+        # Якорь резолвит cursor-UUID в позицию (created_at, id) и намеренно НЕ
+        # фильтрует is_deleted: soft-deleted строка остаётся валидной границей.
+        # Фильтр is_deleted=False здесь ломает пагинацию — удалённый между
+        # страницами якорь перестаёт резолвиться, фильтр границы пропускается,
+        # страница стартует с начала и клиент получает дубли. tenant_id-скоуп
+        # сохранён — чужой курсор по-прежнему резолвится в None (safe).
         anchor = (
-            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id, is_deleted=False)
+            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id)
             .values("created_at", "id")
             .first()
         )
