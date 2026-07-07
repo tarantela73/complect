@@ -183,8 +183,9 @@ test-results/
 # =========================================================
 .mcp.json
 CLAUDE.md
-.claude
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/commands/
 .claude_session*
 .claudeignore
 

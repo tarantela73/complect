@@ -1,6 +1,6 @@
 ---
 description: "Setup RBAC RoleBinding for a user with correct _pk_to_uuid4 encoding. Fixes the critical gotcha where user_id in RoleBinding must use encoded UUID, not raw PK."
-agent: main
+argument-hint: "[username] [role] [password] (defaults: testadmin admin Admin123!)"
 ---
 
 # Setup RBAC RoleBinding
