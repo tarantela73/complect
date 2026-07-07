@@ -18,13 +18,20 @@ def install_pgcrypto(django_db_blocker):
 
 
 @pytest.fixture(autouse=True)
-def _ensure_pgcrypto():
+def _ensure_pgcrypto(request):
     """Ensure pgcrypto extension is available for each test.
 
     The session-scoped install_pgcrypto should cover this, but transaction=True
     tests may use connections where the extension isn't visible. This function-scoped
     fixture guarantees availability without error on every test run.
+
+    Gated on the django_db marker: without the gate the unconditional
+    connection.cursor() runs in setup of EVERY test, and pytest-django raises
+    RuntimeError("Database access not allowed") for the ~267 non-DB tests
+    (OpenAPI/DTO snapshots, pure units) — mass setup ERRORs across the suite.
     """
+    if request.node.get_closest_marker("django_db") is None:
+        return
     with connection.cursor() as cursor:
         cursor.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
 
