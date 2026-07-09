@@ -1,4 +1,3 @@
-
 import pytest
 
 from apps.common.security.pii_vault import PiiEncryptionVault
@@ -15,9 +14,7 @@ class TestPiiCryptoResilience:
         cipher_two = PiiEncryptionVault.encrypt_field(raw_passport)
 
         # Потоки байт в PostgreSQL обязаны различаться, защищая данные от утечки
-        assert cipher_one != cipher_two, (
-            "CRITICAL: Отсутствует вектор инициализации (IV)! База уязвима."
-        )
+        assert cipher_one != cipher_two, "CRITICAL: Отсутствует вектор инициализации (IV)! База уязвима."
 
         # Оба потока должны успешно расшифровываться обратно в исходную строку
         assert PiiEncryptionVault.decrypt_field(cipher_one) == raw_passport

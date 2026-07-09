@@ -1,4 +1,5 @@
 """Tests for contracts report query and Excel export endpoint (U3)."""
+
 from __future__ import annotations
 
 import uuid
@@ -17,12 +18,14 @@ from apps.reports.utils.excel import make_excel_response
 
 
 def _ctx(tenant_id: uuid.UUID) -> None:
-    set_context(RequestContext(
-        tenant_id=tenant_id,
-        user_id=uuid.uuid4(),
-        request_id=uuid.uuid4(),
-        correlation_id=uuid.uuid4(),
-    ))
+    set_context(
+        RequestContext(
+            tenant_id=tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        )
+    )
     set_tenant_context(tenant_id)
 
 
@@ -130,6 +133,7 @@ class TestContractExcelOutput:
 
     def test_excel_response_headers(self):
         from openpyxl import Workbook
+
         wb = Workbook()
         resp = make_excel_response(wb, "contracts_report.xlsx")
         assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in resp["Content-Type"]
@@ -143,10 +147,22 @@ class TestContractExcelOutput:
 
         from openpyxl import Workbook
         from openpyxl.styles import Font
+
         wb = Workbook()
         ws = wb.active
-        headers = ["№", "Номер договора", "Наименование", "Статус", "Вид ресурса",
-                   "Контрагент", "ИНН", "Сумма (руб.)", "Оплачено (руб.)", "Остаток (руб.)", "Дата создания"]
+        headers = [
+            "№",
+            "Номер договора",
+            "Наименование",
+            "Статус",
+            "Вид ресурса",
+            "Контрагент",
+            "ИНН",
+            "Сумма (руб.)",
+            "Оплачено (руб.)",
+            "Остаток (руб.)",
+            "Дата создания",
+        ]
         ws.append(headers)
         for cell in ws[1]:
             cell.font = Font(bold=True)

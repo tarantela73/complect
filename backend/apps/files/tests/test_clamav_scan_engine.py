@@ -10,6 +10,7 @@ Tests verify:
   - Custom socket_path overrides settings value
   - get_scan_engine() factory returns correct implementation based on settings
 """
+
 from __future__ import annotations
 
 import socket

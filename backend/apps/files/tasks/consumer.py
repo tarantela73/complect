@@ -10,6 +10,7 @@ Ordering mode: STRICT (no aggregate sequence; each file is independent).
 Emission contract: exactly one of files.FileAvailable | files.FileQuarantined
   must appear in Outbox per correlation_id — enforced by _verify_emission override.
 """
+
 from __future__ import annotations
 
 import time
@@ -37,9 +38,7 @@ from config.celery import app
 
 logger = structlog.get_logger(__name__)
 
-_SCAN_OUTCOME_TYPES = frozenset(
-    {FileAvailableEvent.EVENT_TYPE, FileQuarantinedEvent.EVENT_TYPE}
-)
+_SCAN_OUTCOME_TYPES = frozenset({FileAvailableEvent.EVENT_TYPE, FileQuarantinedEvent.EVENT_TYPE})
 
 _WS_GROUP = "files.tenant.{tenant_id}"
 
@@ -134,9 +133,7 @@ class FilesConsumer(BaseDomainConsumer):
                         uploaded_by=record.uploaded_by,
                     )
                 )
-                transaction.on_commit(
-                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
-                )
+                transaction.on_commit(lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid))
                 transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.info(
                     "files_consumer_file_quarantined",
@@ -156,13 +153,9 @@ class FilesConsumer(BaseDomainConsumer):
                         uploaded_by=record.uploaded_by,
                     )
                 )
+                transaction.on_commit(lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid))
                 transaction.on_commit(
-                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
-                )
-                transaction.on_commit(
-                    lambda fid=_fid, tid=_tid: get_adaptive_scan_policy().push_rescan(
-                        file_id=fid, tenant_id=tid
-                    )
+                    lambda fid=_fid, tid=_tid: get_adaptive_scan_policy().push_rescan(file_id=fid, tenant_id=tid)
                 )
                 transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.warning(
@@ -183,9 +176,7 @@ class FilesConsumer(BaseDomainConsumer):
                         uploaded_by=record.uploaded_by,
                     )
                 )
-                transaction.on_commit(
-                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid)
-                )
+                transaction.on_commit(lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "QUARANTINED", tid))
                 transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.warning(
                     "files_consumer_scan_error_quarantined",
@@ -203,9 +194,7 @@ class FilesConsumer(BaseDomainConsumer):
                         checksum_sha256=record.checksum_sha256,
                     )
                 )
-                transaction.on_commit(
-                    lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "AVAILABLE", tid)
-                )
+                transaction.on_commit(lambda fid=_fid, tid=_tid: _broadcast_file_status(fid, "AVAILABLE", tid))
                 transaction.on_commit(lambda tid=_tid: invalidate_dashboard(tid))
                 logger.info(
                     "files_consumer_file_available",
@@ -234,9 +223,7 @@ class FilesConsumer(BaseDomainConsumer):
                     cycle_ms=round(self._total_cycle_ms, 2),
                 )
                 if _picked_up > 0:
-                    get_system_control_policy().record_scan_latency(
-                        self._total_scan_ms / _picked_up
-                    )
+                    get_system_control_policy().record_scan_latency(self._total_scan_ms / _picked_up)
 
     def _verify_emission(self, event: StreamEvent) -> None:
         """

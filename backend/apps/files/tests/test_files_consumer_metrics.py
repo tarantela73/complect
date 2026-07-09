@@ -4,6 +4,7 @@ FilesConsumer telemetry tests.
 Verifies that scan_ms / transition_ms / cycle_ms are accumulated correctly
 per process() call and emitted via structlog on run_batch() completion.
 """
+
 from __future__ import annotations
 
 import hashlib

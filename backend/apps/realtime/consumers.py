@@ -28,11 +28,13 @@ def _decode_jwt(token: str) -> dict | None:
 
 def _incr_ws_counter() -> None:
     from apps.common.infra.redis import get_default_redis
+
     get_default_redis().incr("ws:active_connections")
 
 
 def _decr_ws_counter() -> None:
     from apps.common.infra.redis import get_default_redis
+
     r = get_default_redis()
     current = r.get("ws:active_connections")
     if current and int(current) > 0:

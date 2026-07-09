@@ -4,6 +4,7 @@ ClamAVCircuitBreaker unit tests.
 All Redis interactions use the live Redis instance (same as other tests).
 Each test clears the CB keys before and after to prevent state leakage.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -251,9 +252,7 @@ class TestClamAVScanEngineCircuitBreaker:
 
     @override_settings(CLAMAV_CB_FAILURE_THRESHOLD=1, CLAMAV_CB_RECOVERY_TTL=60)
     @patch("socket.socket")
-    def test_circuit_reopens_immediately_on_failed_probe_at_threshold_1(
-        self, mock_socket_cls
-    ):
+    def test_circuit_reopens_immediately_on_failed_probe_at_threshold_1(self, mock_socket_cls):
         """With threshold=1, a single probe failure reopens the circuit."""
         sock = MagicMock()
         sock.connect.side_effect = OSError("refused")

@@ -29,6 +29,7 @@ class TestMapSearchAPI:
     @pytest.fixture(autouse=True)
     def setup(self):
         from apps.users.models import User
+
         self.tenant_id = uuid.uuid4()
         self.user = User.objects.create_user(
             username="testmap",

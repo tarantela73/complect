@@ -80,11 +80,10 @@ class WebhookFanoutConsumer(BaseDomainConsumer):
                 _delivery_id = delivery.id
                 _payload = event.payload
                 transaction.on_commit(
-                    lambda did=_delivery_id, pl=_payload:
-                        deliver_webhook_task.apply_async(
-                            kwargs={"delivery_id": str(did), "payload": pl},
-                            queue="integration",
-                        )
+                    lambda did=_delivery_id, pl=_payload: deliver_webhook_task.apply_async(
+                        kwargs={"delivery_id": str(did), "payload": pl},
+                        queue="integration",
+                    )
                 )
 
         logger.info(
@@ -104,6 +103,7 @@ class _WebhookDeliveryTask(BaseEnterpriseTask):
         if delivery_id:
             try:
                 from apps.integration.models import WebhookDelivery, WebhookDeliveryStatus
+
                 WebhookDelivery.objects.filter(id=delivery_id).update(
                     status=WebhookDeliveryStatus.DEAD,
                 )

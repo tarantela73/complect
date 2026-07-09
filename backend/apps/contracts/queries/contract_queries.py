@@ -4,6 +4,7 @@ Cursor pagination (ADR rule 4.11): OFFSET запрещён. Использует
 (created_at DESC, id DESC) — UUID v4 PK не монотонен, ORDER BY id даёт
 недетерминированный порядок. См. docs/solutions/patterns/cursor-pagination.md.
 """
+
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -70,15 +71,10 @@ def get_contracts_page(
         # страницами якорь перестаёт резолвиться, фильтр границы пропускается,
         # страница стартует с начала и клиент получает дубли. tenant_id-скоуп
         # сохранён — чужой курсор по-прежнему резолвится в None (safe).
-        anchor = (
-            Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id)
-            .values("created_at", "id")
-            .first()
-        )
+        anchor = Contract.objects.filter(id=cursor, tenant_id=ctx.tenant_id).values("created_at", "id").first()
         if anchor:
             qs = qs.filter(
-                Q(created_at__lt=anchor["created_at"])
-                | Q(created_at=anchor["created_at"], id__lt=anchor["id"])
+                Q(created_at__lt=anchor["created_at"]) | Q(created_at=anchor["created_at"], id__lt=anchor["id"])
             )
 
     if status:
@@ -180,17 +176,9 @@ def get_contract_counts() -> dict:
 
 
 def get_open_contracts_count(tenant_id: uuid.UUID) -> int:
-    return (
-        Contract.objects.filter(tenant_id=tenant_id, is_deleted=False)
-        .exclude(status=ContractStatus.CLOSED)
-        .count()
-    )
+    return Contract.objects.filter(tenant_id=tenant_id, is_deleted=False).exclude(status=ContractStatus.CLOSED).count()
 
 
 def get_stuck_drafts_count(threshold_days: int = 30) -> int:
     cutoff = timezone.now() - timedelta(days=threshold_days)
-    return (
-        ContractRepository.get_queryset()
-        .filter(status=ContractStatus.DRAFT, created_at__lt=cutoff)
-        .count()
-    )
+    return ContractRepository.get_queryset().filter(status=ContractStatus.DRAFT, created_at__lt=cutoff).count()

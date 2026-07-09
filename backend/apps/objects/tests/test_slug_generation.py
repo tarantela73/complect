@@ -122,16 +122,19 @@ class TestObjectUpdateSlug:
 class TestSlugValidation:
     def test_uppercase_slug_rejected(self):
         from pydantic import ValidationError as PydanticValidationError
+
         with pytest.raises(PydanticValidationError):
             SupplyObjectUpdateRequest(slug="UPPERCASE-slug")
 
     def test_slug_with_spaces_rejected(self):
         from pydantic import ValidationError as PydanticValidationError
+
         with pytest.raises(PydanticValidationError):
             SupplyObjectUpdateRequest(slug="slug with spaces")
 
     def test_slug_with_underscore_rejected(self):
         from pydantic import ValidationError as PydanticValidationError
+
         with pytest.raises(PydanticValidationError):
             SupplyObjectUpdateRequest(slug="slug_with_underscore")
 

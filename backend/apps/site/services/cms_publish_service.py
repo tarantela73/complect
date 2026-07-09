@@ -34,11 +34,7 @@ class CmsPublishService:
 
         with transaction.atomic():
             try:
-                page = (
-                    SitePageContent.objects
-                    .select_for_update()
-                    .get(tenant_id=tenant_id, slug=slug, is_deleted=False)
-                )
+                page = SitePageContent.objects.select_for_update().get(tenant_id=tenant_id, slug=slug, is_deleted=False)
             except SitePageContent.DoesNotExist as exc:
                 raise PageNotFoundError(slug) from exc
 

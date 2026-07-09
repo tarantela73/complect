@@ -65,14 +65,11 @@ class GalleryService:
     @staticmethod
     def update_image(image_id: uuid.UUID, payload: GalleryUpdateRequest) -> SiteImage:
         tenant_id = get_tenant_id()
-        img = (
-            SiteImage.objects.filter(
-                id=image_id,
-                tenant_id=tenant_id,
-                is_deleted=False,
-            )
-            .first()
-        )
+        img = SiteImage.objects.filter(
+            id=image_id,
+            tenant_id=tenant_id,
+            is_deleted=False,
+        ).first()
         if img is None:
             return None  # type: ignore[return-value]
 
@@ -85,14 +82,11 @@ class GalleryService:
     @staticmethod
     def delete_image(image_id: uuid.UUID) -> bool:
         tenant_id = get_tenant_id()
-        updated = (
-            SiteImage.objects.filter(
-                id=image_id,
-                tenant_id=tenant_id,
-                is_deleted=False,
-            )
-            .update(is_deleted=True)
-        )
+        updated = SiteImage.objects.filter(
+            id=image_id,
+            tenant_id=tenant_id,
+            is_deleted=False,
+        ).update(is_deleted=True)
         return updated > 0
 
     @staticmethod

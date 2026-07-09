@@ -87,9 +87,7 @@ def mark_read(request: HttpRequest, notif_id: uuid.UUID):
         read_at__isnull=True,
     ).update(read_at=timezone.now())
     if not updated:
-        exists = InAppNotification.objects.filter(
-            id=notif_id, tenant_id=ctx.tenant_id, user_id=ctx.user_id
-        ).exists()
+        exists = InAppNotification.objects.filter(id=notif_id, tenant_id=ctx.tenant_id, user_id=ctx.user_id).exists()
         if not exists:
             return 404, make_error_response("NOTIFICATION_NOT_FOUND", "Уведомление не найдено.")
     return 200, {"ok": True}

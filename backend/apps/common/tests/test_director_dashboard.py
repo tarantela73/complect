@@ -10,6 +10,7 @@ Coverage:
   - open_contracts_count excludes CLOSED contracts
   - Cache: second call within TTL served from cache (no extra DB queries)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -123,6 +124,7 @@ class TestDirectorDashboardPermissionOff:
     @pytest.fixture(autouse=True)
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def test_returns_200_with_gateway_context(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -162,6 +164,7 @@ class TestDirectorDashboardPermissionEnforce:
     def _rbac_enforce(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "ENFORCE"
         settings.RBAC_POLICY_CACHE_TTL = 60
+
     def test_no_permission_returns_403(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -194,6 +197,7 @@ class TestDirectorDashboardPayments:
     @pytest.fixture(autouse=True)
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def _call(self, tenant_id: uuid.UUID) -> dict:
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
@@ -266,6 +270,7 @@ class TestDirectorDashboardOpenContracts:
     @pytest.fixture(autouse=True)
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def _call(self, tenant_id: uuid.UUID) -> dict:
         user_id = uuid.uuid4()
         cache.delete(_director_key(tenant_id))
@@ -430,6 +435,7 @@ class TestDirectorDashboardPeriod:
     @pytest.fixture(autouse=True)
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def test_period_from_is_first_day_of_month(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -455,6 +461,7 @@ class TestDirectorDashboardCache:
     @pytest.fixture(autouse=True)
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
+
     def test_second_call_uses_cache(self):
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()

@@ -8,6 +8,7 @@ still open so it does not hammer a degraded daemon.
 Flow per deferred file:
   QUARANTINED[scan_deferred_cb_open] → SCANNING → AVAILABLE | QUARANTINED[final]
 """
+
 from __future__ import annotations
 
 import uuid
@@ -55,9 +56,7 @@ def _rescan_one(
         with transaction.atomic():
             FileRepository.mark_quarantined(file_id, reason="scan_deferred_cb_open")
             _fid, _tid = file_id, tenant_id
-            transaction.on_commit(
-                lambda fid=_fid, tid=_tid: policy.push_rescan(file_id=fid, tenant_id=tid)
-            )
+            transaction.on_commit(lambda fid=_fid, tid=_tid: policy.push_rescan(file_id=fid, tenant_id=tid))
         logger.warning("files_recovery_scan_requeued_cb_still_open", file_id=str(file_id))
         return
 

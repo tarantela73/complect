@@ -24,6 +24,7 @@ Emission enforcement:
   would break the ack-before-verify ordering: if verification fires post-commit, the event
   is already acked and a retry cannot reprocess it.
 """
+
 from __future__ import annotations
 
 import time
@@ -64,9 +65,7 @@ class CausalEmissionMissingError(Exception):
         self.outbox_record_id = outbox_record_id
         self.correlation_id = correlation_id
         self.missing_event_types = missing_event_types
-        super().__init__(
-            f"Consumer {consumer!r} completed without emitting: {missing_event_types}"
-        )
+        super().__init__(f"Consumer {consumer!r} completed without emitting: {missing_event_types}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,11 +192,7 @@ class BaseDomainConsumer(ABC):
                 return
 
         try:
-            if (
-                self.ordering_mode == "FENCED"
-                and event.aggregate_id is not None
-                and event.aggregate_seq is not None
-            ):
+            if self.ordering_mode == "FENCED" and event.aggregate_id is not None and event.aggregate_seq is not None:
                 should_process = AggregateSequenceFenceService.advance(
                     tenant_id=event.tenant_id,
                     aggregate_type=event.aggregate_type or "",
@@ -261,14 +256,11 @@ class BaseDomainConsumer(ABC):
             acked_at__isnull=False,
         )
 
-        qs = (
-            OutboxRecord.objects.filter(
-                event_type__in=self.handled_event_types,
-                is_processed=True,
-                failed_permanently_at__isnull=True,
-            )
-            .exclude(Exists(already_acked))
-        )
+        qs = OutboxRecord.objects.filter(
+            event_type__in=self.handled_event_types,
+            is_processed=True,
+            failed_permanently_at__isnull=True,
+        ).exclude(Exists(already_acked))
 
         if self.ordering_mode == "STRICT":
             qs = qs.order_by("aggregate_id", F("aggregate_seq").asc(nulls_last=True))

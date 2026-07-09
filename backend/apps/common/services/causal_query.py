@@ -128,11 +128,14 @@ class CausalQueryService:
             )
 
         # Post-archival evidence: ProcessedEvent records whose OutboxRecord is gone.
-        archived_pe_outbox_ids = set(
-            ProcessedEvent.objects.filter(
-                causal_root_id=causal_root_id,
-            ).values_list("outbox_record_id", flat=True)
-        ) - outbox_ids
+        archived_pe_outbox_ids = (
+            set(
+                ProcessedEvent.objects.filter(
+                    causal_root_id=causal_root_id,
+                ).values_list("outbox_record_id", flat=True)
+            )
+            - outbox_ids
+        )
 
         for archived_id in archived_pe_outbox_ids:
             nodes.append(
@@ -155,8 +158,8 @@ class CausalQueryService:
         if not outbox_by_id and not archived_pe_outbox_ids:
             missing_layers.append("outbox")
 
-        chain_complete = bool(nodes) and not archived_pe_outbox_ids and all(
-            n.processing_status == "acked" for n in nodes
+        chain_complete = (
+            bool(nodes) and not archived_pe_outbox_ids and all(n.processing_status == "acked" for n in nodes)
         )
 
         result = CausalChain(
@@ -243,9 +246,7 @@ class CausalQueryService:
         if not nodes:
             missing_layers.append("outbox")
 
-        chain_complete = bool(nodes) and all(
-            n.processing_status == "acked" for n in nodes
-        )
+        chain_complete = bool(nodes) and all(n.processing_status == "acked" for n in nodes)
 
         # Class B uses correlation_id as logical root since there may be multiple causal roots.
         result = CausalChain(
@@ -350,9 +351,7 @@ class CausalQueryService:
         # re-sort ascending for consistent CausalChain ordering.
         nodes.sort(key=lambda n: n.aggregate_seq or 0)
 
-        chain_complete = bool(nodes) and all(
-            n.processing_status == "acked" for n in nodes
-        )
+        chain_complete = bool(nodes) and all(n.processing_status == "acked" for n in nodes)
 
         result = CausalChain(
             root_id=aggregate_id,

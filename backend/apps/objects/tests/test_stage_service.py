@@ -55,7 +55,7 @@ class TestObjectStageAutoCreate:
         obj = _create_object(self.tenant_id)
         orders = list(ObjectStage.objects.filter(object_id=obj.id).order_by("order").values_list("order", flat=True))
         assert orders == sorted(orders)
-        assert orders[0] == 10   # REQUEST_RECEIVED
+        assert orders[0] == 10  # REQUEST_RECEIVED
         assert orders[-1] == 100  # CLOSURE
 
     def test_stages_belong_to_correct_tenant(self):
@@ -73,22 +73,16 @@ class TestStageUpdateService:
         self.obj = _create_object(self.tenant_id)
 
     def test_skip_optional_stage_succeeds(self):
-        StageUpdateService.update(
-            self.obj.id, ObjectStageKey.SITE_VISIT, ObjectStageStatus.SKIPPED
-        )
+        StageUpdateService.update(self.obj.id, ObjectStageKey.SITE_VISIT, ObjectStageStatus.SKIPPED)
         stage = ObjectStage.objects.get(object_id=self.obj.id, stage_key=ObjectStageKey.SITE_VISIT)
         assert stage.status == ObjectStageStatus.SKIPPED
 
     def test_skip_non_optional_stage_raises(self):
         with pytest.raises(ValidationError):
-            StageUpdateService.update(
-                self.obj.id, ObjectStageKey.REQUEST_RECEIVED, ObjectStageStatus.SKIPPED
-            )
+            StageUpdateService.update(self.obj.id, ObjectStageKey.REQUEST_RECEIVED, ObjectStageStatus.SKIPPED)
 
     def test_complete_stage_sets_completed_at(self):
-        StageUpdateService.update(
-            self.obj.id, ObjectStageKey.COST_ESTIMATION, ObjectStageStatus.COMPLETED
-        )
+        StageUpdateService.update(self.obj.id, ObjectStageKey.COST_ESTIMATION, ObjectStageStatus.COMPLETED)
         stage = ObjectStage.objects.get(object_id=self.obj.id, stage_key=ObjectStageKey.COST_ESTIMATION)
         assert stage.status == ObjectStageStatus.COMPLETED
         assert stage.completed_at is not None
@@ -126,6 +120,4 @@ class TestStageUpdateService:
         other_obj = _create_object(other_tenant)
         set_tenant_context(self.tenant_id)
         with pytest.raises(PermissionDenied):
-            StageUpdateService.update(
-                other_obj.id, ObjectStageKey.REQUEST_RECEIVED, ObjectStageStatus.IN_PROGRESS
-            )
+            StageUpdateService.update(other_obj.id, ObjectStageKey.REQUEST_RECEIVED, ObjectStageStatus.IN_PROGRESS)

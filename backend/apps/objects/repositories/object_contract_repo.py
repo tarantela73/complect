@@ -16,11 +16,7 @@ class ObjectContractRepository:
 
     @classmethod
     def list_by_contract(cls, contract_id: uuid.UUID) -> list[uuid.UUID]:
-        return list(
-            cls.get_queryset()
-            .filter(contract_id=contract_id)
-            .values_list("object_id", flat=True)
-        )
+        return list(cls.get_queryset().filter(contract_id=contract_id).values_list("object_id", flat=True))
 
     @classmethod
     def link(cls, object_id: uuid.UUID, contract_id: uuid.UUID) -> ObjectContract:
@@ -35,6 +31,4 @@ class ObjectContractRepository:
 
     @classmethod
     def unlink(cls, object_id: uuid.UUID, contract_id: uuid.UUID) -> int:
-        return cls.get_queryset().filter(
-            object_id=object_id, contract_id=contract_id
-        ).delete()[0]
+        return cls.get_queryset().filter(object_id=object_id, contract_id=contract_id).delete()[0]

@@ -2,6 +2,7 @@
 CQRS Query Side — read-only projections for contract attachments.
 Cross-domain read goes through FileServiceProtocol, no ORM FK to files.
 """
+
 from __future__ import annotations
 
 import uuid

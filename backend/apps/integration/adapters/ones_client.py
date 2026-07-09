@@ -12,8 +12,6 @@ class Ones1CHttpClientAdapter:
         """Проверяет токен авторизации и подпись шлюза 1С Предприятия."""
         auth_header = request.headers.get("Authorization")
         if not auth_header or "Bearer ONES_SECRET" not in auth_header:
-            logger.critical(
-                "INTEGRATION_SECURITY_BREACH: Неавторизованный запрос от 1С!"
-            )
+            logger.critical("INTEGRATION_SECURITY_BREACH: Неавторизованный запрос от 1С!")
             raise PermissionDenied("Интеграционный доступ заблокирован.")
         return True

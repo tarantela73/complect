@@ -11,6 +11,7 @@ Security invariants enforced here (service layer, defense-in-depth):
   - EMAIL_ALREADY_EXISTS: unique email per Django user table
   - UNKNOWN_ROLE: only seeded role names are valid
 """
+
 from __future__ import annotations
 
 import secrets
@@ -212,6 +213,4 @@ def assign_roles(
                 defaults={"is_active": True, "granted_by": actor_id},
             )
 
-        transaction.on_commit(
-            lambda: PolicyEngine.invalidate(tenant_id=tenant_id, actor_id=user_uuid)
-        )
+        transaction.on_commit(lambda: PolicyEngine.invalidate(tenant_id=tenant_id, actor_id=user_uuid))

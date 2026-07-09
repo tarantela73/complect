@@ -30,11 +30,7 @@ def _get_user_permissions(user: User) -> list[str]:
         .select_related("role")
         .prefetch_related("role__permissions")
     )
-    return [
-        f"{perm.resource}.{perm.action}"
-        for binding in bindings
-        for perm in binding.role.permissions.all()
-    ]
+    return [f"{perm.resource}.{perm.action}" for binding in bindings for perm in binding.role.permissions.all()]
 
 
 def _make_access_token(user: User) -> str:

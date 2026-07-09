@@ -3,6 +3,7 @@ Tests for:
   - FileRepository.soft_delete (legal hold guard, tenant isolation, CAS version bump)
   - get_files_page (cursor pagination, status filter, deleted exclusion)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,6 +36,7 @@ def _make_file(tenant_id: uuid.UUID, *, status: str = FileStatus.AVAILABLE) -> F
 # ---------------------------------------------------------------------------
 # FileRepository.soft_delete
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 class TestSoftDelete:
@@ -79,6 +81,7 @@ class TestSoftDelete:
 # ---------------------------------------------------------------------------
 # get_files_page — cursor pagination
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 class TestGetFilesPage:
@@ -166,6 +169,7 @@ class TestDeleteFileEndpoint:
 
     def test_delete_available_file_returns_204(self, client):
         from django.test import override_settings
+
         f = _make_file(self.tenant_id, status=FileStatus.AVAILABLE)
         with override_settings(RBAC_ENFORCEMENT_MODE="OFF"):
             resp = client.delete(f"/api/v1/files/{f.id}/", **self._auth())
@@ -175,6 +179,7 @@ class TestDeleteFileEndpoint:
 
     def test_delete_legal_hold_returns_403(self, client):
         from django.test import override_settings
+
         f = _make_file(self.tenant_id, status=FileStatus.AVAILABLE)
         f.is_legal_hold = True
         f.save(update_fields=["is_legal_hold"])
@@ -184,6 +189,7 @@ class TestDeleteFileEndpoint:
 
     def test_delete_unknown_file_returns_404(self, client):
         from django.test import override_settings
+
         with override_settings(RBAC_ENFORCEMENT_MODE="OFF"):
             resp = client.delete(f"/api/v1/files/{uuid.uuid4()}/", **self._auth())
         assert resp.status_code == 404

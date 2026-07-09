@@ -43,15 +43,11 @@ class AsgiTenantEnforcementMiddleware:
     def _validate_public_site_settings() -> None:
         raw = getattr(settings, "PUBLIC_SITE_TENANT_ID", None)
         if raw is None:
-            raise ImproperlyConfigured(
-                "PUBLIC_SITE_TENANT_ID must be set in settings when apps.site is installed."
-            )
+            raise ImproperlyConfigured("PUBLIC_SITE_TENANT_ID must be set in settings when apps.site is installed.")
         try:
             uuid.UUID(str(raw))
         except (ValueError, AttributeError) as exc:
-            raise ImproperlyConfigured(
-                f"PUBLIC_SITE_TENANT_ID is not a valid UUID: {raw!r}"
-            ) from exc
+            raise ImproperlyConfigured(f"PUBLIC_SITE_TENANT_ID is not a valid UUID: {raw!r}") from exc
 
     def __call__(self, request):
         if request.method == "OPTIONS":

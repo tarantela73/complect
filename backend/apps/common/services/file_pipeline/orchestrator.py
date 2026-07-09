@@ -24,9 +24,7 @@ class FilePipelineService:
             if doc.stage != DocumentStage.UPLOADED:
                 raise ValueError("Невалидный статус старта конвейера.")
 
-            EnterpriseSreRepository.atomic_cas_update(
-                doc, stage=DocumentStage.QUARANTINE
-            )
+            EnterpriseSreRepository.atomic_cas_update(doc, stage=DocumentStage.QUARANTINE)
             transaction.on_commit(lambda: run_antivirus_scan_task.delay(str(doc.id)))
 
 
@@ -42,9 +40,7 @@ def run_antivirus_scan_task(self, doc_id: str) -> None:
 
     cd = clamd.ClamdNetworkChild(host=settings.CLAMAV_HOST, port=settings.CLAMAV_PORT)
     try:
-        s3_stream = settings.S3_CLIENT.get_object(
-            Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key
-        )["Body"]
+        s3_stream = settings.S3_CLIENT.get_object(Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key)["Body"]
         scan_result = cd.instream(s3_stream)
 
         if scan_result and scan_result["stream"] == "FOUND":
@@ -64,9 +60,7 @@ def run_antivirus_scan_task(self, doc_id: str) -> None:
             Key=doc.s3_key,
             CopySource={"Bucket": settings.S3_QUARANTINE_BUCKET, "Key": doc.s3_key},
         )
-        settings.S3_CLIENT.delete_object(
-            Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key
-        )
+        settings.S3_CLIENT.delete_object(Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key)
 
         # Конвейер завершен -> Финализируем готовность документа
         doc.stage = DocumentStage.READY
@@ -75,4 +69,3 @@ def run_antivirus_scan_task(self, doc_id: str) -> None:
     except Exception as exc:
         # Экспоненциальный управляемый бэкофф с джиттером [Пункт 9]
         raise self.retry(exc=exc, countdown=2**self.request.retries * 15) from exc
-

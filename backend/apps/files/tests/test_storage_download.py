@@ -5,6 +5,7 @@ Coverage:
   UploadInitService — storage injection, presigned PUT URL shape
   DownloadService   — AVAILABLE-only guard, storage injection, tenant isolation
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -160,12 +161,15 @@ class TestDownloadServiceStatusGuard:
         assert call_kwargs["object_key"] == record.object_key
         assert result.download_url == "https://cdn.example.com/signed"
 
-    @pytest.mark.parametrize("transition_to", [
-        "pending",
-        "uploaded",
-        "scanning",
-        "quarantined",
-    ])
+    @pytest.mark.parametrize(
+        "transition_to",
+        [
+            "pending",
+            "uploaded",
+            "scanning",
+            "quarantined",
+        ],
+    )
     def test_non_available_status_raises(self, transition_to):
         from django.core.exceptions import ValidationError
 

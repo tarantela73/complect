@@ -10,6 +10,7 @@ Covers:
 - check_causal_pair_slo_task: observability-only alerting
 - Contract invariants: structural guarantees on CAUSAL_PAIRS
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -50,6 +51,7 @@ _CONTRACT_CLOSED_PAIR = CausalPairDefinition(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _causal_node(
     event_type: str = "contracts.ContractClosed",
@@ -126,10 +128,11 @@ def _make_outbox(
 # TestCausalDivergenceClassifier
 # ---------------------------------------------------------------------------
 
-class TestCausalDivergenceClassifier:
 
+class TestCausalDivergenceClassifier:
     def test_observable_within_slo(self):
         from datetime import timedelta
+
         source_created_at = _NOW - timedelta(seconds=100)
         state = CausalDivergenceClassifier.classify(
             _CONTRACT_CLOSED_PAIR,
@@ -140,6 +143,7 @@ class TestCausalDivergenceClassifier:
 
     def test_observable_at_slo_boundary(self):
         from datetime import timedelta
+
         source_created_at = _NOW - timedelta(seconds=300)
         state = CausalDivergenceClassifier.classify(
             _CONTRACT_CLOSED_PAIR,
@@ -150,6 +154,7 @@ class TestCausalDivergenceClassifier:
 
     def test_detectable_beyond_slo_in_retention_window(self):
         from datetime import timedelta
+
         source_created_at = _NOW - timedelta(seconds=301)
         state = CausalDivergenceClassifier.classify(
             _CONTRACT_CLOSED_PAIR,
@@ -160,6 +165,7 @@ class TestCausalDivergenceClassifier:
 
     def test_detectable_just_within_retention(self):
         from datetime import timedelta
+
         # 29 days: beyond SLO (300s), within 30d retention window.
         source_created_at = _NOW - timedelta(days=29)
         state = CausalDivergenceClassifier.classify(
@@ -171,6 +177,7 @@ class TestCausalDivergenceClassifier:
 
     def test_irreversible_beyond_retention_window(self):
         from datetime import timedelta
+
         source_created_at = _NOW - timedelta(days=31)
         state = CausalDivergenceClassifier.classify(
             _CONTRACT_CLOSED_PAIR,
@@ -237,8 +244,8 @@ class TestCausalDivergenceClassifier:
 # TestCausalPairRegistry
 # ---------------------------------------------------------------------------
 
-class TestCausalPairRegistry:
 
+class TestCausalPairRegistry:
     def test_get_by_source_known_event(self):
         pair = CausalPairRegistry.get_by_source("contracts.ContractClosed")
         assert pair is not None
@@ -264,14 +271,12 @@ class TestCausalPairRegistry:
 # TestOutboxBackedDomainEffectRegistry
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestOutboxBackedDomainEffectRegistry:
-
     def test_expected_effects_for_registered_source(self):
         registry = OutboxBackedDomainEffectRegistry()
-        assert registry.expected_effects("contracts.ContractClosed") == frozenset(
-            {"finance.TransactionPosted"}
-        )
+        assert registry.expected_effects("contracts.ContractClosed") == frozenset({"finance.TransactionPosted"})
 
     def test_expected_effects_unknown_returns_empty(self):
         registry = OutboxBackedDomainEffectRegistry()
@@ -331,8 +336,8 @@ class TestOutboxBackedDomainEffectRegistry:
 # TestTypeIVAndIIViaRegistry
 # ---------------------------------------------------------------------------
 
-class TestTypeIVAndIIViaRegistry:
 
+class TestTypeIVAndIIViaRegistry:
     def test_type_iv_silent_skip_when_no_downstream_effects(self):
         node = _causal_node(event_type="contracts.ContractClosed", processing_status="acked")
         chain = _chain(node, chain_complete=True)
@@ -377,12 +382,8 @@ class TestTypeIVAndIIViaRegistry:
 
     def test_type_v_partial_propagation_takes_priority_over_iv(self):
         # DLQ node + incomplete chain → TYPE V fires before domain registry check.
-        source_node = _causal_node(
-            event_type="contracts.ContractClosed", processing_status="acked"
-        )
-        dlq_node = _causal_node(
-            event_type="finance.TransactionPosted", processing_status="dlq"
-        )
+        source_node = _causal_node(event_type="contracts.ContractClosed", processing_status="acked")
+        dlq_node = _causal_node(event_type="finance.TransactionPosted", processing_status="dlq")
         chain = _chain(source_node, dlq_node, chain_complete=False)
         registry = _MockDomainRegistry(
             expected=frozenset({"finance.TransactionPosted"}),
@@ -409,9 +410,9 @@ class TestTypeIVAndIIViaRegistry:
 # TestCausalPairRepairService
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestCausalPairRepairService:
-
     def test_initiate_repair_creates_record(self):
         source_id = uuid.uuid4()
         record = CausalPairRepairService.initiate_repair(
@@ -498,9 +499,9 @@ class TestCausalPairRepairService:
 # TestCheckCausalPairSloTask
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestCheckCausalPairSloTask:
-
     def test_task_logs_warning_when_expected_event_absent(self):
         # Source event older than SLO (300s), no downstream record.
         source = _make_outbox(
@@ -534,9 +535,9 @@ class TestCheckCausalPairSloTask:
             check_causal_pair_slo_task()
 
         violation_logs = [
-            l for l in logs
-            if l.get("event") == "causal_pair_slo_violation"
-            and l.get("source_outbox_id") == str(source.id)
+            l
+            for l in logs
+            if l.get("event") == "causal_pair_slo_violation" and l.get("source_outbox_id") == str(source.id)
         ]
         assert len(violation_logs) == 0
 
@@ -553,9 +554,9 @@ class TestCheckCausalPairSloTask:
             check_causal_pair_slo_task()
 
         violation_logs = [
-            l for l in logs
-            if l.get("event") == "causal_pair_slo_violation"
-            and l.get("source_outbox_id") == str(source.id)
+            l
+            for l in logs
+            if l.get("event") == "causal_pair_slo_violation" and l.get("source_outbox_id") == str(source.id)
         ]
         assert len(violation_logs) == 0
 
@@ -564,8 +565,8 @@ class TestCheckCausalPairSloTask:
 # TestCausalPairContractInvariants
 # ---------------------------------------------------------------------------
 
-class TestCausalPairContractInvariants:
 
+class TestCausalPairContractInvariants:
     def test_all_pairs_have_nonempty_required_fields(self):
         for pair in CAUSAL_PAIRS:
             assert pair.name, f"{pair} has empty name"
@@ -574,9 +575,9 @@ class TestCausalPairContractInvariants:
             assert pair.correlation_field, f"{pair} has empty correlation_field"
             assert pair.expected_within_seconds > 0, f"{pair} has non-positive SLO"
             assert pair.finalization_boundary_source, f"{pair} missing finalization_boundary_source"
-            assert pair.authority_on_conflict in (
-                "finance", "contracts", "require_human"
-            ), f"{pair} has invalid authority_on_conflict"
+            assert pair.authority_on_conflict in ("finance", "contracts", "require_human"), (
+                f"{pair} has invalid authority_on_conflict"
+            )
 
     def test_finance_flows_require_sign_off(self):
         for pair in CAUSAL_PAIRS:
@@ -603,6 +604,5 @@ class TestCausalPairContractInvariants:
         # If a source has multiple expected effects, CausalPairDefinition must be extended.
         sources = [p.source_event for p in CAUSAL_PAIRS]
         assert len(sources) == len(set(sources)), (
-            "Duplicate source_event in CAUSAL_PAIRS — "
-            "extend CausalPairDefinition for multi-effect sources"
+            "Duplicate source_event in CAUSAL_PAIRS — extend CausalPairDefinition for multi-effect sources"
         )

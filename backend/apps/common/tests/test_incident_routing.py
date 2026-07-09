@@ -2,6 +2,7 @@
 Pure unit tests for IncidentRoutingPolicy (ADR-0019).
 No DB access — IncidentBundle is constructed directly.
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -42,7 +43,6 @@ def _bundle(*incidents: CausalIncident, root: uuid.UUID | None = None) -> Incide
 
 
 class TestSingleIncidentRouting:
-
     def test_loss_of_causality_routes_to_platform_sre(self):
         b = _bundle(_incident("LOSS_OF_CAUSALITY"))
         d = IncidentRoutingPolicy.route(b)
@@ -98,7 +98,6 @@ class TestSingleIncidentRouting:
 
 
 class TestCompoundRouting:
-
     def test_is_compound_true_when_multiple_incidents(self):
         b = _bundle(
             _incident("LOSS_OF_CAUSALITY"),
@@ -169,7 +168,6 @@ class TestCompoundRouting:
 
 
 class TestDataCorruptionClass:
-
     def test_silent_skip_plus_divergence_is_data_corruption(self):
         b = _bundle(
             _incident("SILENT_SKIP", domains=frozenset({"finance"})),
@@ -194,7 +192,6 @@ class TestDataCorruptionClass:
 
 
 class TestStructlogLabels:
-
     def test_single_incident_type_label(self):
         b = _bundle(_incident("LOSS_OF_CAUSALITY"))
         d = IncidentRoutingPolicy.route(b)
@@ -245,7 +242,6 @@ class TestStructlogLabels:
 
 
 class TestEdgeCases:
-
     def test_empty_bundle_raises(self):
         with pytest.raises(ValueError, match="empty"):
             IncidentRoutingPolicy.route(IncidentContext(incidents=(), causal_root_id=_ROOT))

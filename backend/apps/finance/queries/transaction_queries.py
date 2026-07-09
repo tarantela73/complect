@@ -1,4 +1,5 @@
 """CQRS Query Side — read-only, cursor pagination, no writes."""
+
 import uuid
 from typing import Optional
 

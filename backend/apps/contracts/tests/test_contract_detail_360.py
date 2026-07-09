@@ -4,6 +4,7 @@ Tests for Contract 360° endpoint layer:
   - ContractDetailSchema: snapshot for 360° fields presence
   - Cross-tenant: PermissionDenied propagates so API layer returns 404 (not 403)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -54,12 +55,14 @@ class TestGetContractDetail360:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.tenant_id = uuid.uuid4()
-        set_context(RequestContext(
-            tenant_id=self.tenant_id,
-            user_id=uuid.uuid4(),
-            request_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-        ))
+        set_context(
+            RequestContext(
+                tenant_id=self.tenant_id,
+                user_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
+                correlation_id=uuid.uuid4(),
+            )
+        )
 
     def test_happy_path_returns_360_fields(self):
         contract = _make_contract(self.tenant_id, total=500_000, paid=200_000)
@@ -122,17 +125,27 @@ class TestGetContractDetail360:
 
         metas = {
             fid_available: FileMetaDTO(
-                file_id=fid_available, tenant_id=self.tenant_id,
-                original_name="ok.pdf", size_bytes=100, status="AVAILABLE", download_url="https://s3/ok",
+                file_id=fid_available,
+                tenant_id=self.tenant_id,
+                original_name="ok.pdf",
+                size_bytes=100,
+                status="AVAILABLE",
+                download_url="https://s3/ok",
             ),
             fid_quarantined: FileMetaDTO(
-                file_id=fid_quarantined, tenant_id=self.tenant_id,
-                original_name="bad.exe", size_bytes=200, status="QUARANTINED", download_url=None,
+                file_id=fid_quarantined,
+                tenant_id=self.tenant_id,
+                original_name="bad.exe",
+                size_bytes=200,
+                status="QUARANTINED",
+                download_url=None,
             ),
         }
 
-        with patch("apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids",
-                   return_value=[fid_available, fid_quarantined]):
+        with patch(
+            "apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids",
+            return_value=[fid_available, fid_quarantined],
+        ):
             result = get_contract_detail_360(
                 contract.id,
                 _stub_finance_reader([]),
@@ -150,12 +163,18 @@ class TestGetContractDetail360:
         real_fid = uuid.uuid4()
 
         real_meta = FileMetaDTO(
-            file_id=real_fid, tenant_id=self.tenant_id,
-            original_name="real.pdf", size_bytes=500, status="AVAILABLE", download_url="https://s3/r",
+            file_id=real_fid,
+            tenant_id=self.tenant_id,
+            original_name="real.pdf",
+            size_bytes=500,
+            status="AVAILABLE",
+            download_url="https://s3/r",
         )
 
-        with patch("apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids",
-                   return_value=[orphan_fid, real_fid]):
+        with patch(
+            "apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids",
+            return_value=[orphan_fid, real_fid],
+        ):
             result = get_contract_detail_360(
                 contract.id,
                 _stub_finance_reader([]),
@@ -206,8 +225,7 @@ class TestGetContractDetail360:
         file_ids = [uuid.uuid4() for _ in range(5)]
         svc = _stub_file_service({})
 
-        with patch("apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids",
-                   return_value=file_ids):
+        with patch("apps.contracts.queries.contract_queries.AttachmentRepository.list_file_ids", return_value=file_ids):
             get_contract_detail_360(contract.id, _stub_finance_reader([]), svc)
 
         svc.get_file_metas_batch.assert_called_once()

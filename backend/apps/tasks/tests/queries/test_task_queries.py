@@ -1,4 +1,5 @@
 """Query-layer tests — pagination correctness and query count bounds."""
+
 from __future__ import annotations
 
 import uuid

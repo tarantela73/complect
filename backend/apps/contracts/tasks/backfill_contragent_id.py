@@ -8,6 +8,7 @@ Only fills where exactly ONE contragent matches the INN within the tenant
 Uses raw SQL to avoid cross-domain ORM imports (ADR-0005).
 Run via: celery call contracts.tasks.backfill_contragent_id.run_backfill_contragent_id
 """
+
 from __future__ import annotations
 
 import structlog

@@ -91,9 +91,7 @@ def _to_detail(
 def get_objects_summary(tenant_id: uuid.UUID) -> dict:
     """Returns in_progress_count, top5 (by name), and overdue_count for director dashboard."""
     today = datetime.now(tz=UTC).date()
-    qs = SupplyObject.objects.filter(
-        tenant_id=tenant_id, is_deleted=False, status=ObjectStatus.IN_PROGRESS
-    )
+    qs = SupplyObject.objects.filter(tenant_id=tenant_id, is_deleted=False, status=ObjectStatus.IN_PROGRESS)
     in_progress_count = qs.count()
     top5 = list(qs.order_by("name").values("id", "name")[:5])
     overdue_count = qs.filter(
@@ -150,6 +148,7 @@ def get_objects_page(
     display_map: dict[uuid.UUID, UserDisplayDTO] = {}
     if user_info and rows:
         from apps.common.tenancy.context_core import get_tenant_id
+
         user_ids = list({uid for o in rows for uid in [o.manager_id, o.foreman_id] if uid})
         if user_ids:
             display_map = user_info.get_users_display(user_ids, get_tenant_id())
@@ -180,9 +179,9 @@ def get_object_detail(
     user_info: Optional[UserInfoProtocol] = None,
 ) -> SupplyObjectDetailResponse:
     obj = ObjectRepository.get_by_id(object_id)
-    stages = list(ObjectStage.objects.filter(
-        object_id=object_id, tenant_id=obj.tenant_id, is_deleted=False
-    ).order_by("order"))
+    stages = list(
+        ObjectStage.objects.filter(object_id=object_id, tenant_id=obj.tenant_id, is_deleted=False).order_by("order")
+    )
 
     display_map: dict[uuid.UUID, UserDisplayDTO] = {}
     if user_info:

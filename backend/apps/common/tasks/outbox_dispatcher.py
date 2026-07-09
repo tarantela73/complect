@@ -30,13 +30,11 @@ _N_ROUTING_SLOTS: int = getattr(settings, "OUTBOX_SERIAL_ROUTING_SLOTS", 256)
 
 
 def _routing_stream(record: OutboxRecord, tenant_id_str: str) -> str:
-    if (
-        record.aggregate_type in SERIAL_DISPATCH_AGGREGATE_TYPES
-        and record.aggregate_id is not None
-    ):
+    if record.aggregate_type in SERIAL_DISPATCH_AGGREGATE_TYPES and record.aggregate_id is not None:
         slot = record.aggregate_id.int % _N_ROUTING_SLOTS
         return f"erp:streams:serial:{slot}"
     return f"erp:streams:tenant:{tenant_id_str}"
+
 
 # Injectable clock — patch in tests to advance time without DB manipulation.
 _clock = tz.now
@@ -44,7 +42,7 @@ _clock = tz.now
 
 def _next_retry_at(retry_count: int):
     """Exponential backoff with 10% jitter: min(base × 2^n, cap)."""
-    delay = min(_BACKOFF_BASE * (2 ** retry_count), _BACKOFF_CAP)
+    delay = min(_BACKOFF_BASE * (2**retry_count), _BACKOFF_CAP)
     return _clock() + timedelta(seconds=delay + random.uniform(0, delay * 0.1))
 
 
@@ -77,9 +75,7 @@ def run_outbox_polling_dispatcher_task() -> None:
                     is_processed=False,
                     failed_permanently_at__isnull=True,
                 )
-                .filter(
-                    Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now)
-                )
+                .filter(Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now))
                 .order_by("created_at")[:100]
             )
 

@@ -1,4 +1,5 @@
 """CQRS Query Side — read-only, no writes, replica-routed."""
+
 import uuid
 from typing import Optional
 
@@ -29,9 +30,7 @@ def get_contragents_page(
 
     if q:
         search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
-        qs = qs.filter(search_vector=search_query).order_by(
-            SearchRank("search_vector", search_query).desc(), "-id"
-        )
+        qs = qs.filter(search_vector=search_query).order_by(SearchRank("search_vector", search_query).desc(), "-id")
     else:
         qs = qs.order_by("-id")
 

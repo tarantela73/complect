@@ -1,4 +1,5 @@
 """RBAC permissions tests — tasks domain in ENFORCE mode."""
+
 from __future__ import annotations
 
 import uuid

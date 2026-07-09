@@ -1,4 +1,3 @@
-
 from apps.common.context.core import get_tenant_id
 from apps.site.models import SiteImage, SitePageContent
 from apps.site.schemas.cms_dto import CmsImageResponse, CmsPageContentResponse
@@ -6,11 +5,7 @@ from apps.site.schemas.cms_dto import CmsImageResponse, CmsPageContentResponse
 
 def get_cms_page_for_editing(slug: str) -> CmsPageContentResponse | None:
     tenant_id = get_tenant_id()
-    page = (
-        SitePageContent.objects
-        .filter(tenant_id=tenant_id, slug=slug, is_deleted=False)
-        .first()
-    )
+    page = SitePageContent.objects.filter(tenant_id=tenant_id, slug=slug, is_deleted=False).first()
     if page is None:
         return None
     return CmsPageContentResponse(

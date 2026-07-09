@@ -26,9 +26,7 @@ def seed_cms_permissions(db):
 
 def _make_editor() -> tuple[User, str]:
     email = f"editor_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role = Role.objects.get(name="cms_editor")
     RoleBinding.objects.create(
         tenant_id=TENANT_ID,
@@ -53,43 +51,59 @@ def _patch(slug: str, user: User, token: str, body: dict):
 
 # ── TiptapDocSchema unit tests ────────────────────────────────────────────────
 
+
 class TestTiptapDocSchema:
     def test_accepts_valid_doc(self):
-        doc = TiptapDocSchema(type="doc", content=[
-            {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Hello"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "World"}]},
-        ])
+        doc = TiptapDocSchema(
+            type="doc",
+            content=[
+                {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Hello"}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "World"}]},
+            ],
+        )
         assert doc.type == "doc"
         assert len(doc.content) == 2
 
     def test_accepts_all_allowed_node_types(self):
-        doc = TiptapDocSchema(type="doc", content=[
-            {"type": "paragraph"},
-            {"type": "heading"},
-            {"type": "bulletList"},
-            {"type": "orderedList"},
-            {"type": "blockquote"},
-            {"type": "codeBlock"},
-            {"type": "hardBreak"},
-            {"type": "horizontalRule"},
-            {"type": "image"},
-        ])
+        doc = TiptapDocSchema(
+            type="doc",
+            content=[
+                {"type": "paragraph"},
+                {"type": "heading"},
+                {"type": "bulletList"},
+                {"type": "orderedList"},
+                {"type": "blockquote"},
+                {"type": "codeBlock"},
+                {"type": "hardBreak"},
+                {"type": "horizontalRule"},
+                {"type": "image"},
+            ],
+        )
         assert len(doc.content) == 9
 
     def test_rejects_unknown_node_type_at_root(self):
         with pytest.raises(ValidationError) as exc_info:
-            TiptapDocSchema(type="doc", content=[
-                {"type": "script"},
-            ])
+            TiptapDocSchema(
+                type="doc",
+                content=[
+                    {"type": "script"},
+                ],
+            )
         assert "Unknown node type" in str(exc_info.value)
 
     def test_rejects_unknown_node_type_nested(self):
         with pytest.raises(ValidationError) as exc_info:
-            TiptapDocSchema(type="doc", content=[
-                {"type": "paragraph", "content": [
-                    {"type": "iframe"},
-                ]},
-            ])
+            TiptapDocSchema(
+                type="doc",
+                content=[
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "iframe"},
+                        ],
+                    },
+                ],
+            )
         assert "Unknown node type" in str(exc_info.value)
 
     def test_rejects_wrong_root_type(self):
@@ -101,9 +115,12 @@ class TestTiptapDocSchema:
         assert doc.content == []
 
     def test_model_dump_preserves_structure(self):
-        raw = {"type": "doc", "content": [
-            {"type": "paragraph", "content": [{"type": "text", "text": "Hi"}]},
-        ]}
+        raw = {
+            "type": "doc",
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Hi"}]},
+            ],
+        }
         doc = TiptapDocSchema(**raw)
         dumped = doc.model_dump()
         assert dumped["type"] == "doc"
@@ -112,33 +129,55 @@ class TestTiptapDocSchema:
 
 # ── API integration: content validation via endpoint ─────────────────────────
 
+
 @pytest.mark.django_db
 class TestTiptapSchemaEndpoint:
     def test_rejects_unknown_node_type_via_api(self):
         """U4: PATCH /cms/pages/{slug}/ rejects content with unknown node types."""
         user, token = _make_editor()
-        resp = _patch("home", user, token, {"content": {
-            "type": "doc",
-            "content": [{"type": "malicious_script"}],
-        }})
+        resp = _patch(
+            "home",
+            user,
+            token,
+            {
+                "content": {
+                    "type": "doc",
+                    "content": [{"type": "malicious_script"}],
+                }
+            },
+        )
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
     def test_rejects_wrong_root_type_via_api(self):
         user, token = _make_editor()
-        resp = _patch("home", user, token, {"content": {
-            "type": "paragraph",
-            "content": [],
-        }})
+        resp = _patch(
+            "home",
+            user,
+            token,
+            {
+                "content": {
+                    "type": "paragraph",
+                    "content": [],
+                }
+            },
+        )
         assert resp.status_code == 400
 
     def test_accepts_valid_doc_via_api(self):
         user, token = _make_editor()
-        resp = _patch("home", user, token, {"content": {
-            "type": "doc",
-            "content": [
-                {"type": "heading", "content": [{"type": "text", "text": "О компании"}]},
-            ],
-        }})
+        resp = _patch(
+            "home",
+            user,
+            token,
+            {
+                "content": {
+                    "type": "doc",
+                    "content": [
+                        {"type": "heading", "content": [{"type": "text", "text": "О компании"}]},
+                    ],
+                }
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["content"]["type"] == "doc"

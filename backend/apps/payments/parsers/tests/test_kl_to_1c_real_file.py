@@ -8,6 +8,7 @@ Fixture mimics a real VTB statement with:
   - One amount with spaces as thousands separator (edge case)
   - Multi-part НазначениеПлатежа (НазначениеПлатежа + НазначениеПлатежа1)
 """
+
 from __future__ import annotations
 
 from datetime import date

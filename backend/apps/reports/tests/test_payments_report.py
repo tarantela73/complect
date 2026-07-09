@@ -1,4 +1,5 @@
 """Tests for payments report query and Excel export endpoint (U5)."""
+
 from __future__ import annotations
 
 import uuid
@@ -15,12 +16,14 @@ from apps.reports.queries.payments_report_query import get_payments_report_rows
 
 
 def _ctx(tenant_id: uuid.UUID) -> None:
-    set_context(RequestContext(
-        tenant_id=tenant_id,
-        user_id=uuid.uuid4(),
-        request_id=uuid.uuid4(),
-        correlation_id=uuid.uuid4(),
-    ))
+    set_context(
+        RequestContext(
+            tenant_id=tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        )
+    )
     set_tenant_context(tenant_id)
 
 

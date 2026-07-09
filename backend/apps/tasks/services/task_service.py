@@ -1,4 +1,5 @@
 """CQRS Command Side — TaskService: state mutations, no heavy SELECTs."""
+
 from __future__ import annotations
 
 import uuid
@@ -213,12 +214,16 @@ class TaskService:
             raise PermissionDenied("NOT_TASK_PARTICIPANT")
         try:
             with transaction.atomic():
-                existing = TaskAttachment.objects.select_for_update().filter(
-                    task_id=task.id,
-                    file_id=file_id,
-                    tenant_id=task.tenant_id,
-                    is_deleted=False,
-                ).first()
+                existing = (
+                    TaskAttachment.objects.select_for_update()
+                    .filter(
+                        task_id=task.id,
+                        file_id=file_id,
+                        tenant_id=task.tenant_id,
+                        is_deleted=False,
+                    )
+                    .first()
+                )
                 if existing is not None:
                     raise ValidationError("Этот файл уже прикреплён к задаче.")
 

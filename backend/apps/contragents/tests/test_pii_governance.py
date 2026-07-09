@@ -8,6 +8,4 @@ class TestPiiSecretsGovernance:
 
         for key in forbidden_keys:
             # Сборка падает, если ключ обнаружен в глобальном пространстве настроек Django
-            assert not hasattr(settings, key), (
-                f"CRITICAL SECURITY HOLE: {key} найден в settings.py!"
-            )
+            assert not hasattr(settings, key), f"CRITICAL SECURITY HOLE: {key} найден в settings.py!"

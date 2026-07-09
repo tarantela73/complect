@@ -19,16 +19,14 @@ class FileCommonService:
         file_id: uuid.UUID,
         tenant_id: uuid.UUID,
     ) -> FileMetaDTO | None:
-        record: FileRecord | None = (
-            FileRecord.objects.filter(id=file_id, tenant_id=tenant_id, is_deleted=False)
-            .first()
-        )
+        record: FileRecord | None = FileRecord.objects.filter(id=file_id, tenant_id=tenant_id, is_deleted=False).first()
         if record is None:
             return None
 
         download_url: str | None = None
         if record.status == FileStatus.AVAILABLE:
             from django.conf import settings
+
             ttl = getattr(settings, "FILES_PRESIGNED_DOWNLOAD_TTL", 3600)
             storage = get_storage_backend()
             download_url = storage.generate_download_url(
@@ -60,6 +58,7 @@ class FileCommonService:
         )
 
         from django.conf import settings
+
         ttl = getattr(settings, "FILES_PRESIGNED_DOWNLOAD_TTL", 3600)
         storage = get_storage_backend()
 

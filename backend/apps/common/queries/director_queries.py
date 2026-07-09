@@ -2,6 +2,7 @@
 CQRS Query Side — Director Dashboard KPI aggregation.
 Re-exports domain-specific query functions. No direct cross-domain ORM imports (ADR-0005).
 """
+
 from __future__ import annotations
 
 from apps.contracts.queries.contract_queries import get_open_contracts_count

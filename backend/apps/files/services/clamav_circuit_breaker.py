@@ -70,6 +70,7 @@ class ClamAVCircuitBreaker:
             cache.delete(_CB_FAILURES_KEY)
             # Track open-event rate for SystemControlPolicy.
             from django.conf import settings
+
             _window = getattr(settings, "FILES_CONTROL_CB_RATE_WINDOW_SECONDS", 300)
             open_events = (cache.get(_CB_OPEN_EVENTS_KEY) or 0) + 1
             cache.set(_CB_OPEN_EVENTS_KEY, open_events, timeout=_window)

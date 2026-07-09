@@ -6,6 +6,7 @@ Coverage:
   - API: list, unread-count, mark-read, read-all (tenant isolation, RBAC)
   - Handler registry: correct recipient extraction for each event type
 """
+
 from __future__ import annotations
 
 import uuid
@@ -45,6 +46,7 @@ def _make_stream_event(
 # ──────────────────────────────────────────────────────────────────────────────
 # Handler registry
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestHandlerRegistry:
     def test_all_event_types_registered(self):
@@ -111,6 +113,7 @@ class TestHandlerRegistry:
 # ──────────────────────────────────────────────────────────────────────────────
 # NotificationsConsumer
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db(transaction=True)
 class TestNotificationsConsumer:
@@ -358,6 +361,7 @@ class TestNotificationsConsumer:
 # API
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db(transaction=True)
 class TestNotificationsApi:
     def _setup_context(self, tenant_id: uuid.UUID, user_id: uuid.UUID):
@@ -404,13 +408,19 @@ class TestNotificationsApi:
         user_id = uuid.uuid4()
 
         InAppNotification.objects.create(
-            tenant_id=tenant_id, user_id=user_id,
-            title="Прочитано", body="x", event_type="e",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="Прочитано",
+            body="x",
+            event_type="e",
             read_at=django_timezone.now(),
         )
         InAppNotification.objects.create(
-            tenant_id=tenant_id, user_id=user_id,
-            title="Непрочитано", body="x", event_type="e",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="Непрочитано",
+            body="x",
+            event_type="e",
         )
 
         from apps.notifications.queries.notification_queries import get_unread_count
@@ -423,12 +433,18 @@ class TestNotificationsApi:
         user_id = uuid.uuid4()
 
         InAppNotification.objects.create(
-            tenant_id=tenant_a, user_id=user_id,
-            title="A", body="x", event_type="e",
+            tenant_id=tenant_a,
+            user_id=user_id,
+            title="A",
+            body="x",
+            event_type="e",
         )
         InAppNotification.objects.create(
-            tenant_id=tenant_b, user_id=user_id,
-            title="B", body="x", event_type="e",
+            tenant_id=tenant_b,
+            user_id=user_id,
+            title="B",
+            body="x",
+            event_type="e",
         )
 
         from apps.notifications.queries.notification_queries import get_unread_count
@@ -442,8 +458,11 @@ class TestNotificationsApi:
 
         for i in range(5):
             InAppNotification.objects.create(
-                tenant_id=tenant_id, user_id=user_id,
-                title=f"N{i}", body="x", event_type="e",
+                tenant_id=tenant_id,
+                user_id=user_id,
+                title=f"N{i}",
+                body="x",
+                event_type="e",
             )
 
         from apps.notifications.queries.notification_queries import get_notifications_page
@@ -453,8 +472,10 @@ class TestNotificationsApi:
         assert page1.next_cursor is not None
 
         page2 = get_notifications_page(
-            tenant_id=tenant_id, user_id=user_id,
-            cursor=page1.next_cursor, limit=3,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            cursor=page1.next_cursor,
+            limit=3,
         )
         assert len(page2.results) == 2
 
@@ -462,6 +483,7 @@ class TestNotificationsApi:
 # ──────────────────────────────────────────────────────────────────────────────
 # Task notification handlers
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestTaskAssignedHandler:
     def test_recipient_is_assigned_user(self):

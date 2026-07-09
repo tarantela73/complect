@@ -1,4 +1,5 @@
 """CQRS Command Side — TaskRepository: tenant-isolated reads for writes only."""
+
 from __future__ import annotations
 
 import uuid
@@ -30,30 +31,26 @@ class TaskRepository:
             task.save()
             return task
 
-        updated = (
-            Task.objects.filter(
-                pk=task.pk,
-                tenant_id=task.tenant_id,
-                version=current_version,
-                is_deleted=False,
-            ).update(
-                title=task.title,
-                description=task.description,
-                status=task.status,
-                priority=task.priority,
-                assigned_to_id=task.assigned_to_id,
-                due_date=task.due_date,
-                closed_at=task.closed_at,
-                closed_by_id=task.closed_by_id,
-                version=F("version") + 1,
-                updated_at=tz.now(),
-            )
+        updated = Task.objects.filter(
+            pk=task.pk,
+            tenant_id=task.tenant_id,
+            version=current_version,
+            is_deleted=False,
+        ).update(
+            title=task.title,
+            description=task.description,
+            status=task.status,
+            priority=task.priority,
+            assigned_to_id=task.assigned_to_id,
+            due_date=task.due_date,
+            closed_at=task.closed_at,
+            closed_by_id=task.closed_by_id,
+            version=F("version") + 1,
+            updated_at=tz.now(),
         )
 
         if updated == 0:
-            raise ConcurrentModificationError(
-                "OCC Conflict: задача была изменена параллельным процессом."
-            )
+            raise ConcurrentModificationError("OCC Conflict: задача была изменена параллельным процессом.")
 
         task.refresh_from_db()
         return task

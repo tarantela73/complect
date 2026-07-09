@@ -6,6 +6,7 @@ Tests for FinanceReaderService (ADR-0005 cross-domain read contract):
   - respects limit=5 (returns exactly N most recent)
   - empty result when no matching payments
 """
+
 from __future__ import annotations
 
 import uuid

@@ -15,9 +15,7 @@ class TestSreKillSwitchMiddlewareMesh:
         flag_name = "kill_switch_heavy_analytics"
 
         # 1. Создаем рубильник в СУБД и принудительно гасим его в Redis (Имитируем аварию / лаг реплики)
-        FeatureFlag.objects.create(
-            name=flag_name, flag_type=FeatureFlagType.KILL_SWITCH, is_enabled=False
-        )
+        FeatureFlag.objects.create(name=flag_name, flag_type=FeatureFlagType.KILL_SWITCH, is_enabled=False)
         FeatureFlagRepository.set_flag_state(flag_name, enable=False)
 
         # 2. Стучимся на ЛЮБУЮ ручку внутри заблокированного домена (даже на плоский незадекорированный стаб)
@@ -29,8 +27,4 @@ class TestSreKillSwitchMiddlewareMesh:
         assert response.status_code == 503
         response_json = json.loads(response.content.decode("utf-8"))
         assert response_json["code"] == "DOMAIN_TEMPORARILY_DISABLED"
-        assert (
-            "отключен автоматической системой надежности SRE"
-            in response_json["message"]
-        )
-
+        assert "отключен автоматической системой надежности SRE" in response_json["message"]

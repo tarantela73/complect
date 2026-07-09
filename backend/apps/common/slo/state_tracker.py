@@ -6,6 +6,7 @@ Keys (all on DB=0 default Redis):
   slo:recovering:{name} → exists (TTL=300s) when recently transitioned back to ok
   slo:budget:{name}     → Redis list, last 30 evaluation outcomes (1=ok, 0=breach)
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -19,7 +20,7 @@ _RECOVERING_KEY = "slo:recovering:{name}"
 _BUDGET_KEY = "slo:budget:{name}"
 
 _RECOVERING_TTL = 300  # 5 minutes
-_BUDGET_SLOTS = 30     # 30 evaluations × 60s = 30 minutes
+_BUDGET_SLOTS = 30  # 30 evaluations × 60s = 30 minutes
 
 
 def get_slo_display_state(name: str) -> SLODisplayState:

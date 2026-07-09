@@ -19,9 +19,7 @@ class StageUpdateService:
         stage = StageRepository.get_by_object_and_key(object_id, stage_key)
 
         if status == ObjectStageStatus.SKIPPED and not stage.is_optional:
-            raise ValidationError(
-                f"Этап '{stage_key}' обязателен и не может быть пропущен."
-            )
+            raise ValidationError(f"Этап '{stage_key}' обязателен и не может быть пропущен.")
 
         updated = StageRepository.update_stage(stage, status, note, completed_by_id)
         if not updated:

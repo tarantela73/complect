@@ -25,9 +25,7 @@ def seed_cms_permissions(db):
 
 def _make_editor() -> tuple[User, str]:
     email = f"editor_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role = Role.objects.get(name="cms_editor")
     RoleBinding.objects.create(
         tenant_id=TENANT_ID,
@@ -53,50 +51,69 @@ def _patch(slug: str, user: User, token: str, body: dict) -> dict:
 
 # ── _derive_meta_from_tiptap unit tests ──────────────────────────────────────
 
+
 class TestDeriveMetaFromTiptap:
     def test_derives_title_from_first_heading(self):
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Услуги"}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Услуги"}]},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert result["title"] == "Услуги"
 
     def test_derives_description_from_first_paragraph(self):
-        doc = {"type": "doc", "content": [
-            {"type": "paragraph", "content": [{"type": "text", "text": "Мы помогаем."}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Мы помогаем."}]},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert result["description"] == "Мы помогаем."
 
     def test_derives_both_from_doc(self):
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Заголовок"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "Описание страницы."}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Заголовок"}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "Описание страницы."}]},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert result["title"] == "Заголовок"
         assert result["description"] == "Описание страницы."
 
     def test_returns_empty_when_no_heading_or_paragraph(self):
-        doc = {"type": "doc", "content": [
-            {"type": "bulletList", "content": []},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "bulletList", "content": []},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert result == {}
 
     def test_truncates_long_title_to_60_chars(self):
         long_title = "A" * 80
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "content": [{"type": "text", "text": long_title}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "content": [{"type": "text", "text": long_title}]},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert len(result["title"]) == 60
 
     def test_truncates_long_description_to_160_chars(self):
         long_desc = "B" * 200
-        doc = {"type": "doc", "content": [
-            {"type": "paragraph", "content": [{"type": "text", "text": long_desc}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": long_desc}]},
+            ],
+        }
         result = _derive_meta_from_tiptap(doc)
         assert len(result["description"]) == 160
 
@@ -106,6 +123,7 @@ class TestDeriveMetaFromTiptap:
 
 
 # ── _overrides integration tests ─────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestMetaAutoDerivation:
@@ -145,10 +163,13 @@ class TestMetaAutoDerivation:
         # Set custom title — marks override
         _patch("contact", user, token, {"meta": {"title": "Услуги компании | Комплект"}})
         # Save new content with different H1
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "content": [{"type": "text", "text": "Новый заголовок"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "Новое описание."}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "content": [{"type": "text", "text": "Новый заголовок"}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "Новое описание."}]},
+            ],
+        }
         resp = _patch("contact", user, token, {"content": doc})
         assert resp.status_code == 200
         meta = resp.json()["meta"]
@@ -159,17 +180,21 @@ class TestMetaAutoDerivation:
         """Only _overrides.description = True blocks description derivation."""
         user, token = _make_editor()
         _patch("faq", user, token, {"meta": {"description": "Зафиксированное описание."}})
-        doc = {"type": "doc", "content": [
-            {"type": "heading", "content": [{"type": "text", "text": "Новый заголовок"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "Другое описание."}]},
-        ]}
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "content": [{"type": "text", "text": "Новый заголовок"}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "Другое описание."}]},
+            ],
+        }
         resp = _patch("faq", user, token, {"content": doc})
         meta = resp.json()["meta"]
-        assert meta["title"] == "Новый заголовок"       # not protected, auto-derived
+        assert meta["title"] == "Новый заголовок"  # not protected, auto-derived
         assert meta["description"] == "Зафиксированное описание."  # protected
 
 
 # ── MetaUpdateRequest validation ─────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestMetaUpdateRequestValidation:

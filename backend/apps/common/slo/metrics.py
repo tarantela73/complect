@@ -2,6 +2,7 @@
 Runtime metric collectors for SLO evaluation and Ops Console.
 Single source of truth — imported by both the ops API endpoint and the SLO task.
 """
+
 from __future__ import annotations
 
 import redis as redis_lib
@@ -91,6 +92,7 @@ def collect_reconciliation_stats() -> dict[str, int]:
             BankStatementStatus,
             MatchStatus,
         )
+
         importing = BankStatement.objects.filter(status=BankStatementStatus.IMPORTING).count()
         base = BankStatementLine.objects.filter(
             is_deleted=False,
@@ -100,7 +102,7 @@ def collect_reconciliation_stats() -> dict[str, int]:
             "statements_importing": importing,
             "unmatched_lines": base.filter(match_status=MatchStatus.UNMATCHED).count(),
             "ambiguous_lines": base.filter(match_status=MatchStatus.AMBIGUOUS).count(),
-            "partial_lines":   base.filter(match_status=MatchStatus.PARTIAL).count(),
+            "partial_lines": base.filter(match_status=MatchStatus.PARTIAL).count(),
         }
     except Exception:
         logger.warning("ops_reconciliation_stats_unavailable")

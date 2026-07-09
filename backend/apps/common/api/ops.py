@@ -2,6 +2,7 @@
 Ops Console — pure read-only aggregator over existing infrastructure.
 No domain logic, no tenant scope. Cross-tenant by design (platform admin only).
 """
+
 from __future__ import annotations
 
 import structlog

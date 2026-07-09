@@ -159,9 +159,7 @@ class CausalIncidentClassifier:
         if seq_nodes:
             by_aggregate: dict[tuple, list[int]] = {}
             for n in seq_nodes:
-                by_aggregate.setdefault((n.aggregate_type, n.aggregate_id), []).append(
-                    n.aggregate_seq
-                )
+                by_aggregate.setdefault((n.aggregate_type, n.aggregate_id), []).append(n.aggregate_seq)
             for seqs in by_aggregate.values():
                 if len(seqs) > 1:
                     sorted_seqs = sorted(seqs)

@@ -24,9 +24,7 @@ class EnterpriseSreRepository:
         """Гарантированная изоляция чтения под защитой текущего тенанта."""
         tenant_id = get_current_tenant_id()
         try:
-            return model_class.objects.filter(
-                pk=pk, tenant_id=tenant_id, is_deleted=False
-            ).get()
+            return model_class.objects.filter(pk=pk, tenant_id=tenant_id, is_deleted=False).get()
         except ObjectDoesNotExist:
             raise PermissionDenied("Доступ запрещен или объект не найден.") from None
 
@@ -51,18 +49,14 @@ class EnterpriseSreRepository:
         )
 
         if updated == 0:
-            raise ConcurrentModificationError(
-                "OCC Conflict: Запись была изменена параллельным процессом."
-            )
+            raise ConcurrentModificationError("OCC Conflict: Запись была изменена параллельным процессом.")
 
     @staticmethod
     def enforce_soft_delete(instance) -> None:
         """Безопасное мягкое удаление, полностью вынесенное из модели."""
         tenant_id = get_current_tenant_id()
         if instance.is_legal_hold:
-            raise ValidationError(
-                "Юридическое удержание активировано. Удаление заблокировано."
-            )
+            raise ValidationError("Юридическое удержание активировано. Удаление заблокировано.")
 
         updated = (
             type(instance)

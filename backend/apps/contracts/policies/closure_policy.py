@@ -42,6 +42,4 @@ class ContractClosurePolicy:
         has_act = document_conditions.get("has_act", False)
 
         if not (paid and has_signed and has_act):
-            raise ContractClosurePolicyViolation(
-                detail={"paid": paid, "has_signed": has_signed, "has_act": has_act}
-            )
+            raise ContractClosurePolicyViolation(detail={"paid": paid, "has_signed": has_signed, "has_act": has_act})

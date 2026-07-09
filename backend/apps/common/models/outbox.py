@@ -100,4 +100,3 @@ class OutboxRecord(models.Model):
                 condition=models.Q(aggregate_seq__isnull=False),
             ),
         ]
-

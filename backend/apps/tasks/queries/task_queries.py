@@ -1,4 +1,5 @@
 """CQRS Query Side — read-only projections, no writes."""
+
 from __future__ import annotations
 
 import base64
@@ -50,10 +51,7 @@ def get_tasks_page(
         if anchor is None:
             return TaskListOut(items=[], next_cursor=None)
         anchor_ts, anchor_id = anchor
-        qs = qs.filter(
-            Q(created_at__lt=anchor_ts)
-            | Q(created_at=anchor_ts, id__lt=anchor_id)
-        )
+        qs = qs.filter(Q(created_at__lt=anchor_ts) | Q(created_at=anchor_ts, id__lt=anchor_id))
     if status:
         qs = qs.filter(status=status)
     if assigned_to_id:
@@ -69,9 +67,7 @@ def get_tasks_page(
     has_next = len(rows) > limit
     rows = rows[:limit]
 
-    next_cursor = (
-        _encode_cursor(rows[-1].created_at, rows[-1].id) if has_next and rows else None
-    )
+    next_cursor = _encode_cursor(rows[-1].created_at, rows[-1].id) if has_next and rows else None
 
     return TaskListOut(items=[_task_to_out(t) for t in rows], next_cursor=next_cursor)
 
