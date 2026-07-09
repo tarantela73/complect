@@ -92,7 +92,7 @@ class KlTo1CParser:
         for line in lines_raw:
             stripped = line.strip()
             if stripped.startswith(MARKER_SECTION_DOC + "="):
-                current_doc_type = stripped[len(MARKER_SECTION_DOC) + 1:]
+                current_doc_type = stripped[len(MARKER_SECTION_DOC) + 1 :]
                 current_doc_lines = []
                 mode = "doc"
             elif stripped == MARKER_END_DOC:
@@ -217,7 +217,7 @@ class KlTo1CParser:
         # Убираем ИНН из имени если он там есть (формат «ИНН, Имя»)
         cp_name = cp_name.strip()
         if cp_inn and cp_name.startswith(cp_inn):
-            cp_name = cp_name[len(cp_inn):].lstrip(", ").strip()
+            cp_name = cp_name[len(cp_inn) :].lstrip(", ").strip()
 
         # НазначениеПлатежа может быть разбито на НазначениеПлатежа1..6
         description_parts = [fields.get("НазначениеПлатежа", "")]

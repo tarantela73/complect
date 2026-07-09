@@ -130,7 +130,9 @@ def activate_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 422, make_error_response("BUSINESS_RULE_VIOLATION", exc.message)
 
 
-@router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict, 422: dict})
+@router.post(
+    "/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict, 422: dict}
+)
 @require_permission("write", "contracts")
 def close_contract(request: HttpRequest, contract_id: uuid.UUID):
     from apps.common.tenancy.context_core import get_context
@@ -157,6 +159,7 @@ def close_contract(request: HttpRequest, contract_id: uuid.UUID):
 
 # ── Contract Event Log ────────────────────────────────────────────────────────
 
+
 @router.get(
     "/{contract_id}/events/",
     response={200: ContractEventLogResponse, 403: dict},
@@ -173,6 +176,7 @@ def list_contract_events(request: HttpRequest, contract_id: uuid.UUID):
 
 
 # ── Attachments ───────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{contract_id}/attachments/",

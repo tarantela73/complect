@@ -7,6 +7,7 @@ _rbac_action marker set by require_permission().
 
 Failure here means a new endpoint was added without RBAC coverage.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -45,9 +46,8 @@ def test_all_non_auth_endpoints_have_rbac():
         if not hasattr(fn, "_rbac_action"):
             unprotected.append(f"{sorted(methods)} {prefix}{path} -> {fn.__name__}")
 
-    assert not unprotected, (
-        "Endpoints missing @require_permission:\n"
-        + "\n".join(f"  {e}" for e in sorted(unprotected))
+    assert not unprotected, "Endpoints missing @require_permission:\n" + "\n".join(
+        f"  {e}" for e in sorted(unprotected)
     )
 
 
@@ -70,7 +70,6 @@ def test_all_rbac_permissions_are_registered_in_inventory():
         if key not in _BY_PAIR:
             unknown.append(f"action={fn._rbac_action!r} resource={fn._rbac_resource!r} in {fn.__name__}")
 
-    assert not unknown, (
-        "Permissions used in decorators but missing from rbac_permissions.PERMISSIONS:\n"
-        + "\n".join(f"  {u}" for u in unknown)
+    assert not unknown, "Permissions used in decorators but missing from rbac_permissions.PERMISSIONS:\n" + "\n".join(
+        f"  {u}" for u in unknown
     )

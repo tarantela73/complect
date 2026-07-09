@@ -18,7 +18,7 @@ def _load_dotenv() -> None:
 def main():
     """Единая точка управления миграциями и проверками ERP Комплект."""
     _load_dotenv()
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local')
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -28,5 +28,6 @@ def main():
         ) from exc
     execute_from_command_line(sys.argv)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

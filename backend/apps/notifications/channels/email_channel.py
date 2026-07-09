@@ -18,11 +18,7 @@ logger = structlog.get_logger(__name__)
 def send_notification_email_task(*, user_id: str, subject: str, body: str) -> None:
     from apps.users.models import User
 
-    email = (
-        User.objects.filter(id=user_id)
-        .values_list("email", flat=True)
-        .first()
-    )
+    email = User.objects.filter(id=user_id).values_list("email", flat=True).first()
     if not email:
         logger.info("notification_email_skipped_no_address", user_id=user_id)
         return

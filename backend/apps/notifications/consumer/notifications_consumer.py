@@ -85,20 +85,16 @@ class NotificationsConsumer(BaseDomainConsumer):
                         payload=event.payload,
                     )
                     _uid, _tid, _nid = user_id, event.tenant_id, notif.id
-                    transaction.on_commit(
-                        lambda uid=_uid, tid=_tid, nid=_nid:
-                            push_notification_ws(uid, tid, nid)
-                    )
+                    transaction.on_commit(lambda uid=_uid, tid=_tid, nid=_nid: push_notification_ws(uid, tid, nid))
 
                 if prefs.email_enabled:
                     _uid_str = str(user_id)
                     transaction.on_commit(
-                        lambda uid=_uid_str, t=title, b=body:
-                            send_notification_email_task.delay(
-                                user_id=uid,
-                                subject=t,
-                                body=b,
-                            )
+                        lambda uid=_uid_str, t=title, b=body: send_notification_email_task.delay(
+                            user_id=uid,
+                            subject=t,
+                            body=b,
+                        )
                     )
 
 

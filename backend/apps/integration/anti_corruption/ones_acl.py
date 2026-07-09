@@ -25,9 +25,7 @@ class OnesAntiCorruptionLayerFacade:
             ).exists()
 
             if is_duplicate:
-                raise ValidationError(
-                    f"Пакет 1С {raw_dto.DocGUID} уже был успешно обработан ранее."
-                )
+                raise ValidationError(f"Пакет 1С {raw_dto.DocGUID} уже был успешно обработан ранее.")
 
             # Регистрируем входящую задачу в Inbox в статусе PENDING
             inbox_record = IntegrationInboxRecord.objects.create(

@@ -18,6 +18,7 @@ Callers that want a 403 JSON envelope should catch PermissionDenied:
     except PermissionDenied:
         return 403, make_error_response("FORBIDDEN", "...")
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,6 +59,7 @@ def require_permission(action: str, resource: str) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         if asyncio.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def async_wrapper(request, *args, **kwargs):
                 # _check runs a sync ORM query (RBAC cache miss → RoleBinding lookup);

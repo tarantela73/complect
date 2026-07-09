@@ -20,9 +20,7 @@ _COVER_URL_TTL = 3600
 def _to_public_schema(obj: SupplyObject, storage: StorageBackend) -> PublicObjectSchema:
     cover_image_url: Optional[str] = None
     if obj.cover_image_key:
-        cover_image_url = storage.generate_download_url(
-            object_key=obj.cover_image_key, expires_in=_COVER_URL_TTL
-        )
+        cover_image_url = storage.generate_download_url(object_key=obj.cover_image_key, expires_in=_COVER_URL_TTL)
 
     location: Optional[PublicObjectLocationSchema] = None
     if obj.location:
@@ -49,11 +47,7 @@ def get_public_objects_catalog(
 ) -> PublicObjectListResponse:
     _storage = storage or get_storage_backend()
 
-    qs = (
-        ObjectRepository.get_queryset()
-        .filter(is_public=True, slug__isnull=False)
-        .order_by("-id")
-    )
+    qs = ObjectRepository.get_queryset().filter(is_public=True, slug__isnull=False).order_by("-id")
 
     if resource_type:
         qs = qs.filter(resource_type=resource_type)

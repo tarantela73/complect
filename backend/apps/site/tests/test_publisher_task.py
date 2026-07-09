@@ -68,6 +68,7 @@ class TestPublishScheduledPagesTask:
 
     def test_task_registered_in_beat_schedule(self):
         from django.conf import settings
+
         assert "cms-publish-scheduled" in settings.CELERY_BEAT_SCHEDULE
         entry = settings.CELERY_BEAT_SCHEDULE["cms-publish-scheduled"]
         assert entry["task"] == "apps.site.tasks.publisher.publish_scheduled_pages_task"

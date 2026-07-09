@@ -50,11 +50,7 @@ class CmsUpdateService:
         except Exception:
             user_id = None
 
-        existing = (
-            SitePageContent.objects
-            .filter(tenant_id=tenant_id, slug=slug, is_deleted=False)
-            .first()
-        )
+        existing = SitePageContent.objects.filter(tenant_id=tenant_id, slug=slug, is_deleted=False).first()
 
         current_meta: dict = dict(existing.meta) if existing else {}
         overrides: dict = dict(current_meta.pop("_overrides", {}))

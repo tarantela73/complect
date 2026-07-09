@@ -13,9 +13,7 @@ class IntegrationInboxRecord(models.Model):
 
     # Уникальный ключ транзакции во внешней системе (например, Документ_GUID из 1С)
     external_event_id = models.CharField(max_length=255, unique=True, db_index=True)
-    source_system = models.CharField(
-        max_length=50, db_index=True
-    )  # e.g., 'ONES_1C', 'ESIA_GOSUSLUGI'
+    source_system = models.CharField(max_length=50, db_index=True)  # e.g., 'ONES_1C', 'ESIA_GOSUSLUGI'
 
     status = models.CharField(max_length=30, default="PENDING", db_index=True)
     processed_at = models.DateTimeField(null=True, blank=True)

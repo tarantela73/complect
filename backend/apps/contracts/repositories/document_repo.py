@@ -19,16 +19,12 @@ class DocumentRepository:
     def get_by_id(doc_id: uuid.UUID) -> CommonDocument:
         tenant_id = get_current_tenant_id()
         try:
-            return CommonDocument.objects.filter(
-                id=doc_id, tenant_id=tenant_id, is_deleted=False
-            ).get()
+            return CommonDocument.objects.filter(id=doc_id, tenant_id=tenant_id, is_deleted=False).get()
         except ObjectDoesNotExist:
             raise PermissionDenied("Документ не найден в контуре текущей компании.") from None
 
     @staticmethod
-    def atomic_stage_transition(
-        document: CommonDocument, next_stage: DocumentStage, **meta_updates
-    ) -> None:
+    def atomic_stage_transition(document: CommonDocument, next_stage: DocumentStage, **meta_updates) -> None:
         """
         [FSM CAS] Атомарный Compare-And-Swap переход по стадиям обработки.
         Исключает конкурентное изменение статуса файла разными воркерами Celery.
@@ -52,6 +48,4 @@ class DocumentRepository:
         )
 
         if updated_rows == 0:
-            raise DocumentConcurrencyError(
-                "FSM Conflict: статус файла изменен параллельной задачей."
-            )
+            raise DocumentConcurrencyError("FSM Conflict: статус файла изменен параллельной задачей.")

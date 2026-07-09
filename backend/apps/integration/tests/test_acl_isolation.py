@@ -23,9 +23,7 @@ class TestAntiCorruptionLayerMesh:
 
         # Проверяем, что в Inbox появилась отметка о фиксации
         assert (
-            IntegrationInboxRecord.objects.filter(
-                external_event_id="1c-finance-uuid-999", status="COMPLETED"
-            ).count()
+            IntegrationInboxRecord.objects.filter(external_event_id="1c-finance-uuid-999", status="COMPLETED").count()
             == 1
         )
 
@@ -35,9 +33,4 @@ class TestAntiCorruptionLayerMesh:
             OnesAntiCorruptionLayerFacade.process_incoming_1c_payment(raw_1c_packet)
 
         # Количество завершенных проводок в системе по-прежнему строго равно единице!
-        assert (
-            IntegrationInboxRecord.objects.filter(
-                external_event_id="1c-finance-uuid-999"
-            ).count()
-            == 1
-        )
+        assert IntegrationInboxRecord.objects.filter(external_event_id="1c-finance-uuid-999").count() == 1

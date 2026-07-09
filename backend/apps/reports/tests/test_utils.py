@@ -1,4 +1,5 @@
 """Unit tests for reports utility helpers (U2)."""
+
 from __future__ import annotations
 
 import pytest
@@ -13,9 +14,7 @@ class TestMakeExcelResponse:
     def test_content_type(self):
         wb = Workbook()
         response = make_excel_response(wb, "report.xlsx")
-        assert response["Content-Type"] == (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        assert response["Content-Type"] == ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     def test_content_disposition(self):
         wb = Workbook()

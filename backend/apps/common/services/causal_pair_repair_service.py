@@ -65,9 +65,7 @@ class CausalPairRepairService:
             sign_off_at=now,
         )
         if not updated:
-            raise ValueError(
-                f"CausalPairRepairRecord {repair_record_id} not found or already completed"
-            )
+            raise ValueError(f"CausalPairRepairRecord {repair_record_id} not found or already completed")
         logger.info(
             "causal_pair_repair_completed",
             repair_record_id=str(repair_record_id),

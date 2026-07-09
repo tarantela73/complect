@@ -6,6 +6,7 @@ Covers:
 - ConsumerRepairService: safety contract, ProcessedEvent reset, fence bypass
 - TYPE VI ordering violation detection in CausalIncidentClassifier
 """
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,7 @@ _NOW = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _outbox(
     *,
     is_processed: bool = True,
@@ -48,9 +50,7 @@ def _outbox(
     cutoff_past = tz.now() - timedelta(days=days_old)
     OutboxRecord.objects.filter(id=record.id).update(
         created_at=cutoff_past,
-        processed_at=processed_at if processed_at is not None else (
-            cutoff_past if is_processed else None
-        ),
+        processed_at=processed_at if processed_at is not None else (cutoff_past if is_processed else None),
     )
     return OutboxRecord.objects.get(id=record.id)
 
@@ -92,9 +92,9 @@ def _chain(*nodes: CausalNode) -> CausalChain:
 # TestArchiveTask
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestArchiveTask:
-
     def test_normal_records_moved_to_archive(self):
         record = _outbox(is_processed=True, failed_permanently_at=None, days_old=35)
         archive_processed_outbox_records_task()
@@ -169,9 +169,9 @@ class TestArchiveTask:
 # TestConsumerRepairService
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestConsumerRepairService:
-
     def _quarantine_record(self) -> OutboxRecord:
         record = OutboxRecord(
             event_type="finance.transaction",
@@ -197,9 +197,7 @@ class TestConsumerRepairService:
             operator_id="ops-001",
             reason="business action not executed",
         )
-        assert not ProcessedEvent.objects.filter(
-            outbox_record_id=record.id, consumer="finance.consumer"
-        ).exists()
+        assert not ProcessedEvent.objects.filter(outbox_record_id=record.id, consumer="finance.consumer").exists()
 
     def test_reset_non_quarantine_raises(self):
         record = OutboxRecord(
@@ -247,12 +245,8 @@ class TestConsumerRepairService:
             operator_id="ops-001",
             reason="test",
         )
-        assert not ProcessedEvent.objects.filter(
-            outbox_record_id=record.id, consumer="consumer.a"
-        ).exists()
-        assert ProcessedEvent.objects.filter(
-            outbox_record_id=record.id, consumer="consumer.b"
-        ).exists()
+        assert not ProcessedEvent.objects.filter(outbox_record_id=record.id, consumer="consumer.a").exists()
+        assert ProcessedEvent.objects.filter(outbox_record_id=record.id, consumer="consumer.b").exists()
 
     def test_fence_reset_when_requested(self):
         record = self._quarantine_record()
@@ -314,8 +308,8 @@ class TestConsumerRepairService:
 # TestTypeVIOrdering (pure unit tests — no DB)
 # ---------------------------------------------------------------------------
 
-class TestTypeVIOrdering:
 
+class TestTypeVIOrdering:
     def test_no_ordering_violation_for_single_node(self):
         agg_id = str(uuid.uuid4())
         node = _causal_node(aggregate_id=agg_id, aggregate_seq=5)
@@ -362,10 +356,9 @@ class TestTypeVIOrdering:
         agg_a = str(uuid.uuid4())
         agg_b = str(uuid.uuid4())
         # agg_a: contiguous [1,2,3]; agg_b: contiguous [1,2] — no violation.
-        nodes = (
-            [_causal_node(aggregate_id=agg_a, aggregate_seq=s) for s in [1, 2, 3]]
-            + [_causal_node(aggregate_id=agg_b, aggregate_seq=s) for s in [1, 2]]
-        )
+        nodes = [_causal_node(aggregate_id=agg_a, aggregate_seq=s) for s in [1, 2, 3]] + [
+            _causal_node(aggregate_id=agg_b, aggregate_seq=s) for s in [1, 2]
+        ]
         incident = CausalIncidentClassifier.classify(_chain(*nodes))
         assert incident is None
 

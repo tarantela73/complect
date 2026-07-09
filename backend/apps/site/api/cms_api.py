@@ -98,21 +98,19 @@ def list_page_revisions(
     tenant_id = get_tenant_id()
     from apps.site.models import SitePageContent
 
-    page = (
-        SitePageContent.objects
-        .filter(tenant_id=tenant_id, slug=slug, is_deleted=False)
-        .first()
-    )
+    page = SitePageContent.objects.filter(tenant_id=tenant_id, slug=slug, is_deleted=False).first()
     if page is None:
         return 404, make_error_response("CMS_PAGE_NOT_FOUND", f"Страница '{slug}' не найдена.")
 
     svc = CmsRevisionService()
-    rows = list(svc.list_revisions(
-        page_id=page.id,
-        tenant_id=tenant_id,
-        cursor=cursor,
-        limit=min(limit, 100),
-    ))
+    rows = list(
+        svc.list_revisions(
+            page_id=page.id,
+            tenant_id=tenant_id,
+            cursor=cursor,
+            limit=min(limit, 100),
+        )
+    )
 
     page_size = min(limit, 100)
     has_next = len(rows) > page_size
@@ -150,11 +148,7 @@ def rollback_page_revision(
 
     from apps.site.models import SitePageContent
 
-    page = (
-        SitePageContent.objects
-        .filter(tenant_id=tenant_id, slug=slug, is_deleted=False)
-        .first()
-    )
+    page = SitePageContent.objects.filter(tenant_id=tenant_id, slug=slug, is_deleted=False).first()
     if page is None:
         return 404, make_error_response("CMS_PAGE_NOT_FOUND", f"Страница '{slug}' не найдена.")
 

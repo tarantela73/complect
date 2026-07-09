@@ -4,6 +4,7 @@ AdaptiveScanPolicy unit tests.
 Verifies Redis LIST-backed rescan queue: push, pop, size, batch limit, FIFO order.
 All tests clean up _RESCAN_QUEUE_KEY before and after to prevent state leakage.
 """
+
 from __future__ import annotations
 
 import uuid

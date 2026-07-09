@@ -1,4 +1,5 @@
 """Tests for PATCH /api/v1/contragents/{id}/ — update_contragent endpoint."""
+
 from __future__ import annotations
 
 import uuid

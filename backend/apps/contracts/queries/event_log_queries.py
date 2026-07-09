@@ -2,6 +2,7 @@
 CQRS Query Side — read projection of Transactional Outbox for contract lifecycle events.
 No writes, no business logic, no domain model imports.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -10,11 +11,13 @@ from typing import Optional
 from apps.common.models.outbox import OutboxRecord
 from apps.contracts.schemas.contract_dto import ContractEventLogEntrySchema, ContractEventLogResponse
 
-_CONTRACT_EVENT_TYPES = frozenset({
-    "contracts.ContractCreated",
-    "contracts.ContractActivated",
-    "contracts.ContractClosed",
-})
+_CONTRACT_EVENT_TYPES = frozenset(
+    {
+        "contracts.ContractCreated",
+        "contracts.ContractActivated",
+        "contracts.ContractClosed",
+    }
+)
 
 _EVENT_LABELS: dict[str, str] = {
     "contracts.ContractCreated": "Создан",

@@ -1,6 +1,7 @@
 """
 CQRS Query Side — Payments read-only projections.
 """
+
 from __future__ import annotations
 
 import uuid

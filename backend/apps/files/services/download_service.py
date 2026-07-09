@@ -34,16 +34,12 @@ class DownloadService:
         storage: StorageBackend | None = None,
         expires_in: int | None = None,
     ) -> DownloadUrlResult:
-        ttl: int = expires_in if expires_in is not None else getattr(
-            settings, "FILES_PRESIGNED_DOWNLOAD_TTL", 3600
-        )
+        ttl: int = expires_in if expires_in is not None else getattr(settings, "FILES_PRESIGNED_DOWNLOAD_TTL", 3600)
 
         record = FileRepository.get_by_id(file_id)
 
         if record.status != FileStatus.AVAILABLE:
-            raise ValidationError(
-                f"Файл {file_id} недоступен для скачивания (статус: {record.status})."
-            )
+            raise ValidationError(f"Файл {file_id} недоступен для скачивания (статус: {record.status}).")
 
         _storage = storage or get_storage_backend()
         url = _storage.generate_download_url(object_key=record.object_key, expires_in=ttl)

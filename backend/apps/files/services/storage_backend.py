@@ -9,9 +9,7 @@ from apps.common.contracts.storage_contracts import get_storage_backend as get_s
 class StubStorageBackend:
     """Dev/test stub. Always reports object_exists=True."""
 
-    def generate_upload_url(
-        self, *, object_key: str, content_type: str, size_bytes: int, expires_in: int
-    ) -> str:
+    def generate_upload_url(self, *, object_key: str, content_type: str, size_bytes: int, expires_in: int) -> str:
         return f"/stub/upload/{object_key}"
 
     def generate_download_url(self, *, object_key: str, expires_in: int) -> str:
@@ -36,9 +34,7 @@ class S3StorageBackend:
         self._bucket: str = settings.AWS_S3_BUCKET_NAME
         self._s3 = boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)
 
-    def generate_upload_url(
-        self, *, object_key: str, content_type: str, size_bytes: int, expires_in: int
-    ) -> str:
+    def generate_upload_url(self, *, object_key: str, content_type: str, size_bytes: int, expires_in: int) -> str:
         return self._s3.generate_presigned_url(
             "put_object",
             Params={
@@ -67,5 +63,3 @@ class S3StorageBackend:
             if exc.response["Error"]["Code"] == "404":
                 return False
             raise
-
-

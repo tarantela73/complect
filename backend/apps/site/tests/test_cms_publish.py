@@ -25,9 +25,7 @@ def seed_cms_permissions(db):
 
 def _make_user_with_role(role_name: str) -> tuple[User, str]:
     email = f"{role_name}_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role, _ = Role.objects.get_or_create(name=role_name)
     RoleBinding.objects.create(
         tenant_id=TENANT_ID,
@@ -40,9 +38,7 @@ def _make_user_with_role(role_name: str) -> tuple[User, str]:
 def _make_publisher() -> tuple[User, str]:
     """Publisher has cms.publish permission."""
     email = f"publisher_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role, _ = Role.objects.get_or_create(name="cms_publisher")
     pub_perm = Permission.objects.get(action="publish", resource="cms")
     RolePermission.objects.get_or_create(role=role, permission=pub_perm)

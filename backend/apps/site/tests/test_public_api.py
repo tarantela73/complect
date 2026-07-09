@@ -76,6 +76,7 @@ class TestSubmitLeadForm:
         assert data["status"] == "NEW"
 
         from apps.requests.models.request import Request
+
         req = Request.objects.get(id=data["id"])
         assert req.source == "WEBSITE"
         assert str(req.tenant_id) == PUBLIC_TENANT_ID

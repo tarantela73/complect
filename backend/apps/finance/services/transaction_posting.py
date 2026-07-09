@@ -49,8 +49,7 @@ class TransactionPostingService:
             # Защита от переплаты: REFUND не может превышать уже оплаченное
             if transaction_type == TransactionType.REFUND and amount > contract.paid_amount:
                 raise ValidationError(
-                    f"Возврат {amount / 100:.2f} руб. превышает оплаченную сумму "
-                    f"{contract.paid_amount / 100:.2f} руб."
+                    f"Возврат {amount / 100:.2f} руб. превышает оплаченную сумму {contract.paid_amount / 100:.2f} руб."
                 )
 
             # Создаём транзакцию в статусе POSTED

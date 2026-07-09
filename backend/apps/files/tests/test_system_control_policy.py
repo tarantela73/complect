@@ -8,6 +8,7 @@ Verifies:
   - get_batch_size() falls back to default when key absent.
   - CB open events counter incremented when circuit opens.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -134,7 +135,7 @@ class TestSystemControlPolicyRules:
         from django.core.cache import cache
 
         cache.set(_SCAN_MS_EWMA_KEY, 9000.0, timeout=60)  # would trigger REDUCED
-        cache.set(_CB_OPEN_EVENTS_KEY, 3, timeout=60)      # triggers THROTTLED
+        cache.set(_CB_OPEN_EVENTS_KEY, 3, timeout=60)  # triggers THROTTLED
         p = _policy(cb_rate_threshold=3, scan_latency_threshold_ms=5000.0)
         p.evaluate()
         assert p.get_batch_size() == 10  # THROTTLED wins

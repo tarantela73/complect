@@ -8,6 +8,7 @@ Ordering guarantee: single-concurrency Celery worker on the 'finance' queue (ADR
 Slot Locking Invariant). run_batch() orders by (aggregate_id, aggregate_seq); combined
 with concurrency=1 this is equivalent to Mode A serial dispatch.
 """
+
 import uuid
 
 import structlog

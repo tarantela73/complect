@@ -9,6 +9,7 @@ Coverage targets:
   - require_permission decorator: unauthenticated, allowed, denied
   - RoleBinding model constraints
 """
+
 import uuid
 from unittest.mock import MagicMock, patch
 

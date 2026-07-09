@@ -2,6 +2,7 @@
 CQRS Query Side — read projection of Transactional Outbox for contragent Historia.
 No writes, no business logic.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -13,14 +14,16 @@ from apps.contragents.schemas.attachment_dto import (
     ContragentTimelineResponse,
 )
 
-_CONTRAGENT_EVENT_TYPES = frozenset({
-    "contragents.ContragentCreated",
-    "contragents.ContragentUpdated",
-    "contragents.ContragentDeleted",
-    "contragents.ContragentFileAttached",
-    "contragents.ContragentFileDetached",
-    "contragents.PersonProfileCreated",
-})
+_CONTRAGENT_EVENT_TYPES = frozenset(
+    {
+        "contragents.ContragentCreated",
+        "contragents.ContragentUpdated",
+        "contragents.ContragentDeleted",
+        "contragents.ContragentFileAttached",
+        "contragents.ContragentFileDetached",
+        "contragents.PersonProfileCreated",
+    }
+)
 
 _EVENT_LABELS: dict[str, str] = {
     "contragents.ContragentCreated": "Создан",

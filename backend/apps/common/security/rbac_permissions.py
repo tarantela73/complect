@@ -9,6 +9,7 @@ This module is the authoritative source for:
   - Admin UI for role management
   - Regression guard in test_endpoint_coverage.py
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -86,9 +87,7 @@ PERMISSIONS: tuple[Permission, ...] = (
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature
-_BY_PAIR: dict[tuple[str, str], Permission] = {
-    (p.action, p.resource): p for p in PERMISSIONS
-}
+_BY_PAIR: dict[tuple[str, str], Permission] = {(p.action, p.resource): p for p in PERMISSIONS}
 
 
 def get_permission(action: str, resource: str) -> Permission:

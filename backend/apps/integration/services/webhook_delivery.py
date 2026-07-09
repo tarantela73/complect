@@ -45,10 +45,7 @@ class WebhookDeliveryService:
 
         from apps.integration.models import WebhookDelivery, WebhookDeliveryStatus, WebhookSubscription
 
-        delivery = (
-            WebhookDelivery.objects.select_related("subscription")
-            .get(id=delivery_id)
-        )
+        delivery = WebhookDelivery.objects.select_related("subscription").get(id=delivery_id)
         if delivery.status == WebhookDeliveryStatus.DELIVERED:
             return
 

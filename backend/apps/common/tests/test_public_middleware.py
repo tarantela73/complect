@@ -3,6 +3,7 @@
 Tests for PUBLIC_API_PREFIX branch in AsgiTenantEnforcementMiddleware (ADR-0023).
 Tenant is injected from settings.PUBLIC_SITE_TENANT_ID without any JWT or gateway token.
 """
+
 import pytest
 from django.test import Client, override_settings
 

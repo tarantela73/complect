@@ -1,4 +1,5 @@
 """Tests for PATCH /api/v1/contracts/{id}/ and POST /api/v1/contracts/{id}/activate/."""
+
 from __future__ import annotations
 
 import uuid

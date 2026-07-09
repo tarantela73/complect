@@ -1,4 +1,5 @@
 """Tests for PDF rendering service — contract and contragent print forms (U12, U13)."""
+
 from __future__ import annotations
 
 import sys
@@ -14,12 +15,14 @@ from apps.contracts.models.contract import Contract, ResourceSupplyType
 
 
 def _ctx(tenant_id: uuid.UUID) -> None:
-    set_context(RequestContext(
-        tenant_id=tenant_id,
-        user_id=uuid.uuid4(),
-        request_id=uuid.uuid4(),
-        correlation_id=uuid.uuid4(),
-    ))
+    set_context(
+        RequestContext(
+            tenant_id=tenant_id,
+            user_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+        )
+    )
     set_tenant_context(tenant_id)
 
 
@@ -92,6 +95,7 @@ class TestRenderContractPdf:
 
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contract_pdf
+
             result = render_contract_pdf(contract.id)
 
         assert result == FAKE_PDF
@@ -103,6 +107,7 @@ class TestRenderContractPdf:
         mock_wp, captured = _capturing_weasyprint()
         with patch.dict(sys.modules, {"weasyprint": mock_wp}):
             from apps.reports.pdf_service import render_contract_pdf
+
             render_contract_pdf(contract.id)
 
         assert len(captured) == 1
@@ -116,14 +121,17 @@ class TestRenderContractPdf:
 
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contract_pdf
+
             result = render_contract_pdf(contract.id)
 
         assert result == FAKE_PDF
 
     def test_permission_denied_for_missing_contract(self):
         from django.core.exceptions import PermissionDenied
+
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contract_pdf
+
             with pytest.raises(PermissionDenied):
                 render_contract_pdf(uuid.uuid4())
 
@@ -135,8 +143,10 @@ class TestRenderContractPdf:
         _ctx(self.tenant_id)
 
         from django.core.exceptions import PermissionDenied
+
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contract_pdf
+
             with pytest.raises(PermissionDenied):
                 render_contract_pdf(contract.id)
 
@@ -153,6 +163,7 @@ class TestRenderContragentPdf:
 
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contragent_pdf
+
             result = render_contragent_pdf(ct.id)
 
         assert result == FAKE_PDF
@@ -163,6 +174,7 @@ class TestRenderContragentPdf:
         mock_wp, captured = _capturing_weasyprint()
         with patch.dict(sys.modules, {"weasyprint": mock_wp}):
             from apps.reports.pdf_service import render_contragent_pdf
+
             render_contragent_pdf(ct.id)
 
         assert len(captured) == 1
@@ -178,14 +190,17 @@ class TestRenderContragentPdf:
         mock_wp, captured = _capturing_weasyprint()
         with patch.dict(sys.modules, {"weasyprint": mock_wp}):
             from apps.reports.pdf_service import render_contragent_pdf
+
             render_contragent_pdf(ct.id)
 
         assert "2" in captured[0]
 
     def test_permission_denied_for_missing_contragent(self):
         from django.core.exceptions import PermissionDenied
+
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contragent_pdf
+
             with pytest.raises(PermissionDenied):
                 render_contragent_pdf(uuid.uuid4())
 
@@ -197,7 +212,9 @@ class TestRenderContragentPdf:
         _ctx(self.tenant_id)
 
         from django.core.exceptions import PermissionDenied
+
         with patch.dict(sys.modules, {"weasyprint": _mock_weasyprint()}):
             from apps.reports.pdf_service import render_contragent_pdf
+
             with pytest.raises(PermissionDenied):
                 render_contragent_pdf(ct.id)

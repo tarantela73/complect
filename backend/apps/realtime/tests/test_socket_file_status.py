@@ -4,6 +4,7 @@ WebSocket file status broadcast tests.
 Verifies that ErpRealtimeConsumer forwards channel layer group_send messages
 (originating from FilesConsumer._broadcast_file_status on_commit) to the WS client.
 """
+
 from __future__ import annotations
 
 import pytest

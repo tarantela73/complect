@@ -27,8 +27,7 @@ class CmsRevisionService:
     ) -> SitePageRevision:
         with transaction.atomic():
             max_num = (
-                SitePageRevision.objects
-                .filter(tenant_id=page.tenant_id, page_id=page.id, is_deleted=False)
+                SitePageRevision.objects.filter(tenant_id=page.tenant_id, page_id=page.id, is_deleted=False)
                 .order_by("-revision_number")
                 .values_list("revision_number", flat=True)
                 .first()
@@ -54,8 +53,7 @@ class CmsRevisionService:
 
             if count > self.MAX_REVISIONS:
                 oldest = (
-                    SitePageRevision.objects
-                    .filter(tenant_id=page.tenant_id, page_id=page.id, is_deleted=False)
+                    SitePageRevision.objects.filter(tenant_id=page.tenant_id, page_id=page.id, is_deleted=False)
                     .order_by("revision_number")
                     .first()
                 )

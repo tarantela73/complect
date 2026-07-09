@@ -2,6 +2,7 @@
 PDF rendering service for reports — contract and contragent print forms.
 ADR-0005 exception: cross-domain reads inside apps/reports/ are sanctioned.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -78,6 +79,7 @@ def render_contract_pdf(contract_id: uuid.UUID) -> bytes:
     html = render_to_string("reports/contract_pdf.html", context)
 
     from weasyprint import HTML
+
     return HTML(string=html).write_pdf()
 
 
@@ -129,4 +131,5 @@ def render_contragent_pdf(contragent_id: uuid.UUID) -> bytes:
     html = render_to_string("reports/contragent_pdf.html", context)
 
     from weasyprint import HTML
+
     return HTML(string=html).write_pdf()

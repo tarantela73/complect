@@ -18,6 +18,7 @@ Consumer pipeline:
   Duplicate event discarded (idempotency via ConsumerIdempotencyService).
   Causal emission verified (CausalEmissionMissingError on missing outcome event).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -133,9 +134,7 @@ class TestFileStatusMachine:
     def test_pending_upload_cannot_skip_to_scanning(self):
         init = UploadInitService.initialize_upload(
             actor_id=self.actor_id,
-            request=UploadInitRequest(
-                original_name="f.pdf", content_type="application/pdf", size_bytes=100
-            ),
+            request=UploadInitRequest(original_name="f.pdf", content_type="application/pdf", size_bytes=100),
         )
         result = FileRepository.mark_scanning(init.file_id)
         assert result is False
@@ -176,9 +175,7 @@ class TestFileStatusMachine:
     def test_pending_upload_cannot_jump_to_available(self):
         init = UploadInitService.initialize_upload(
             actor_id=self.actor_id,
-            request=UploadInitRequest(
-                original_name="f.pdf", content_type="application/pdf", size_bytes=100
-            ),
+            request=UploadInitRequest(original_name="f.pdf", content_type="application/pdf", size_bytes=100),
         )
         result = FileRepository.mark_available(init.file_id)
         assert result is False
@@ -204,9 +201,7 @@ class TestFilesConsumerPipeline:
         FilesConsumer(scan_engine=StubScanEngine()).handle(record)
 
         assert FileRepository.get_by_id(file_id).status == FileStatus.AVAILABLE
-        assert OutboxRecord.objects.filter(
-            correlation_id=corr, event_type="files.FileAvailable"
-        ).exists()
+        assert OutboxRecord.objects.filter(correlation_id=corr, event_type="files.FileAvailable").exists()
 
     def test_infected_scan_produces_quarantined_and_event(self):
         file_id, corr = _setup_uploaded_file(self.tenant_id, self.actor_id)
@@ -219,9 +214,7 @@ class TestFilesConsumerPipeline:
         repo_record = FileRepository.get_by_id(file_id)
         assert repo_record.status == FileStatus.QUARANTINED
         assert repo_record.quarantine_reason == "virus_detected"
-        assert OutboxRecord.objects.filter(
-            correlation_id=corr, event_type="files.FileQuarantined"
-        ).exists()
+        assert OutboxRecord.objects.filter(correlation_id=corr, event_type="files.FileQuarantined").exists()
 
     def test_scan_error_quarantines_with_scan_error_reason(self):
         file_id, corr = _setup_uploaded_file(self.tenant_id, self.actor_id)
@@ -252,9 +245,7 @@ class TestFilesConsumerPipeline:
         repo_record = FileRepository.get_by_id(file_id)
         assert repo_record.status == FileStatus.QUARANTINED
         assert repo_record.quarantine_reason == "scan_deferred_cb_open"
-        assert OutboxRecord.objects.filter(
-            correlation_id=corr, event_type="files.FileQuarantined"
-        ).exists()
+        assert OutboxRecord.objects.filter(correlation_id=corr, event_type="files.FileQuarantined").exists()
 
         r.delete(_RESCAN_QUEUE_KEY)
 
@@ -268,9 +259,7 @@ class TestFilesConsumerPipeline:
         consumer.handle(record)
 
         # Only one FileAvailable event emitted
-        assert OutboxRecord.objects.filter(
-            correlation_id=corr, event_type="files.FileAvailable"
-        ).count() == 1
+        assert OutboxRecord.objects.filter(correlation_id=corr, event_type="files.FileAvailable").count() == 1
 
     def test_causal_emission_verified_after_process(self):
         """Consumer raises CausalEmissionMissingError when scan outcome event absent."""

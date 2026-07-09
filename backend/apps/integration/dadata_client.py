@@ -3,12 +3,8 @@ from dataclasses import dataclass
 import httpx
 from django.conf import settings
 
-_DADATA_SUGGEST_URL = (
-    "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
-)
-_DADATA_GEOLOCATE_URL = (
-    "https://suggestions.dadata.ru/suggestions/api/4_1/rs/geolocate/address"
-)
+_DADATA_SUGGEST_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
+_DADATA_GEOLOCATE_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/geolocate/address"
 _TIMEOUT = 5.0
 
 

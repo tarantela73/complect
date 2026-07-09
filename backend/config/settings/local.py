@@ -38,11 +38,7 @@ DB_REPLICA_HOST = os.getenv("DATABASE_REPLICA_HOST", "postgres_replica")
 DB_PORT = os.getenv("DATABASE_PORT", "5432")
 
 _DB_OPTIONS = {
-    "options": (
-        "-c statement_timeout=30000 "
-        "-c lock_timeout=10000 "
-        "-c idle_in_transaction_session_timeout=15000"
-    ),
+    "options": ("-c statement_timeout=30000 -c lock_timeout=10000 -c idle_in_transaction_session_timeout=15000"),
 }
 
 DATABASES = {
@@ -137,4 +133,3 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "idempotency-key",
 ]
-

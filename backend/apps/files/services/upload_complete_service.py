@@ -41,9 +41,7 @@ class UploadCompleteService:
         record = FileRepository.get_by_id(file_id)
 
         if record.status != FileStatus.PENDING_UPLOAD:
-            raise ValidationError(
-                f"Файл {file_id} уже обработан (текущий статус: {record.status})."
-            )
+            raise ValidationError(f"Файл {file_id} уже обработан (текущий статус: {record.status}).")
 
         with transaction.atomic():
             updated = FileRepository.mark_uploaded(
@@ -51,9 +49,7 @@ class UploadCompleteService:
                 checksum_sha256=request.checksum_sha256,
             )
             if not updated:
-                raise PermissionDenied(
-                    "Не удалось подтвердить загрузку: файл изменён параллельным запросом."
-                )
+                raise PermissionDenied("Не удалось подтвердить загрузку: файл изменён параллельным запросом.")
 
             TransactionalOutboxService.push_to_outbox(
                 FileUploadedEvent.create(

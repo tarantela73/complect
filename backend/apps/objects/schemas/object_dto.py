@@ -36,6 +36,7 @@ class FeatureCollectionSchema(BaseModel):
 
 # --- Enriched detail schema ---
 
+
 class UserDisplaySchema(BaseModel):
     id: uuid.UUID
     full_name: str
@@ -80,6 +81,7 @@ class SupplyObjectDetailResponse(BaseModel):
 
 # --- Update request ---
 
+
 class SupplyObjectUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     address: Optional[str] = Field(None, max_length=500)
@@ -102,13 +104,14 @@ class SupplyObjectUpdateRequest(BaseModel):
         if v is None:
             return v
         import re
+
         if not v:
             raise ValueError("Slug не может быть пустым")
-        if re.search(r'\s', v):
+        if re.search(r"\s", v):
             raise ValueError("Slug не может содержать пробелы")
         if v != v.lower():
             raise ValueError("Slug должен быть в нижнем регистре")
-        if not re.match(r'^[\w-]+$', v, re.UNICODE) or '_' in v:
+        if not re.match(r"^[\w-]+$", v, re.UNICODE) or "_" in v:
             raise ValueError("Slug: только строчные буквы, цифры и дефисы")
         return v
 
@@ -118,6 +121,7 @@ class SupplyObjectUpdateRequest(BaseModel):
         if v is None:
             return v
         from apps.objects.models.supply_object import ObjectStatus
+
         valid = {choice[0] for choice in ObjectStatus.choices}
         if v not in valid:
             msg = f"Недопустимый статус: {v}. Допустимые: {valid}"
@@ -134,6 +138,7 @@ class StageUpdateRequest(BaseModel):
     @classmethod
     def validate_status(cls, v: str) -> str:
         from apps.objects.models.object_stage import ObjectStageStatus
+
         valid = {choice[0] for choice in ObjectStageStatus.choices}
         if v not in valid:
             msg = f"Недопустимый статус этапа: {v}. Допустимые: {valid}"
@@ -142,6 +147,7 @@ class StageUpdateRequest(BaseModel):
 
 
 # --- Create request ---
+
 
 class SupplyObjectCreateRequest(BaseModel):
     name: str = Field(..., max_length=255)
@@ -197,6 +203,7 @@ class ObjectContractResponse(BaseModel):
 
 # --- Public site schemas (no internal fields) ---
 
+
 class PublicObjectLocationSchema(BaseModel):
     lat: float
     lon: float
@@ -220,7 +227,6 @@ class PublicObjectListResponse(BaseModel):
     results: list[PublicObjectSchema]
     next_cursor: Optional[str] = None
     count: int
-
 
 
 class ContragentLinkRequest(BaseModel):

@@ -10,6 +10,7 @@ Verifies that run_files_recovery_scan_task():
   - Re-queues and rolls back on CB_FAST_FAIL during recovery probe.
   - Skips files not in the expected deferred state (idempotency guard).
 """
+
 from __future__ import annotations
 
 import hashlib

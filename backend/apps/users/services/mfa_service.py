@@ -1,4 +1,3 @@
-
 import jwt
 import pyotp
 from django.conf import settings

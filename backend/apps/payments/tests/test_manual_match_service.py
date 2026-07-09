@@ -5,6 +5,7 @@ Tests for ManualMatchService:
   - detach: happy path, outbox event, idempotent on UNMATCHED
   - get_candidates: aggregation, deduplication, no-amount guard
 """
+
 from __future__ import annotations
 
 import uuid
@@ -24,6 +25,7 @@ from apps.payments.models.bank_statement_line import BankStatementLine, MatchSta
 from apps.payments.services.manual_match_service import ManualMatchService
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_tenant() -> uuid.UUID:
     tid = uuid.uuid4()
@@ -97,6 +99,7 @@ def _mock_finder(
 
 # ── attach ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db(transaction=True)
 class TestManualMatchServiceAttach:
     def setup_method(self):
@@ -107,6 +110,7 @@ class TestManualMatchServiceAttach:
 
     def _patch_finder(self, dto: TxCandidateDTO | None = None):
         import apps.payments.services.manual_match_service as svc_module
+
         mock = _mock_finder(find_by_id_result=dto)
         self._orig = getattr(
             __import__(
@@ -175,7 +179,8 @@ class TestManualMatchServiceAttach:
 
     def test_attach_records_previous_status(self, monkeypatch):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             match_status=MatchStatus.PARTIAL,
             match_confidence=60,
         )
@@ -194,12 +199,15 @@ class TestManualMatchServiceAttach:
         ).last()
         assert record.payload_json["previous_status"] == MatchStatus.PARTIAL
 
-    @pytest.mark.parametrize("source_status", [
-        MatchStatus.UNMATCHED,
-        MatchStatus.PARTIAL,
-        MatchStatus.AMBIGUOUS,
-        MatchStatus.MATCHED,
-    ])
+    @pytest.mark.parametrize(
+        "source_status",
+        [
+            MatchStatus.UNMATCHED,
+            MatchStatus.PARTIAL,
+            MatchStatus.AMBIGUOUS,
+            MatchStatus.MATCHED,
+        ],
+    )
     def test_attach_allowed_from_any_status(self, monkeypatch, source_status):
         line = _make_line(self.stmt, self.tenant_id, match_status=source_status)
         monkeypatch.setattr(
@@ -250,6 +258,7 @@ class TestManualMatchServiceAttach:
 
 # ── detach ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db(transaction=True)
 class TestManualMatchServiceDetach:
     def setup_method(self):
@@ -260,7 +269,8 @@ class TestManualMatchServiceDetach:
 
     def test_detach_resets_to_unmatched(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             match_status=MatchStatus.MATCHED,
             match_confidence=100,
             transaction_id=self.tx_id,
@@ -276,7 +286,8 @@ class TestManualMatchServiceDetach:
 
     def test_detach_persists_to_db(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             match_status=MatchStatus.MATCHED,
             match_confidence=100,
             transaction_id=self.tx_id,
@@ -292,27 +303,25 @@ class TestManualMatchServiceDetach:
 
     def test_detach_writes_outbox_event(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             match_status=MatchStatus.MATCHED,
             match_confidence=85,
             transaction_id=self.tx_id,
         )
-        before_count = OutboxRecord.objects.filter(
-            event_type=BankStatementLineMatchedEvent.EVENT_TYPE
-        ).count()
+        before_count = OutboxRecord.objects.filter(event_type=BankStatementLineMatchedEvent.EVENT_TYPE).count()
         ManualMatchService.detach(
             tenant_id=self.tenant_id,
             line=line,
             confirmed_by=self.actor_id,
         )
-        after_count = OutboxRecord.objects.filter(
-            event_type=BankStatementLineMatchedEvent.EVENT_TYPE
-        ).count()
+        after_count = OutboxRecord.objects.filter(event_type=BankStatementLineMatchedEvent.EVENT_TYPE).count()
         assert after_count == before_count + 1
 
     def test_detach_outbox_has_null_transaction_id(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             match_status=MatchStatus.MATCHED,
             match_confidence=100,
             transaction_id=self.tx_id,
@@ -330,22 +339,19 @@ class TestManualMatchServiceDetach:
 
     def test_detach_on_unmatched_is_idempotent(self):
         line = _make_line(self.stmt, self.tenant_id, match_status=MatchStatus.UNMATCHED)
-        before_count = OutboxRecord.objects.filter(
-            event_type=BankStatementLineMatchedEvent.EVENT_TYPE
-        ).count()
+        before_count = OutboxRecord.objects.filter(event_type=BankStatementLineMatchedEvent.EVENT_TYPE).count()
         result = ManualMatchService.detach(
             tenant_id=self.tenant_id,
             line=line,
             confirmed_by=self.actor_id,
         )
         assert result.match_status == MatchStatus.UNMATCHED
-        after_count = OutboxRecord.objects.filter(
-            event_type=BankStatementLineMatchedEvent.EVENT_TYPE
-        ).count()
+        after_count = OutboxRecord.objects.filter(event_type=BankStatementLineMatchedEvent.EVENT_TYPE).count()
         assert after_count == before_count  # no outbox event written
 
 
 # ── get_candidates ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestManualMatchServiceGetCandidates:
@@ -375,7 +381,8 @@ class TestManualMatchServiceGetCandidates:
             lambda: finder,
         )
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="PAY-001",
             counterparty_inn="7700000001",
             transaction_date=date(2025, 1, 15),
@@ -396,7 +403,8 @@ class TestManualMatchServiceGetCandidates:
             lambda: finder,
         )
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="PAY-001",
             transaction_date=date(2025, 1, 15),
         )

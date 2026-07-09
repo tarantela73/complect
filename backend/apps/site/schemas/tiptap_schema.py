@@ -4,20 +4,22 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-ALLOWED_NODE_TYPES = frozenset({
-    "doc",
-    "paragraph",
-    "heading",
-    "text",
-    "bulletList",
-    "orderedList",
-    "listItem",
-    "blockquote",
-    "codeBlock",
-    "hardBreak",
-    "horizontalRule",
-    "image",
-})
+ALLOWED_NODE_TYPES = frozenset(
+    {
+        "doc",
+        "paragraph",
+        "heading",
+        "text",
+        "bulletList",
+        "orderedList",
+        "listItem",
+        "blockquote",
+        "codeBlock",
+        "hardBreak",
+        "horizontalRule",
+        "image",
+    }
+)
 
 
 def _validate_node_types(nodes: list[dict]) -> None:

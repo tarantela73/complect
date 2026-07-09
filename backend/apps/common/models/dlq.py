@@ -16,4 +16,3 @@ class DeadLetterRecord(models.Model):
 
     class Meta:
         db_table = "infrastructure_dead_letter_records"
-

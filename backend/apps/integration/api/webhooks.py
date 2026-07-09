@@ -17,6 +17,7 @@ router = Router(tags=["webhooks"])
 # Schemas
 # ---------------------------------------------------------------------------
 
+
 class WebhookSubscriptionOut(Schema):
     id: uuid.UUID
     url: str
@@ -108,6 +109,7 @@ class WebhookStatsOut(Schema):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_tenant_id(request: HttpRequest) -> uuid.UUID:
     return uuid.UUID(str(request.jwt_tenant_id))
 
@@ -122,6 +124,7 @@ def _validate_event_types(event_types: list[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/", response={200: WebhookListOut, 403: dict})
 @require_permission("read", "webhooks")

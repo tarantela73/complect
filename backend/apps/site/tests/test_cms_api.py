@@ -31,9 +31,7 @@ def seed_cms_permissions(db):
 
 def _make_user_with_role(role_name: str) -> tuple[User, str]:
     email = f"{role_name}_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role = Role.objects.get(name=role_name)
     RoleBinding.objects.create(
         tenant_id=TENANT_ID,
@@ -258,18 +256,32 @@ class TestGalleryCRUD:
         from apps.site.models import SiteImage
 
         img_a = SiteImage.objects.create(
-            tenant_id=user.tenant_id, section="hero", s3_key="a.jpg", caption="", alt="", order=0,
+            tenant_id=user.tenant_id,
+            section="hero",
+            s3_key="a.jpg",
+            caption="",
+            alt="",
+            order=0,
         )
         img_b = SiteImage.objects.create(
-            tenant_id=user.tenant_id, section="hero", s3_key="b.jpg", caption="", alt="", order=1,
+            tenant_id=user.tenant_id,
+            section="hero",
+            s3_key="b.jpg",
+            caption="",
+            alt="",
+            order=1,
         )
 
         resp = Client().post(
             "/api/v1/cms/gallery/reorder/",
-            data=json.dumps({"items": [
-                {"id": str(img_a.id), "order": 10},
-                {"id": str(img_b.id), "order": 5},
-            ]}),
+            data=json.dumps(
+                {
+                    "items": [
+                        {"id": str(img_a.id), "order": 10},
+                        {"id": str(img_b.id), "order": 5},
+                    ]
+                }
+            ),
             content_type="application/json",
             **_auth_headers(user, token, mutating=True),
         )
@@ -288,13 +300,15 @@ class TestGalleryCRUD:
         user, token = _make_user_with_role("cms_editor")
         resp = Client().post(
             "/api/v1/cms/gallery/confirm-upload/",
-            data=json.dumps({
-                "s3_key": "cms/gallery/abc/photo.jpg",
-                "section": "team",
-                "caption": "Team photo",
-                "alt": "Our team",
-                "order": 2,
-            }),
+            data=json.dumps(
+                {
+                    "s3_key": "cms/gallery/abc/photo.jpg",
+                    "section": "team",
+                    "caption": "Team photo",
+                    "alt": "Our team",
+                    "order": 2,
+                }
+            ),
             content_type="application/json",
             **_auth_headers(user, token, mutating=True),
         )

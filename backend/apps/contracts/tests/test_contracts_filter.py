@@ -1,4 +1,5 @@
 """Tests for contracts list filtering including the contragent_id filter (U1)."""
+
 from __future__ import annotations
 
 import uuid
@@ -34,12 +35,14 @@ class TestContragentIdFilter:
         self.tenant_id = uuid.uuid4()
         self.contragent_a = uuid.uuid4()
         self.contragent_b = uuid.uuid4()
-        set_context(RequestContext(
-            tenant_id=self.tenant_id,
-            user_id=uuid.uuid4(),
-            request_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-        ))
+        set_context(
+            RequestContext(
+                tenant_id=self.tenant_id,
+                user_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
+                correlation_id=uuid.uuid4(),
+            )
+        )
 
     def test_contragent_id_filter_returns_only_matching(self):
         ca1 = _make_contract(self.tenant_id, contragent_id=self.contragent_a)
@@ -84,12 +87,14 @@ class TestCursorPagination:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.tenant_id = uuid.uuid4()
-        set_context(RequestContext(
-            tenant_id=self.tenant_id,
-            user_id=uuid.uuid4(),
-            request_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-        ))
+        set_context(
+            RequestContext(
+                tenant_id=self.tenant_id,
+                user_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
+                correlation_id=uuid.uuid4(),
+            )
+        )
 
     def test_pages_do_not_overlap(self):
         for _ in range(12):
@@ -125,21 +130,25 @@ class TestCursorPagination:
     def test_cursor_from_other_tenant_returns_no_results(self):
         """Cursor UUID from another tenant must not leak cross-tenant data."""
         other_tenant = uuid.uuid4()
-        set_context(RequestContext(
-            tenant_id=other_tenant,
-            user_id=uuid.uuid4(),
-            request_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-        ))
+        set_context(
+            RequestContext(
+                tenant_id=other_tenant,
+                user_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
+                correlation_id=uuid.uuid4(),
+            )
+        )
         other_contract = _make_contract(other_tenant)
         cross_tenant_cursor = other_contract.id
 
-        set_context(RequestContext(
-            tenant_id=self.tenant_id,
-            user_id=uuid.uuid4(),
-            request_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-        ))
+        set_context(
+            RequestContext(
+                tenant_id=self.tenant_id,
+                user_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
+                correlation_id=uuid.uuid4(),
+            )
+        )
         for _ in range(3):
             _make_contract(self.tenant_id)
 

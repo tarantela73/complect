@@ -107,12 +107,14 @@ class ManualMatchService:
         if line.doc_number:
             _add(finder.find_by_external_ref(tenant_id, line.doc_number))
         if line.transaction_date:
-            _add(finder.find_by_amount_and_date(
-                tenant_id,
-                amount_kopecks,
-                date_from=line.transaction_date - _DATE_WINDOW,
-                date_to=line.transaction_date + _DATE_WINDOW,
-            ))
+            _add(
+                finder.find_by_amount_and_date(
+                    tenant_id,
+                    amount_kopecks,
+                    date_from=line.transaction_date - _DATE_WINDOW,
+                    date_to=line.transaction_date + _DATE_WINDOW,
+                )
+            )
         if line.counterparty_inn:
             _add(finder.find_by_amount_and_inn(tenant_id, amount_kopecks, line.counterparty_inn))
 

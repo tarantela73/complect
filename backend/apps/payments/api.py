@@ -18,6 +18,7 @@ router = Router(tags=["payments"])
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
+
 class BankStatementLineOut(Schema):
     id: uuid.UUID
     line_number: int
@@ -202,6 +203,7 @@ class TxCandidateOut(Schema):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _get_tenant_id(request: HttpRequest) -> uuid.UUID:
     return uuid.UUID(str(request.jwt_tenant_id))
 
@@ -211,6 +213,7 @@ def _get_user_id(request: HttpRequest) -> uuid.UUID:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/statements/",
@@ -345,8 +348,8 @@ def get_review_queue(
 
     unmatched_count = base_qs.filter(match_status=MatchStatus.UNMATCHED).count()
     ambiguous_count = base_qs.filter(match_status=MatchStatus.AMBIGUOUS).count()
-    partial_count   = base_qs.filter(match_status=MatchStatus.PARTIAL).count()
-    total_count     = unmatched_count + ambiguous_count + partial_count
+    partial_count = base_qs.filter(match_status=MatchStatus.PARTIAL).count()
+    total_count = unmatched_count + ambiguous_count + partial_count
 
     qs = base_qs.select_related("statement")
     if match_status and match_status in [s.value for s in _REVIEW_STATUSES]:

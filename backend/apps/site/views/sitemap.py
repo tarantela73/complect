@@ -44,9 +44,5 @@ def sitemap_xml(request: HttpRequest) -> HttpResponse:
 
 def robots_txt(request: HttpRequest) -> HttpResponse:
     base_url = getattr(settings, "PUBLIC_SITE_BASE_URL", "").rstrip("/")
-    content = (
-        "User-agent: *\n"
-        "Allow: /\n"
-        f"Sitemap: {base_url}/sitemap.xml\n"
-    )
+    content = f"User-agent: *\nAllow: /\nSitemap: {base_url}/sitemap.xml\n"
     return HttpResponse(content, content_type="text/plain; charset=utf-8")

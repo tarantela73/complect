@@ -13,6 +13,7 @@ Coverage:
   - Tenant isolation: tasks of other tenants not visible
   - Cursor pagination
 """
+
 import uuid
 
 import pytest

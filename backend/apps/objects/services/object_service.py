@@ -33,6 +33,7 @@ class ObjectCreateService:
     @staticmethod
     def execute(data: SupplyObjectCreateRequest) -> SupplyObject:
         from apps.common.tenancy.context_core import get_tenant_id
+
         tenant_id = get_tenant_id()
 
         obj = SupplyObject(
@@ -67,6 +68,7 @@ class ObjectUpdateService:
     @staticmethod
     def execute(object_id: uuid.UUID, data) -> None:
         from apps.common.tenancy.context_core import get_tenant_id
+
         tenant_id = get_tenant_id()
 
         obj = ObjectRepository.get_by_id(object_id)
@@ -110,9 +112,7 @@ class ObjectUpdateService:
             fields["slug"] = _generate_unique_slug(data.name, tenant_id, exclude_id=object_id)
 
         if fields:
-            SupplyObject.objects.filter(
-                id=object_id, tenant_id=tenant_id, is_deleted=False
-            ).update(**fields)
+            SupplyObject.objects.filter(id=object_id, tenant_id=tenant_id, is_deleted=False).update(**fields)
 
 
 class ObjectDeleteService:

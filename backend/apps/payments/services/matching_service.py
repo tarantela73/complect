@@ -9,6 +9,7 @@ Reconciliation: сопоставляет строки банковской вы�
 
 Не импортирует никакие модели из apps.finance — только Protocol.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -31,9 +32,7 @@ class MatchingService:
         Сопоставляет все PARSED строки выписки.
         Возвращает счётчики: {MATCHED, PARTIAL, AMBIGUOUS, UNMATCHED}.
         """
-        lines = list(
-            stmt.lines.filter(parse_status="parsed").select_for_update(skip_locked=True)
-        )
+        lines = list(stmt.lines.filter(parse_status="parsed").select_for_update(skip_locked=True))
         counters: dict[str, int] = {
             MatchStatus.MATCHED: 0,
             MatchStatus.PARTIAL: 0,

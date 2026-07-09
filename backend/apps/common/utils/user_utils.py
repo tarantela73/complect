@@ -4,6 +4,7 @@ Utilities for user identity resolution.
 Django's integer pk is encoded as a deterministic UUID for API surfaces.
 The mask extracts the original pk bits. Mirrors the encoding in auth_service._pk_to_uuid4.
 """
+
 import uuid
 
 from django.contrib.auth import get_user_model

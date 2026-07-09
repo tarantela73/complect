@@ -2,6 +2,7 @@
 CQRS Query Side — cross-domain read for payments/bank statement reports.
 ADR-0005 exception: apps/reports/ is the sanctioned cross-domain read layer.
 """
+
 from __future__ import annotations
 
 import uuid

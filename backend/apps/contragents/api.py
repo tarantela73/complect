@@ -185,6 +185,7 @@ def delete_contragent(request: HttpRequest, contragent_id: uuid.UUID):
 
 # ── Persons ───────────────────────────────────────────────────────────────────
 
+
 @router.get("/{contragent_id}/persons/", response={200: PersonListResponse, 403: dict, 404: dict})
 @require_permission("read", "contragents")
 def list_persons(request: HttpRequest, contragent_id: uuid.UUID):
@@ -224,6 +225,7 @@ def create_person(request: HttpRequest, contragent_id: uuid.UUID, body: PersonCr
 
 
 # ── Attachments ───────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{contragent_id}/attachments/",
@@ -321,6 +323,7 @@ def detach_contragent_file(
 
 
 # ── Timeline / Historia ───────────────────────────────────────────────────────
+
 
 @router.get(
     "/{contragent_id}/timeline/",

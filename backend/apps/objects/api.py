@@ -174,6 +174,7 @@ def list_object_contracts(request: HttpRequest, object_id: uuid.UUID):
 
     try:
         from apps.objects.repositories.object_repo import ObjectRepository
+
         ObjectRepository.get_by_id(object_id)
     except PermissionDenied:
         return 403, make_error_response("OBJECT_NOT_FOUND", "Объект не найден.")
@@ -203,9 +204,7 @@ def link_object_contract(
     response={204: None, 403: dict},
 )
 @require_permission("write", "objects")
-def unlink_object_contract(
-    request: HttpRequest, object_id: uuid.UUID, contract_id: uuid.UUID
-):
+def unlink_object_contract(request: HttpRequest, object_id: uuid.UUID, contract_id: uuid.UUID):
     try:
         ObjectContractService.unlink(object_id, contract_id)
         return 204, None
@@ -224,6 +223,7 @@ def objects_by_contract(request: HttpRequest, contract_id: uuid.UUID):
     object_ids = ObjectContractRepository.list_by_contract(contract_id)
     if not object_ids:
         from apps.objects.schemas.object_dto import SupplyObjectListResponse as LR
+
         return 200, LR(results=[], count=0)
     result = get_objects_page(object_ids=object_ids, limit=100, user_info=_user_info)
     return 200, result
@@ -251,8 +251,7 @@ def link_object_contragent(request: HttpRequest, object_id: uuid.UUID, body: Con
     if body.contragent_id is not None:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT 1 FROM contragents_contragents"
-                " WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
+                "SELECT 1 FROM contragents_contragents WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
                 [body.contragent_id, tenant_id],
             )
             if cursor.fetchone() is None:

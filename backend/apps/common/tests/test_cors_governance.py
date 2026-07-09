@@ -19,7 +19,5 @@ class TestCorsSecurityGovernance:
 
         # Если заголовок вернулся, он обязан быть конкретным хостом, а не "*"
         if allow_origin:
-            assert allow_origin != "*", (
-                "CRITICAL SECURITY HOLE: Обнаружен CORS Wildcard '*' при credentials=true!"
-            )
+            assert allow_origin != "*", "CRITICAL SECURITY HOLE: Обнаружен CORS Wildcard '*' при credentials=true!"
             assert allow_origin in ["http://localhost:3000", "https://complect.ru"]

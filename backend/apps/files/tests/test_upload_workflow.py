@@ -2,6 +2,7 @@
 Upload lifecycle: PENDING_UPLOAD → UPLOADED via UploadInitService + UploadCompleteService.
 Verifies state transitions, Outbox emission, and idempotency guard.
 """
+
 from __future__ import annotations
 
 import hashlib

@@ -79,27 +79,38 @@ def export_contracts(
     ws.title = "Договоры"
 
     headers = [
-        "№", "Номер договора", "Наименование", "Статус", "Вид ресурса",
-        "Контрагент", "ИНН", "Сумма (руб.)", "Оплачено (руб.)", "Остаток (руб.)", "Дата создания",
+        "№",
+        "Номер договора",
+        "Наименование",
+        "Статус",
+        "Вид ресурса",
+        "Контрагент",
+        "ИНН",
+        "Сумма (руб.)",
+        "Оплачено (руб.)",
+        "Остаток (руб.)",
+        "Дата создания",
     ]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
     for i, row in enumerate(rows, start=1):
-        ws.append([
-            i,
-            row["contract_number"],
-            row["title"],
-            STATUS_LABELS.get(row["status"], row["status"]),
-            RESOURCE_LABELS.get(row["resource_type"], row["resource_type"]),
-            row["contragent_name"] or "",
-            row["contragent_inn"] or "",
-            _amount_rub(row["total_amount"]),
-            _amount_rub(row["paid_amount"]),
-            _amount_rub(row["remaining_amount"]),
-            row["created_at"].strftime("%d.%m.%Y") if row["created_at"] else "",
-        ])
+        ws.append(
+            [
+                i,
+                row["contract_number"],
+                row["title"],
+                STATUS_LABELS.get(row["status"], row["status"]),
+                RESOURCE_LABELS.get(row["resource_type"], row["resource_type"]),
+                row["contragent_name"] or "",
+                row["contragent_inn"] or "",
+                _amount_rub(row["total_amount"]),
+                _amount_rub(row["paid_amount"]),
+                _amount_rub(row["remaining_amount"]),
+                row["created_at"].strftime("%d.%m.%Y") if row["created_at"] else "",
+            ]
+        )
 
     return make_excel_response(wb, "contracts_report.xlsx")
 
@@ -130,23 +141,30 @@ def export_finance(
     ws.title = "Транзакции"
 
     headers = [
-        "Дата", "Номер договора", "Тип операции", "Статус",
-        "Сумма (руб.)", "ИНН контрагента", "Внешний реф.",
+        "Дата",
+        "Номер договора",
+        "Тип операции",
+        "Статус",
+        "Сумма (руб.)",
+        "ИНН контрагента",
+        "Внешний реф.",
     ]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
     for row in rows:
-        ws.append([
-            row["value_date"].strftime("%d.%m.%Y") if row["value_date"] else "",
-            row["contract_number"] or "",
-            TRANSACTION_TYPE_LABELS.get(row["transaction_type"], row["transaction_type"]),
-            TRANSACTION_STATUS_LABELS.get(row["status"], row["status"]),
-            _amount_rub(row["amount"]),
-            row["counterparty_inn"] or "",
-            row["external_ref"] or "",
-        ])
+        ws.append(
+            [
+                row["value_date"].strftime("%d.%m.%Y") if row["value_date"] else "",
+                row["contract_number"] or "",
+                TRANSACTION_TYPE_LABELS.get(row["transaction_type"], row["transaction_type"]),
+                TRANSACTION_STATUS_LABELS.get(row["status"], row["status"]),
+                _amount_rub(row["amount"]),
+                row["counterparty_inn"] or "",
+                row["external_ref"] or "",
+            ]
+        )
 
     return make_excel_response(wb, "finance_report.xlsx")
 
@@ -183,8 +201,16 @@ def export_payments(
     ws.title = "Выписка"
 
     headers = [
-        "Дата", "Сумма", "Направление", "Контрагент", "ИНН",
-        "Описание", "Реквизит", "Статус матчинга", "Уверенность (%)", "ID договора",
+        "Дата",
+        "Сумма",
+        "Направление",
+        "Контрагент",
+        "ИНН",
+        "Описание",
+        "Реквизит",
+        "Статус матчинга",
+        "Уверенность (%)",
+        "ID договора",
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -195,18 +221,20 @@ def export_payments(
     unmatched = total - matched
 
     for row in rows:
-        ws.append([
-            row["transaction_date"].strftime("%d.%m.%Y") if row["transaction_date"] else "",
-            float(row["amount"]) if row["amount"] is not None else "",
-            row["direction"] or "",
-            row["counterparty_name"] or "",
-            row["counterparty_inn"] or "",
-            row["description"] or "",
-            row["reference"] or "",
-            MATCH_STATUS_LABELS.get(row["match_status"], row["match_status"]),
-            row["match_confidence"],
-            str(row["contract_id"]) if row["contract_id"] else "",
-        ])
+        ws.append(
+            [
+                row["transaction_date"].strftime("%d.%m.%Y") if row["transaction_date"] else "",
+                float(row["amount"]) if row["amount"] is not None else "",
+                row["direction"] or "",
+                row["counterparty_name"] or "",
+                row["counterparty_inn"] or "",
+                row["description"] or "",
+                row["reference"] or "",
+                MATCH_STATUS_LABELS.get(row["match_status"], row["match_status"]),
+                row["match_confidence"],
+                str(row["contract_id"]) if row["contract_id"] else "",
+            ]
+        )
 
     ws.append([])
     ws.append(["Итого:", total, "Сопоставлено:", matched, "Не сопоставлено:", unmatched])

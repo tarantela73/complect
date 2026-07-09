@@ -21,9 +21,9 @@ class DjangoUserInfoProvider:
         if not ids:
             return {}
         pk_to_uuid: dict[int, uuid.UUID] = {_uuid_to_pk(uid): uid for uid in ids}
-        users = User.objects.filter(
-            pk__in=list(pk_to_uuid.keys()), tenant_id=tenant_id
-        ).values("pk", "first_name", "last_name", "username")
+        users = User.objects.filter(pk__in=list(pk_to_uuid.keys()), tenant_id=tenant_id).values(
+            "pk", "first_name", "last_name", "username"
+        )
         result: dict[uuid.UUID, UserDisplayDTO] = {}
         for u in users:
             uid = pk_to_uuid[u["pk"]]

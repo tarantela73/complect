@@ -2,6 +2,7 @@
 CQRS Query Side — read-only projections, no business logic, no writes.
 Cursor pagination: WHERE id < cursor ORDER BY id DESC (ADR rule 4.11).
 """
+
 import uuid
 from typing import Optional
 
@@ -26,9 +27,7 @@ def get_files_page(
 
     if q:
         search_query = SearchQuery(q, config="pg_catalog.russian", search_type="plain")
-        qs = qs.filter(search_vector=search_query).order_by(
-            SearchRank("search_vector", search_query).desc(), "-id"
-        )
+        qs = qs.filter(search_vector=search_query).order_by(SearchRank("search_vector", search_query).desc(), "-id")
     else:
         qs = qs.order_by("-id")
 

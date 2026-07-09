@@ -6,6 +6,7 @@ for a confirmed BankStatement (status=IMPORTING → IMPORTED | PARSE_FAILED).
 
 Queue: finance (high-priority, per queue topology rule 4.15).
 """
+
 from __future__ import annotations
 
 import uuid

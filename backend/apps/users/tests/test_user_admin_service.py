@@ -18,9 +18,14 @@ def seed_roles(db):
     from apps.common.models.rbac import Permission, Role, RolePermission
 
     for action, resource in [
-        ("read", "contracts"), ("create", "contracts"), ("write", "contracts"),
-        ("read", "users"), ("create", "users"), ("write", "users"),
-        ("read", "files"), ("read", "finance"),
+        ("read", "contracts"),
+        ("create", "contracts"),
+        ("write", "contracts"),
+        ("read", "users"),
+        ("create", "users"),
+        ("write", "users"),
+        ("read", "files"),
+        ("read", "finance"),
     ]:
         Permission.objects.get_or_create(action=action, resource=resource)
 
@@ -28,10 +33,16 @@ def seed_roles(db):
     manager, _ = Role.objects.get_or_create(name="manager")
     viewer, _ = Role.objects.get_or_create(name="viewer")
 
-    for action, resource in [("read", "contracts"), ("create", "contracts"),
-                              ("write", "contracts"), ("read", "users"),
-                              ("create", "users"), ("write", "users"),
-                              ("read", "files"), ("read", "finance")]:
+    for action, resource in [
+        ("read", "contracts"),
+        ("create", "contracts"),
+        ("write", "contracts"),
+        ("read", "users"),
+        ("create", "users"),
+        ("write", "users"),
+        ("read", "files"),
+        ("read", "finance"),
+    ]:
         perm = Permission.objects.get(action=action, resource=resource)
         RolePermission.objects.get_or_create(role=admin, permission=perm)
 
@@ -214,9 +225,7 @@ class TestAssignRoles:
         )
         target_uuid = uuid.UUID(_pk_to_uuid4(target.pk))
         viewer_role = Role.objects.get(name="viewer")
-        RoleBinding.objects.create(
-            tenant_id=TENANT_ID, user_id=target_uuid, role=viewer_role, granted_by=actor_id
-        )
+        RoleBinding.objects.create(tenant_id=TENANT_ID, user_id=target_uuid, role=viewer_role, granted_by=actor_id)
 
         assign_roles(
             tenant_id=TENANT_ID,
@@ -226,9 +235,9 @@ class TestAssignRoles:
         )
 
         active = set(
-            RoleBinding.objects.filter(
-                tenant_id=TENANT_ID, user_id=target_uuid, is_active=True
-            ).values_list("role__name", flat=True)
+            RoleBinding.objects.filter(tenant_id=TENANT_ID, user_id=target_uuid, is_active=True).values_list(
+                "role__name", flat=True
+            )
         )
         assert active == {"manager"}
 

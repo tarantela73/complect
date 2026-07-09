@@ -7,6 +7,7 @@ Covers:
 - Dispatcher routing: Mode A → serial stream, Mode B → tenant stream
 - CausalQueryService.get_aggregate_history: Class C query
 """
+
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -30,9 +31,9 @@ _NOW = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
 # AggregateSequenceAllocator
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestAggregateSequenceAllocator:
-
     def test_first_allocation_returns_one(self):
         agg_id = uuid.uuid4()
         seq = AggregateSequenceAllocator.allocate(_TENANT, "finance.transaction", agg_id)
@@ -98,9 +99,9 @@ class TestAggregateSequenceAllocator:
 # AggregateSequenceFenceService
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestAggregateSequenceFenceService:
-
     def _advance(self, agg_id: uuid.UUID, consumer: str, seq: int) -> bool:
         return AggregateSequenceFenceService.advance(
             tenant_id=_TENANT,
@@ -177,9 +178,7 @@ class TestAggregateSequenceFenceService:
         assert result is True
 
     def test_returns_false_on_exception_without_raising(self):
-        with patch(
-            "apps.common.services.aggregate_sequence.AggregateSequenceFence.objects"
-        ) as mock_mgr:
+        with patch("apps.common.services.aggregate_sequence.AggregateSequenceFence.objects") as mock_mgr:
             mock_mgr.filter.side_effect = Exception("db_error")
             result = AggregateSequenceFenceService.advance(
                 tenant_id=_TENANT,
@@ -195,8 +194,8 @@ class TestAggregateSequenceFenceService:
 # Dispatcher routing (pure unit tests — no DB)
 # ---------------------------------------------------------------------------
 
-class TestDispatcherRouting:
 
+class TestDispatcherRouting:
     def _make_record(
         self,
         aggregate_type: str | None = None,
@@ -261,9 +260,9 @@ class TestDispatcherRouting:
 # CausalQueryService — Class C (aggregate history)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestCausalQueryClassC:
-
     def _make_outbox(
         self,
         tenant_id: uuid.UUID,

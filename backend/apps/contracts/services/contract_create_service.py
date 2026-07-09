@@ -30,8 +30,7 @@ class ContractCreateService:
         if request.contragent_id is not None:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT 1 FROM contragents_contragents"
-                    " WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
+                    "SELECT 1 FROM contragents_contragents WHERE id = %s AND tenant_id = %s AND is_deleted = FALSE",
                     [request.contragent_id, ctx.tenant_id],
                 )
                 if cursor.fetchone() is None:

@@ -3,6 +3,7 @@ Contract tests: every HTTP boundary in the system must return rule 6.6 envelope.
 Covers Ninja handlers, middleware rejections, Django fallback handlers,
 and the outermost ASGI error boundary.
 """
+
 import json
 import uuid
 
@@ -39,6 +40,7 @@ def _assert_envelope(data: dict, expected_code: str) -> None:
 
 # ── make_error_response unit ──────────────────────────────────────────────────
 
+
 class TestMakeErrorResponse:
     def test_envelope_shape(self):
         result = make_error_response("TEST_CODE", "Test message.")
@@ -55,6 +57,7 @@ class TestMakeErrorResponse:
 
 # ── Django fallback handlers ──────────────────────────────────────────────────
 
+
 class TestDjangoFallbackHandlers:
     """
     Django-level handlers (handler400/403/404/500) must return rule 6.6 envelope.
@@ -69,6 +72,7 @@ class TestDjangoFallbackHandlers:
         response = django_bad_request(request)
         assert response.status_code == 400
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "BAD_REQUEST")
 
@@ -77,6 +81,7 @@ class TestDjangoFallbackHandlers:
         response = django_permission_denied(request)
         assert response.status_code == 403
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "FORBIDDEN")
 
@@ -85,6 +90,7 @@ class TestDjangoFallbackHandlers:
         response = django_page_not_found(request)
         assert response.status_code == 404
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "NOT_FOUND")
 
@@ -93,6 +99,7 @@ class TestDjangoFallbackHandlers:
         response = django_server_error(request)
         assert response.status_code == 500
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "INTERNAL_SERVER_ERROR")
 
@@ -101,6 +108,7 @@ class TestDjangoFallbackHandlers:
         request = self.rf.get("/")
         response = django_server_error(request)
         import json
+
         data = json.loads(response.content)
         assert data["error"]["detail"] is None
         assert "traceback" not in str(data)
@@ -108,6 +116,7 @@ class TestDjangoFallbackHandlers:
 
 
 # ── Middleware rejections ─────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("config.urls")
@@ -165,6 +174,7 @@ class TestMiddlewareEnvelope:
 
 
 # ── ASGI error boundary ───────────────────────────────────────────────────────
+
 
 class TestAsgiErrorBoundary:
     """
@@ -243,6 +253,7 @@ class TestAsgiErrorBoundary:
 
 
 # ── Ninja validation error ────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("config.urls")

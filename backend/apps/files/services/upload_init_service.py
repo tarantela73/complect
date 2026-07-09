@@ -40,9 +40,7 @@ class UploadInitService:
         storage: StorageBackend | None = None,
     ) -> UploadInitResult:
         if request.size_bytes > _MAX_FILE_SIZE:
-            raise ValidationError(
-                f"Размер файла {request.size_bytes} байт превышает лимит {_MAX_FILE_SIZE} байт."
-            )
+            raise ValidationError(f"Размер файла {request.size_bytes} байт превышает лимит {_MAX_FILE_SIZE} байт.")
 
         tenant_id = get_tenant_id()
         file_id = uuid.uuid4()

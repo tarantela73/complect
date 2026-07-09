@@ -10,6 +10,7 @@ Usage:
     python manage.py create_test_users          # dev only (DEBUG=True required)
     python manage.py create_test_users --force  # bypass env guard (CI, staging)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -63,8 +64,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         if not settings.DEBUG and not options.get("force"):
             raise CommandError(
-                "create_test_users is disabled when DEBUG=False. "
-                "Pass --force to override (CI/staging only)."
+                "create_test_users is disabled when DEBUG=False. Pass --force to override (CI/staging only)."
             )
         from apps.common.models.rbac import Role, RoleBinding
         from apps.users.models import User
@@ -98,10 +98,7 @@ class Command(BaseCommand):
 
             role = Role.objects.filter(name=spec["role_name"]).first()
             if role is None:
-                msg = (
-                    f"  WARNING: role '{spec['role_name']}' not found in DB"
-                    f" — skipping binding for {spec['username']}"
-                )
+                msg = f"  WARNING: role '{spec['role_name']}' not found in DB — skipping binding for {spec['username']}"
                 self.stdout.write(self.style.WARNING(msg))
                 logger.warning(
                     "test_user_role_not_found",

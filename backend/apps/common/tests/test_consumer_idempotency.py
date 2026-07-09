@@ -21,7 +21,6 @@ def _claim(outbox_record_id=None, consumer="svc_a", tenant_id=None) -> bool:
 
 @pytest.mark.django_db
 class TestConsumerIdempotencyService:
-
     # ── first-time claim ──────────────────────────────────────────────────────
 
     def test_first_claim_returns_true(self):
@@ -31,9 +30,7 @@ class TestConsumerIdempotencyService:
         event_id = uuid.uuid4()
         tenant_id = uuid.uuid4()
         ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
-        assert ProcessedEvent.objects.filter(
-            outbox_record_id=event_id, consumer="svc"
-        ).exists()
+        assert ProcessedEvent.objects.filter(outbox_record_id=event_id, consumer="svc").exists()
 
     # ── duplicate claim ───────────────────────────────────────────────────────
 
@@ -63,9 +60,9 @@ class TestConsumerIdempotencyService:
 
 # ── ACK tracking ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestConsumerAckTracking:
-
     def test_claim_leaves_acked_at_null(self):
         """Freshly claimed event is in-flight: acked_at must be NULL."""
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -137,9 +134,9 @@ class TestConsumerAckTracking:
 
 # ── Ownership-bound ACK (instance_id) ────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestConsumerAckOwnership:
-
     def test_claim_stores_instance_id(self):
         event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id)
@@ -177,9 +174,9 @@ class TestConsumerAckOwnership:
 
 # ── Lease & Reclaim (ADR-0011) ────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestConsumerLease:
-
     def test_claim_without_lease_argument_creates_default_lease(self):
         """
         Safe-by-default: claim() without lease_ttl must set lease_expires_at
@@ -208,6 +205,7 @@ class TestConsumerLease:
 
     def test_default_lease_expires_at_is_in_the_future(self):
         from django.utils import timezone as tz
+
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
         ConsumerIdempotencyService.claim(event_id, "svc", tenant_id)
         record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
@@ -216,7 +214,6 @@ class TestConsumerLease:
 
 @pytest.mark.django_db
 class TestConsumerReclaim:
-
     def test_reclaim_expired_lease_returns_true(self):
         """Worker B can take over after Worker A's lease expires."""
         from datetime import timedelta
@@ -334,7 +331,6 @@ class TestConsumerReclaim:
 
 @pytest.mark.django_db
 class TestConsumerHeartbeat:
-
     def test_heartbeat_extends_lease(self):
         """heartbeat() must push lease_expires_at further into the future."""
         from django.utils import timezone as tz
@@ -390,15 +386,13 @@ class TestConsumerHeartbeat:
 
 # ── Causal root propagation (ADR-0015/0016) ───────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestClaimCausalRootPropagation:
-
     def test_claim_stores_causal_root_id(self):
         """causal_root_id passed to claim() must be persisted on ProcessedEvent."""
         event_id, tenant_id, root_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        ConsumerIdempotencyService.claim(
-            event_id, "svc", tenant_id, causal_root_id=root_id
-        )
+        ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, causal_root_id=root_id)
         record = ProcessedEvent.objects.get(outbox_record_id=event_id, consumer="svc")
         assert record.causal_root_id == root_id
 
@@ -418,9 +412,7 @@ class TestClaimCausalRootPropagation:
         repair_event_id = uuid.uuid4()  # different from original_root_id
         tenant_id = uuid.uuid4()
 
-        ConsumerIdempotencyService.claim(
-            repair_event_id, "svc", tenant_id, causal_root_id=original_root_id
-        )
+        ConsumerIdempotencyService.claim(repair_event_id, "svc", tenant_id, causal_root_id=original_root_id)
         record = ProcessedEvent.objects.get(outbox_record_id=repair_event_id, consumer="svc")
         assert record.causal_root_id == original_root_id
         assert record.outbox_record_id != record.causal_root_id
@@ -429,9 +421,9 @@ class TestClaimCausalRootPropagation:
 # ── Coalescing wake-up (fix 5.1) ─────────────────────────────────────────────
 # Requires transaction=True so that transaction.on_commit fires after each write.
 
+
 @pytest.mark.django_db(transaction=True)
 class TestOutboxCoalescing:
-
     def test_bulk_push_fires_single_wake_up(self):
         """
         N rapid outbox writes in the same coalesce window must produce exactly
@@ -458,7 +450,4 @@ class TestOutboxCoalescing:
             for _ in range(5):
                 TransactionalOutboxService.push_to_outbox(_make_event())
 
-        assert len(dispatch_calls) == 1, (
-            f"Expected 1 wake-up for 5 rapid writes, got {len(dispatch_calls)}"
-        )
-
+        assert len(dispatch_calls) == 1, f"Expected 1 wake-up for 5 rapid writes, got {len(dispatch_calls)}"

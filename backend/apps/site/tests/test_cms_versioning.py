@@ -27,9 +27,7 @@ def seed_cms_permissions(db):
 
 def _make_user_with_role(role_name: str) -> tuple[User, str]:
     email = f"{role_name}_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=TENANT_ID
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=TENANT_ID)
     role = Role.objects.get(name=role_name)
     RoleBinding.objects.create(
         tenant_id=TENANT_ID,
@@ -96,9 +94,7 @@ class TestPatchCreatesRevision:
             )
 
         revisions = list(
-            SitePageRevision.objects
-            .filter(tenant_id=TENANT_ID, is_deleted=False)
-            .order_by("revision_number")
+            SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).order_by("revision_number")
         )
         assert len(revisions) == 2
         assert revisions[0].revision_number == 1
@@ -166,9 +162,9 @@ class TestRollback:
             **_auth_headers(user, token, mutating=True),
         )
 
-        rev1 = SitePageRevision.objects.filter(
-            tenant_id=TENANT_ID, is_deleted=False
-        ).order_by("revision_number").first()
+        rev1 = (
+            SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).order_by("revision_number").first()
+        )
         assert rev1 is not None
 
         resp = Client().post(
@@ -192,27 +188,23 @@ class TestRollback:
             **_auth_headers(user, token, mutating=True),
         )
 
-        rev1 = SitePageRevision.objects.filter(
-            tenant_id=TENANT_ID, is_deleted=False
-        ).order_by("revision_number").first()
+        rev1 = (
+            SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).order_by("revision_number").first()
+        )
 
-        before_count = SitePageRevision.objects.filter(
-            tenant_id=TENANT_ID, is_deleted=False
-        ).count()
+        before_count = SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).count()
 
         Client().post(
             f"/api/v1/cms/pages/rev-rollback-label/revisions/{rev1.id}/rollback/",
             **_auth_headers(user, token, mutating=True),
         )
 
-        after_count = SitePageRevision.objects.filter(
-            tenant_id=TENANT_ID, is_deleted=False
-        ).count()
+        after_count = SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).count()
         assert after_count > before_count
 
-        rollback_rev = SitePageRevision.objects.filter(
-            tenant_id=TENANT_ID, is_deleted=False
-        ).order_by("-revision_number").first()
+        rollback_rev = (
+            SitePageRevision.objects.filter(tenant_id=TENANT_ID, is_deleted=False).order_by("-revision_number").first()
+        )
         assert "rollback" in rollback_rev.label
 
     def test_rollback_wrong_tenant(self):
@@ -220,14 +212,13 @@ class TestRollback:
         page = _create_page("rev-wrong-tenant")
         # Create revision for this page under TENANT_ID
         from apps.site.services.cms_revision_service import CmsRevisionService
+
         rev = CmsRevisionService().create_revision(page, uuid.uuid4())
 
         # Create another tenant's user
         other_tenant = uuid.uuid4()
         email = f"other_{uuid.uuid4().hex[:8]}@test.com"
-        other_user = User.objects.create_user(
-            username=email, email=email, password="Pass1!", tenant_id=other_tenant
-        )
+        other_user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=other_tenant)
         role = Role.objects.get(name="cms_editor")
         RoleBinding.objects.create(
             tenant_id=other_tenant,
@@ -238,6 +229,7 @@ class TestRollback:
 
         # Create a page for the other tenant with same slug
         from apps.site.models import SitePageContent
+
         SitePageContent.objects.create(
             tenant_id=other_tenant,
             slug="rev-wrong-tenant",

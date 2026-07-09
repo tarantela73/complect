@@ -87,9 +87,7 @@ def get_request_detail(
     from django.core.exceptions import PermissionDenied
 
     tenant_id = get_tenant_id()
-    req = Request.objects.filter(
-        id=request_id, tenant_id=tenant_id, is_deleted=False
-    ).first()
+    req = Request.objects.filter(id=request_id, tenant_id=tenant_id, is_deleted=False).first()
     if not req:
         raise PermissionDenied("Заявка не найдена.")
     display_map = _build_display_map([req], tenant_id, user_info)

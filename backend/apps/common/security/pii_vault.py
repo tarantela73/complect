@@ -25,13 +25,9 @@ class PiiEncryptionVault:
 
         if not os.path.exists(secret_path):
             if os.getenv("ENVIRONMENT") == "local":
-                cls._cached_master_key = (
-                    "local_dev_high_entropy_secure_vault_master_key_2026"
-                )
+                cls._cached_master_key = "local_dev_high_entropy_secure_vault_master_key_2026"
                 return cls._cached_master_key
-            raise PermissionDenied(
-                "CRITICAL SECURITY FAILURE: Docker Secret PII Key is missing!"
-            )
+            raise PermissionDenied("CRITICAL SECURITY FAILURE: Docker Secret PII Key is missing!")
 
         try:
             with open(secret_path, "r", encoding="utf-8") as secret_file:
@@ -39,9 +35,7 @@ class PiiEncryptionVault:
                 return cls._cached_master_key
         except Exception as exc:
             logger.critical("SECURITY VAULT OPENPGP READ FAILED", error=str(exc))
-            raise PermissionDenied(
-                "CRITICAL SECURITY FAILURE: Cannot unlock PII Vault Key."
-            ) from None
+            raise PermissionDenied("CRITICAL SECURITY FAILURE: Cannot unlock PII Vault Key.") from None
 
     @classmethod
     def encrypt_field(cls, raw_text: str) -> bytes:

@@ -6,9 +6,7 @@ class RawOnesPaymentInputSchema(BaseModel):
 
     DocGUID: str = Field(..., description="Уникальный идентификатор документа в 1С")
     OrganizationINN: str = Field(..., description="ИНН нашей организации")
-    SummaDoc: float = Field(
-        ..., description="Сумма в рублях, приходящая от внешней системы"
-    )
+    SummaDoc: float = Field(..., description="Сумма в рублях, приходящая от внешней системы")
     NaznacheniePlat: str = Field(..., description="Текстовое назначение платежа")
 
 
@@ -19,4 +17,3 @@ class InternalLedgerTransactionDTO(BaseModel):
     tenant_inn: str
     amount_in_cents: int  # Конвертировано в копейки для исключения float-багов
     description: str
-
