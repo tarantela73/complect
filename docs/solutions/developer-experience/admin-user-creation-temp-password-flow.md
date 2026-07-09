@@ -51,7 +51,7 @@ related_components:
 { email, full_name, roles, send_invite_email: false }
 ```
 
-`send_invite_email: false` захардкожен — письмо-приглашение **не отправляется**.
+`send_invite_email: false` захардкорен — письмо-приглашение **не отправляется**.
 
 ### 3. Backend: генерация временного пароля
 
