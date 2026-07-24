@@ -12,9 +12,9 @@ ERP «Комплект» — событийно-ориентированный �
 
 Архитектурная спецификация: `docs/Project_architecture.md`
 Глоссарий доменов: `CONCEPTS.md`
-ADR (23 штуки): `docs/adr/`
+Реестр архитектурных решений: `docs/adr/`
 Solution docs: `docs/solutions/` (patterns, database-issues, test-failures, dev-experience и др.)
-OpenCode plugin: `opencode.json` → compound-engineering plugin
+OpenCode plugin: `opencode.json` → [Superpowers](https://github.com/obra/superpowers.git) skills + compound-engineering plugin
 
 ---
 
@@ -367,6 +367,16 @@ curl -s -X POST http://localhost:8000/api/v1/auth/login \
 - **Docker Desktop WSL2 ghost port**: порт 5432 может заниматься мёртвым контейнером → `docker compose down` + ручная очистка
 - **Outbox lock contention**: тесты с `transaction=True` могут пропускать dispatched tasks из-за заблокированных записей
 - **Streaming replica stale reads**: в тестах с `transaction=True` replica возвращает устаревшие данные → используйте `transaction=False` или читайте из primary
+
+---
+
+## Коммиты и Pull Requests
+
+- Формат коммита: `type(scope): description`; scope можно опустить. Используйте принятые типы `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `chore`.
+- Один коммит должен описывать одно логическое изменение. Не включайте сгенерированные или посторонние файлы без необходимости.
+- В PR укажите цель и границы изменения, связанную задачу (если есть), риски, миграции — при изменении схемы, и выполненные проверки.
+- Перед PR для backend запустите `make lint`, `make types` и релевантные pytest-тесты; для frontend — `make tsc` и релевантные Vitest/Playwright-тесты. При изменении API выполните `make generate-sdk` и проверьте получившийся diff.
+- Для видимых frontend-изменений приложите скриншоты до и после изменения либо короткую запись изменённого пользовательского сценария.
 
 ---
 
