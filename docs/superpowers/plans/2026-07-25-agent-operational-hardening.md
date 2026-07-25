@@ -60,7 +60,7 @@
   - `close_task(config_path: Path, state_path: Path, now: datetime) -> dict[str, object]`
   - `read_task_status(config_path: Path, state_path: Path) -> dict[str, object]`
 
-- [ ] **Step 1: Create package markers and failing task validation tests**
+- [x] **Step 1: Create package markers and failing task validation tests**
 
 ```python
 class TaskKeyValidationTests(unittest.TestCase):
@@ -81,7 +81,7 @@ class TaskKeyValidationTests(unittest.TestCase):
         )
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm the import failure**
+- [x] **Step 2: Run the focused tests and confirm the import failure**
 
 Run:
 
@@ -91,7 +91,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_task.TaskKeyValidationT
 
 Expected: `ModuleNotFoundError` for `infra.scripts.agent_tools.common`.
 
-- [ ] **Step 3: Implement validation and atomic JSON helpers**
+- [x] **Step 3: Implement validation and atomic JSON helpers**
 
 `common.py` must define:
 
@@ -133,7 +133,7 @@ class CommandResult:
 CommandRunner = Callable[[Sequence[str], Path | None], CommandResult]
 ```
 
-- [ ] **Step 4: Run validation tests and confirm they pass**
+- [x] **Step 4: Run validation tests and confirm they pass**
 
 Run:
 
@@ -143,7 +143,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_task.TaskKeyValidationT
 
 Expected: all tests `OK`.
 
-- [ ] **Step 5: Add failing lifecycle tests**
+- [x] **Step 5: Add failing lifecycle tests**
 
 ```python
 def test_start_preserves_unknown_config_fields(self):
@@ -178,7 +178,7 @@ def test_close_does_not_change_repo_container_tag(self):
     self.assertEqual(state["status"], "closed")
 ```
 
-- [ ] **Step 6: Run lifecycle tests and confirm they fail**
+- [x] **Step 6: Run lifecycle tests and confirm they fail**
 
 Run:
 
@@ -189,7 +189,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_task.TaskLifecycleTests
 Expected: failures because `start_task`, `close_task` and `read_task_status`
 are not implemented.
 
-- [ ] **Step 7: Implement lifecycle functions and CLI**
+- [x] **Step 7: Implement lifecycle functions and CLI**
 
 State schema:
 
@@ -220,7 +220,7 @@ Default paths derive from the Git root found with
 `personalContainerTag=complect:project`, но сохраняет существующее значение и
 все неизвестные поля. CLI output contains only task key, container and status.
 
-- [ ] **Step 8: Run all task tests**
+- [x] **Step 8: Run all task tests**
 
 Run:
 
@@ -230,7 +230,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_task -v
 
 Expected: all tests `OK`.
 
-- [ ] **Step 9: Commit lifecycle tooling**
+- [x] **Step 9: Commit lifecycle tooling**
 
 ```bash
 git add infra/scripts/agent_tools/__init__.py \
@@ -257,7 +257,7 @@ git commit -m "feat(agents): add task container lifecycle"
   - `tracked_candidate_paths(root: Path, runner: CommandRunner) -> list[Path]`
   - `run_secret_lint(paths: Sequence[Path]) -> list[Finding]`
 
-- [ ] **Step 1: Write failing scanner tests**
+- [x] **Step 1: Write failing scanner tests**
 
 ```python
 def test_reports_rule_without_secret_value(self):
@@ -281,7 +281,7 @@ def test_ignores_unsupported_binary_and_local_env(self):
     self.assertFalse(is_candidate_path(Path("image.png")))
 ```
 
-- [ ] **Step 2: Run tests and confirm they fail**
+- [x] **Step 2: Run tests and confirm they fail**
 
 Run:
 
@@ -291,7 +291,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_secret_lint -v
 
 Expected: import failure for `secret_lint`.
 
-- [ ] **Step 3: Implement scanner with redacted findings**
+- [x] **Step 3: Implement scanner with redacted findings**
 
 Rules include:
 
@@ -314,7 +314,7 @@ Special names include `Dockerfile`, `Makefile` and `docker-compose.dev.yml`.
 `.env` and names matching `.env.*` are excluded except `.env.example`.
 `Finding.__str__()` returns only `path:line:rule`.
 
-- [ ] **Step 4: Run scanner tests**
+- [x] **Step 4: Run scanner tests**
 
 Run:
 
@@ -324,7 +324,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_secret_lint -v
 
 Expected: all tests `OK`.
 
-- [ ] **Step 5: Add tracked-file enumeration test**
+- [x] **Step 5: Add tracked-file enumeration test**
 
 Use an injected runner returning:
 
@@ -338,7 +338,7 @@ frontend/public/logo.png
 Expected candidates: `AGENTS.md`, `.codex/config.toml`; `.env` and PNG are
 excluded without reading them.
 
-- [ ] **Step 6: Implement `git ls-files -z` enumeration and CLI**
+- [x] **Step 6: Implement `git ls-files -z` enumeration and CLI**
 
 CLI:
 
@@ -350,7 +350,7 @@ No explicit paths means tracked candidates from `git ls-files -z`. Exit `1`
 when findings exist, otherwise print `PASS agent-secret-check files=<count>`
 and exit `0`.
 
-- [ ] **Step 7: Run all secret-lint tests and a repository scan**
+- [x] **Step 7: Run all secret-lint tests and a repository scan**
 
 Run:
 
@@ -363,7 +363,7 @@ python3 -m infra.scripts.agent_tools.secret_lint \
 Expected: tests pass and repository scan exits `0` without printing secret
 values.
 
-- [ ] **Step 8: Commit secret lint**
+- [x] **Step 8: Commit secret lint**
 
 ```bash
 git add infra/scripts/agent_tools/secret_lint.py \
@@ -392,7 +392,7 @@ git commit -m "feat(agents): add redacted secret lint"
   - `run_live_checks(context: DoctorContext) -> list[Check]`
   - `exit_code(checks: Sequence[Check]) -> int`
 
-- [ ] **Step 1: Write failing result-classification tests**
+- [x] **Step 1: Write failing result-classification tests**
 
 ```python
 def test_exit_code_fails_only_on_fail(self):
@@ -409,7 +409,7 @@ def test_closed_task_is_fail(self):
     self.assertIn("agent-task-start", task_check.detail)
 ```
 
-- [ ] **Step 2: Run doctor tests and confirm they fail**
+- [x] **Step 2: Run doctor tests and confirm they fail**
 
 Run:
 
@@ -419,7 +419,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_doctor -v
 
 Expected: import failure for `doctor`.
 
-- [ ] **Step 3: Implement result model and task/config checks**
+- [x] **Step 3: Implement result model and task/config checks**
 
 `DoctorContext` fields:
 
@@ -464,7 +464,7 @@ Offline checks parse:
 Expected invariants are copied from the design. Detail strings name fields and
 paths but never include values matching `key|token|secret|password`.
 
-- [ ] **Step 4: Add and pass cadence/status regression test**
+- [x] **Step 4: Add and pass cadence/status regression test**
 
 Test fixture:
 
@@ -481,7 +481,7 @@ autoRecallEveryPrompt=false captureEveryNTurns=0 stop_hook=present
 The implementation must not use the hard-coded prose from upstream
 `status.js`.
 
-- [ ] **Step 5: Add MCP, plugin and GitHub warning tests**
+- [x] **Step 5: Add MCP, plugin and GitHub warning tests**
 
 Injected `codex mcp list` output contains `playwright` and
 `openaiDeveloperDocs`; both produce `PASS`. Missing `gh` produces:
@@ -493,7 +493,7 @@ Check("github-cli", Status.WARN, "gh is not installed; connector availability is
 Missing optional Product Design manifest is `WARN`; missing GitHub or
 Superpowers manifest is `FAIL`.
 
-- [ ] **Step 6: Implement remaining offline checks and CLI**
+- [x] **Step 6: Implement remaining offline checks and CLI**
 
 CLI:
 
@@ -512,7 +512,7 @@ WARN github-cli gh is not installed; connector availability is session-scoped
 
 JSON output contains `name`, `status`, `detail`, but no environment values.
 
-- [ ] **Step 7: Write failing live-probe tests**
+- [x] **Step 7: Write failing live-probe tests**
 
 Injected probes assert:
 
@@ -522,7 +522,7 @@ Injected probes assert:
   with the active task container;
 - only result counts enter check detail.
 
-- [ ] **Step 8: Implement live probes**
+- [x] **Step 8: Implement live probes**
 
 Use `urllib.request` with five-second timeout. Search body:
 
@@ -539,7 +539,7 @@ Use `urllib.request` with five-second timeout. Search body:
 for `--live`. `docker compose -f docker-compose.dev.yml ps supermemory` is a
 separate check.
 
-- [ ] **Step 9: Run doctor unit tests and offline CLI**
+- [x] **Step 9: Run doctor unit tests and offline CLI**
 
 Run:
 
@@ -550,7 +550,7 @@ python3 -m infra.scripts.agent_tools.doctor
 
 Expected: tests pass. Offline doctor may report `WARN github-cli`; no `FAIL`.
 
-- [ ] **Step 10: Commit Agent Doctor**
+- [x] **Step 10: Commit Agent Doctor**
 
 ```bash
 git add infra/scripts/agent_tools/doctor.py \
@@ -575,7 +575,7 @@ git commit -m "feat(agents): add configuration doctor"
   - `SupermemoryClient.search(...) -> int`
   - `SupermemoryClient.save(...) -> str`
 
-- [ ] **Step 1: Write failing validation and payload tests**
+- [x] **Step 1: Write failing validation and payload tests**
 
 ```python
 def test_search_payload_has_exactly_one_container(self):
@@ -597,7 +597,7 @@ def test_save_requires_custom_id(self):
         build_save_payload("complect:project", "", "decision", "content")
 ```
 
-- [ ] **Step 2: Run tests and confirm they fail**
+- [x] **Step 2: Run tests and confirm they fail**
 
 Run:
 
@@ -607,7 +607,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_memory -v
 
 Expected: import failure for `memory`.
 
-- [ ] **Step 3: Implement validation and payload builders**
+- [x] **Step 3: Implement validation and payload builders**
 
 Save memory object:
 
@@ -633,7 +633,7 @@ Request body:
 
 Allowed kinds: `decision`, `finding`, `feedback`, `handoff`, `reference`.
 
-- [ ] **Step 4: Add mock HTTP redaction tests**
+- [x] **Step 4: Add mock HTTP redaction tests**
 
 Mock response bodies contain a fake token and memory content. Assert stdout
 contains only:
@@ -645,7 +645,7 @@ search container=complect:project count=1
 
 and does not contain response body, content or fake token.
 
-- [ ] **Step 5: Implement `SupermemoryClient` and CLI**
+- [x] **Step 5: Implement `SupermemoryClient` and CLI**
 
 CLI:
 
@@ -664,7 +664,7 @@ python3 -m infra.scripts.agent_tools.memory save \
 container only. Client base URL defaults to `http://127.0.0.1:6767` and may be
 overridden by `SUPERMEMORY_API_URL`.
 
-- [ ] **Step 6: Run all memory tests**
+- [x] **Step 6: Run all memory tests**
 
 Run:
 
@@ -674,7 +674,7 @@ python3 -m unittest infra.scripts.agent_tools.tests.test_memory -v
 
 Expected: all tests `OK`.
 
-- [ ] **Step 7: Run safe live customId contract test**
+- [x] **Step 7: Run safe live customId contract test**
 
 Create a short temporary content file without secrets and save to the active
 task container using custom ID
@@ -691,7 +691,7 @@ Then search the exact task container and print only count. Expected:
 
 The contract test does not delete memories.
 
-- [ ] **Step 8: Commit memory wrapper**
+- [x] **Step 8: Commit memory wrapper**
 
 ```bash
 git add infra/scripts/agent_tools/memory.py \
@@ -713,7 +713,7 @@ git commit -m "feat(agents): add scoped memory wrapper"
 - Produces: stable `make agent-*` workflow and checked-off implementation
   record.
 
-- [ ] **Step 1: Add Makefile targets**
+- [x] **Step 1: Add Makefile targets**
 
 ```make
 agent-task-start:
@@ -739,7 +739,7 @@ agent-tools-test:
 	python3 -m unittest discover -s infra/scripts/agent_tools/tests -v
 ```
 
-- [ ] **Step 2: Document start/close/doctor workflow**
+- [x] **Step 2: Document start/close/doctor workflow**
 
 Add to `docs/development/supermemory.md`:
 
@@ -757,7 +757,7 @@ Add to `docs/development/supermemory.md`:
 Document that upstream `supermemory-status` displays hard-coded cadence and
 is not authoritative; `agent-doctor` reads actual config.
 
-- [ ] **Step 3: Run focused tooling verification**
+- [x] **Step 3: Run focused tooling verification**
 
 Run:
 
@@ -772,7 +772,7 @@ Expected: tests and secret check pass. If the current task was previously
 closed, start the already selected hardening task key once before doctor; do
 not reuse the completed `20260725-codex-agent-configuration` key.
 
-- [ ] **Step 4: Run live verification**
+- [x] **Step 4: Run live verification**
 
 Load credentials into the current process without printing them, then run:
 
@@ -784,7 +784,7 @@ make supermemory-status
 Expected: Qwen and Supermemory health pass; project/task searches return
 counts; missing `gh` remains `WARN`.
 
-- [ ] **Step 5: Run configuration and repository checks**
+- [x] **Step 5: Run configuration and repository checks**
 
 Run:
 
@@ -804,7 +804,7 @@ Expected:
 - Compose config is valid;
 - only agent-tooling files plus the six pre-existing request files are dirty.
 
-- [ ] **Step 6: Verify no ERP test suite is required**
+- [x] **Step 6: Verify no ERP test suite is required**
 
 Run:
 
@@ -817,7 +817,7 @@ plan. The six pre-existing dirty request files remain unstaged. Therefore
 `make test-all` is not required; the prior verified application suite remains
 unaffected.
 
-- [ ] **Step 7: Mark plan checkboxes and commit integration**
+- [x] **Step 7: Mark plan checkboxes and commit integration**
 
 Update only completed checkboxes in this plan, then:
 
@@ -827,7 +827,7 @@ git add Makefile docs/development/supermemory.md \
 git commit -m "docs(agents): document operational workflow"
 ```
 
-- [ ] **Step 8: Final review**
+- [x] **Step 8: Final review**
 
 Review:
 

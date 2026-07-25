@@ -61,6 +61,28 @@ supermemory-down:
 agent-infra-test:
 	python3 -m unittest discover -s infra/scripts/tests -v
 
+agent-task-start:
+	@test -n "$(TASK_KEY)" || (echo "TASK_KEY is required" >&2; exit 2)
+	python3 -m infra.scripts.agent_tools.task start "$(TASK_KEY)"
+
+agent-task-status:
+	python3 -m infra.scripts.agent_tools.task status
+
+agent-task-close:
+	python3 -m infra.scripts.agent_tools.task close
+
+agent-doctor:
+	python3 -m infra.scripts.agent_tools.doctor
+
+agent-doctor-live:
+	python3 -m infra.scripts.agent_tools.doctor --live
+
+agent-secret-check:
+	python3 -m infra.scripts.agent_tools.secret_lint
+
+agent-tools-test:
+	python3 -m unittest discover -s infra/scripts/agent_tools/tests -v
+
 # ============================================
 # DJANGO
 # ============================================
