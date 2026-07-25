@@ -201,3 +201,6 @@ opencode.json
 
 .clinerules
 clinerules
+
+# Isolated development worktrees
+.worktrees/
