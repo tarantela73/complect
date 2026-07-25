@@ -11,6 +11,7 @@ volumes:
   grafana_data:
   frontend_nm:
   frontend_next:
+  supermemory_data:
 
 secrets:
   db_root_password:
@@ -56,7 +57,7 @@ services:
     container_name: complect_postgres_replica
     restart: unless-stopped
     environment:
-      PGPASSWORD: replica_password_secure_2026
+      PGPASSWORD: ${POSTGRES_REPLICATION_PASSWORD}2026
     ports:
       - "5433:5432"
     volumes:
@@ -98,6 +99,58 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # --- LOCAL AGENT MEMORY (host llama.cpp + Supermemory) ---
+  supermemory_data_init:
+    image: busybox:1.37.0
+    container_name: complect_supermemory_data_init
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    command: ["sh", "-c", "chown -R 10001:10001 /data"]
+    volumes:
+      - supermemory_data:/data
+
+  supermemory:
+    build:
+      context: ./infra/supermemory
+      args:
+        SUPERMEMORY_SERVER_VERSION: 0.0.6
+    container_name: complect_supermemory
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      HOME: /data
+      PORT: "6767"
+      OPENAI_BASE_URL: http://host.docker.internal:8090/v1
+      OPENAI_API_KEY: local-llama-cpp
+      OPENAI_MODEL: qwen3-coder
+      WORKFLOW_ENGINE: direct
+      SUPERMEMORY_DATA_DIR: /data
+      SUPERMEMORY_DISABLE_TELEMETRY: "1"
+    ports:
+      - "127.0.0.1:6767:6767"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - supermemory_data:/data
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m
+    networks:
+      - erp_network
+    depends_on:
+      supermemory_data_init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   # --- STORAGE LAYER CONTEXT (MinIO S3 API) ---
   minio:
@@ -205,7 +258,7 @@ services:
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: local-dev-insecure-key-change-me-32chars
+      SECRET_KEY: ${SECRET_KEY}32chars
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -222,7 +275,7 @@ services:
       MAX_UPLOAD_SIZE_MB: 50
       DATA_UPLOAD_MAX_MEMORY_SIZE: 52428800
       FILE_UPLOAD_MAX_MEMORY_SIZE: 52428800
-      EXPECTED_GATEWAY_TOKEN: complect_internal_secure_mesh_token_2026
+      EXPECTED_GATEWAY_TOKEN: ${EXPECTED_GATEWAY_TOKEN}
       DADATA_API_KEY: ${DADATA_API_KEY}
     ports:
       - "8010:8010"
@@ -275,7 +328,7 @@ services:
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: local-dev-insecure-key-change-me-32chars
+      SECRET_KEY: ${SECRET_KEY}32chars
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -389,10 +442,5 @@ services:
     networks:
       - erp_network
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
-
-
-
-
-
 
 

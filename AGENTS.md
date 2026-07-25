@@ -14,7 +14,8 @@ ERP «Комплект» — событийно-ориентированный �
 Глоссарий доменов: `CONCEPTS.md`
 ADR (23 штуки): `docs/adr/`
 Solution docs: `docs/solutions/` (patterns, database-issues, test-failures, dev-experience и др.)
-OpenCode plugin: `opencode.json` → compound-engineering plugin
+OpenCode plugin: `opencode.json` → [Superpowers](https://github.com/obra/superpowers.git) skills
+Память агентов: `docs/development/supermemory.md` — обязательная изоляция проектного и task-контекста через `containerTag`
 
 ---
 
@@ -58,6 +59,52 @@ make redis-cli       # Redis консоль
 make health          # curl http://localhost:8010/health/
 make celery-status   # ping celery worker
 ```
+
+---
+
+## Codex: агенты, память и MCP
+
+### Project-local агенты
+
+- `complect_explorer` — read-only поиск путей выполнения, ADR и доменных границ.
+- `complect_reviewer` — read-only проверка correctness, security, tenant isolation
+  и архитектурных инвариантов.
+- `complect_verifier` — запуск минимального релевантного набора Docker-проверок
+  без изменения исходного кода.
+- Делегировать только независимые ограниченные подзадачи. Основной агент
+  принимает решения, выполняет изменения и проверяет выводы подагентов.
+- Project-local custom roles запускать без полной истории
+  (`fork_turns="none"`), передавая самодостаточный brief. Full-history fork
+  наследует тип основного агента и несовместим с явным custom agent type.
+- Подагенты не читают и не записывают долговременную память самостоятельно.
+  Все операции памяти координирует основной агент с заранее выбранным точным
+  контейнером.
+
+### Supermemory
+
+- Полный протокол находится в `docs/development/supermemory.md`.
+- В начале задачи один раз выбрать `task-key`; не переиспользовать контейнер
+  завершённой или несвязанной задачи.
+- Проектный и task-контекст читать отдельными операциями с
+  `containerTag=complect:project` и
+  `containerTag=complect:task:<task-key>`.
+- Для каждой операции указывать ровно один `containerTag`. Recall без
+  `containerTag` запрещён.
+- Не сохранять секреты, токены, PII, полные логи, дампы БД и неподтверждённые
+  гипотезы как факты.
+
+### Add-only MCP policy
+
+- Перед изменением проверить глобальный и project config, затем выполнить
+  `codex mcp list`.
+- По умолчанию разрешено только добавление нового MCP под уникальным ID.
+  Удаление, отключение, переименование, замена или переопределение существующего
+  MCP и его transport/auth/tool policy требуют явного запроса пользователя с
+  точным ID сервера.
+- Переиспользуемый MCP добавлять в `~/.codex/config.toml`, нужный только Complect
+  — в `.codex/config.toml`; один ID не дублировать в обоих слоях.
+- Credentials передавать ссылками на environment variables, не literal
+  значениями в TOML. После изменения повторно выполнить `codex mcp list`.
 
 ---
 
@@ -181,7 +228,7 @@ RoleBinding.objects.create(user_id=correct_uuid, tenant_id=u.tenant_id, role=adm
 - **Context-Free** (`/api/v1/auth/`, `/docs`, `/openapi.json`) — требуют `X-Gateway-Token`, но без tenant/user
 - **Protected** (все остальные) — требуют `X-Gateway-Token` + `X-Tenant-ID` + `X-User-ID`
 
-Gateway token: `complect_internal_secure_mesh_token_2026` (dev).
+Gateway token: `$EXPECTED_GATEWAY_TOKEN` (dev).
 
 ---
 
@@ -346,13 +393,13 @@ Backend контейнер автоматически выполняет `migrat
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -H "X-Gateway-Token: complect_internal_secure_mesh_token_2026" \
-  -d '{"username": "testadmin", "password": "Admin123!", "device_fingerprint": "cli-agent-001"}'
+  -H "X-Gateway-Token: $EXPECTED_GATEWAY_TOKEN" \
+  -d "{\"username\":\"testadmin\",\"password\":\"${TESTADMIN_PASSWORD}\",\"device_fingerprint\":\"cli-agent-001\"}"
 ```
 
 ### Тестовый пользователь
 
-- Username: `testadmin`, Password: `Admin123!` (создан через `set_password`)
+- Username: `testadmin`, Password: `$TESTADMIN_PASSWORD` (создан через `set_password`)
 - Role: `admin` (30 permissions), tenant: `a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5`
 
 ### Frontend auth flow

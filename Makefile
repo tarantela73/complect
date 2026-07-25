@@ -40,6 +40,25 @@ postgres-logs:
 	$(COMPOSE) logs -f --tail=200 postgres_primary
 
 # ============================================
+# LOCAL AGENT MEMORY
+# ============================================
+
+supermemory-up:
+	curl --fail --silent --show-error http://127.0.0.1:8090/health >/dev/null
+	$(COMPOSE) up --build -d supermemory
+
+supermemory-logs:
+	$(COMPOSE) logs --no-color -f --tail=200 supermemory | sed -u -E 's/sm_[A-Za-z0-9_-]{20,}/[REDACTED_SUPERMEMORY_KEY]/g'
+
+supermemory-status:
+	curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8090/health
+	$(COMPOSE) ps supermemory
+	curl --fail --silent --show-error --output /dev/null http://127.0.0.1:6767/
+
+supermemory-down:
+	$(COMPOSE) stop supermemory
+
+# ============================================
 # DJANGO
 # ============================================
 
