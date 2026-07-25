@@ -55,13 +55,15 @@ Code подключаются официальными плагинами с
 
 Если локальная Supermemory доступна и нужен межсессионный контекст:
 
-1. Определить `task-key` и зафиксировать
-   `TASK_CONTAINER=complect:task:<task-key>`.
-2. Выполнить отдельный `recall` в `complect:project` с запросом по затронутым
+1. До первой операции памяти выбрать новый `task-key` и выполнить
+   `make agent-task-start TASK_KEY=<task-key>`. Команда атомарно синхронизирует
+   локальный `repoContainerTag` и task-state.
+2. Проверить конфигурацию командой `make agent-doctor`.
+3. Выполнить отдельный `recall` в `complect:project` с запросом по затронутым
    доменам и путям.
-3. Выполнить отдельный `recall` в `TASK_CONTAINER` по цели и текущему состоянию
+4. Выполнить отдельный `recall` в `complect:task:<task-key>` по цели и текущему состоянию
    задачи.
-4. Не выполнять `recall` без `containerTag` и не использовать контейнер другой
+5. Не выполнять `recall` без `containerTag` и не использовать контейнер другой
    задачи.
 
 Недоступность Supermemory не блокирует работу и не требует создания
@@ -114,7 +116,12 @@ Task scope:
 1. Сохранить в task-контейнер только короткий handoff, если работа будет
    продолжена в другой сессии.
 2. Продвинуть в проектный контейнер лишь проверенные переиспользуемые выводы.
-3. Не читать завершённый task-контейнер в новых несвязанных задачах.
+3. Выполнить `make agent-task-close`.
+4. Не читать завершённый task-контейнер в новых несвязанных задачах.
+
+Закрытый state намеренно переводит `make agent-doctor` в `FAIL`, пока для
+следующей работы не будет выбран и запущен новый уникальный task-key. Закрытый
+ключ повторно использовать нельзя.
 
 ## Локальный запуск
 
@@ -140,6 +147,12 @@ make supermemory-up
 make supermemory-status
 make supermemory-logs
 make supermemory-down
+
+make agent-task-start TASK_KEY=issue-142
+make agent-task-status
+make agent-doctor
+make agent-secret-check
+make agent-tools-test
 ```
 
 `supermemory-up` сначала проверяет `/health` у host `llama-server`.
@@ -149,6 +162,17 @@ make supermemory-down
 выводом в терминал.
 Команда `make destroy` удаляет все volumes dev-окружения, включая локальную
 память, и не должна использоваться без актуального backup.
+
+`make agent-doctor` выполняет детерминированные offline-проверки конфигурации,
+hooks, task-state, MCP manifests, плагинов и tracked-файлов. Команда
+`make agent-doctor-live` дополнительно проверяет Qwen, Supermemory, Docker и
+делает два независимых scoped search. Для live-режима локальная
+`SUPERMEMORY_CODEX_API_KEY` должна уже находиться в окружении; облачный
+Supermemory API key не требуется.
+
+Upstream-команда `supermemory-status` содержит hard-coded описание cadence и
+не является авторитетным источником этих настроек. `agent-doctor` читает
+фактические `autoRecallEveryPrompt`, `captureEveryNTurns` и наличие Stop hook.
 
 ## Секреты и данные
 
@@ -203,6 +227,15 @@ Claude Code:
 flush следующей задачи. Там же хранится
 `personalContainerTag=complect:project`, чтобы Codex читал переиспользуемые
 знания только при работе внутри Complect.
+
+Ручной wrapper запускается как
+`python3 -m infra.scripts.agent_tools.memory search` и требует ровно один
+явный `--container`. Он выводит только container и количество результатов.
+Операция `save` реализована fail-closed и сейчас отключена: локальный server
+`0.0.6` принимает запись, но не подтверждает `customId` в ответе. До отдельной
+проверки совместимой версии wrapper блокирует save до HTTP-запроса. Удаление и
+повторная вставка как обход не используются; финальный flush официального
+плагина продолжает работать с активным `repoContainerTag`.
 
 ## Backup и restore
 
