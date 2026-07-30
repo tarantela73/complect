@@ -58,6 +58,9 @@ supermemory-status:
 supermemory-down:
 	$(COMPOSE) stop supermemory
 
+agent-infra-test:
+	python3 -m unittest discover -s infra/scripts/tests -v
+
 # ============================================
 # DJANGO
 # ============================================
