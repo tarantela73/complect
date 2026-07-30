@@ -58,6 +58,22 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres_replication_auth:
+    image: postgis/postgis:16-3.4
+    container_name: complect_postgres_replication_auth
+    restart: "no"
+    entrypoint: ["/bin/bash", "/opt/complect/reconcile_replication.sh"]
+    volumes:
+      - ./infra/postgres/reconcile_replication.sh:/opt/complect/reconcile_replication.sh:ro
+    secrets:
+      - db_root_password
+      - replication_password
+    networks:
+      - erp_network
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+
   postgres_replica:
     image: postgis/postgis:16-3.4
     container_name: complect_postgres_replica
@@ -89,6 +105,8 @@ services:
     depends_on:
       postgres_primary:
         condition: service_healthy
+      postgres_replication_auth:
+        condition: service_completed_successfully
 
   # --- REALTIME & CACHE LAYER (Redis Alpine) ---
   redis:

@@ -126,7 +126,10 @@ OpenAI-compatible alias `qwen3-coder`. Compose обращается к нему 
 `infra/secrets/dev_db_password.txt`, `infra/secrets/dev_s3_password.txt` и
 `infra/secrets/dev_replication_password.txt`. Последний файл используется и
 primary init script, и `pg_basebackup`; значение не хранится в Compose, SQL или
-environment контейнера.
+environment контейнера. Перед запуском replica одноразовый сервис
+`postgres_replication_auth` идемпотентно выполняет `ALTER ROLE` на уже
+существующем primary. Поэтому смена replication secret и пересоздание только
+replica volume не требуют удаления `pg_primary_data`.
 
 Первый запуск Supermemory скачивает серверный образ и встроенную
 embedding-модель объёмом около 106 MB. Он может быть заметно дольше
