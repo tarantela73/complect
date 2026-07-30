@@ -11,7 +11,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
-from .common import NoRedirectHandler, validate_container_tag, validate_loopback_http_url
+from .common import (
+    NoRedirectHandler,
+    validate_container_tag,
+    validate_loopback_http_url,
+    validate_task_state,
+)
 from .doctor import HttpProbe, HttpResponse
 
 ALLOWED_KINDS = {"decision", "finding", "feedback", "handoff", "reference"}
@@ -37,16 +42,37 @@ def build_search_payload(container_tag: str, query: str, limit: int) -> dict[str
 
 
 def validate_save_scope(container_tag: str, task_state: Mapping[str, object] | None) -> tuple[str, str | None]:
+    return _validate_active_task_scope(container_tag, task_state, operation="save")
+
+
+def validate_search_scope(
+    container_tag: str,
+    task_state: Mapping[str, object] | None,
+) -> tuple[str, str | None]:
+    return _validate_active_task_scope(container_tag, task_state, operation="search")
+
+
+def _validate_active_task_scope(
+    container_tag: str,
+    task_state: Mapping[str, object] | None,
+    *,
+    operation: str,
+) -> tuple[str, str | None]:
     scope, task_key = validate_container_tag(container_tag)
     if scope == "task":
-        active_match = (
-            task_state is not None
-            and task_state.get("status") == "active"
-            and task_state.get("taskKey") == task_key
-            and task_state.get("containerTag") == container_tag
-        )
-        if not active_match:
-            raise ValueError("task save requires the matching active task container")
+        if task_state is None:
+            raise ValueError(f"task {operation} requires the matching active task container")
+        try:
+            active_task_key, active_container, _ = validate_task_state(
+                task_state,
+                require_active=True,
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"task {operation} requires the matching active task container"
+            ) from error
+        if active_task_key != task_key or active_container != container_tag:
+            raise ValueError(f"task {operation} requires the matching active task container")
     return scope, task_key
 
 
@@ -120,7 +146,15 @@ class SupermemoryClient:
             )
         return response
 
-    def search(self, container_tag: str, query: str, limit: int) -> int:
+    def search(
+        self,
+        container_tag: str,
+        query: str,
+        limit: int,
+        *,
+        task_state: Mapping[str, object] | None,
+    ) -> int:
+        validate_search_scope(container_tag, task_state)
         payload = build_search_payload(container_tag, query, limit)
         response = self._post("/v4/search", container_tag, payload)
         body = response.json_body or {}
@@ -215,7 +249,14 @@ def main() -> int:
     )
     try:
         if args.command == "search":
-            client.search(args.container, args.query, args.limit)
+            scope, _ = validate_container_tag(args.container)
+            task_state = _read_task_state(_git_root()) if scope == "task" else None
+            client.search(
+                args.container,
+                args.query,
+                args.limit,
+                task_state=task_state,
+            )
         else:
             content = (
                 sys.stdin.read()

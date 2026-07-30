@@ -20,6 +20,24 @@ RULES = (
 )
 CANDIDATE_SUFFIXES = {".md", ".toml", ".json", ".yaml", ".yml", ".sh", ".env", ".example"}
 SPECIAL_NAMES = {"Dockerfile", "Makefile", "docker-compose.dev.yml"}
+CREDENTIAL_CONFIG_SUFFIXES = {".toml", ".json", ".yaml", ".yml", ".env", ".example"}
+CREDENTIAL_FIELD_PATTERN = re.compile(
+    r"""(?ix)
+    ["']?
+    (?P<field>[a-z0-9_.-]*(?:api[_-]?key|token|secret|password)[a-z0-9_.-]*)
+    ["']?
+    \s*[:=]\s*
+    ["']?(?P<value>[^\s,"'}\#]+)
+    """
+)
+CREDENTIAL_PLACEHOLDERS = (
+    "REQUIRED",
+    "CHANGEME",
+    "CHANGE_ME",
+    "PLACEHOLDER",
+    "EXAMPLE",
+    "DUMMY",
+)
 
 
 @dataclass(frozen=True)
@@ -41,10 +59,24 @@ def is_candidate_path(path: Path) -> bool:
 
 def scan_text(path: Path, text: str) -> list[Finding]:
     findings: list[Finding] = []
+    scan_credential_fields = path.suffix.lower() in CREDENTIAL_CONFIG_SUFFIXES
     for line_number, line in enumerate(text.splitlines(), start=1):
+        matched_specific_rule = False
         for rule, pattern in RULES:
             if pattern.search(line):
                 findings.append(Finding(path=path, line=line_number, rule=rule))
+                matched_specific_rule = True
+        credential_match = CREDENTIAL_FIELD_PATTERN.search(line) if scan_credential_fields else None
+        if credential_match and not matched_specific_rule:
+            field = credential_match.group("field")
+            value = credential_match.group("value")
+            is_reference = value.startswith(("$", "<", "{", "`", "__"))
+            is_placeholder = value.upper().startswith(CREDENTIAL_PLACEHOLDERS)
+            is_secret_file_reference = field.lower().endswith("_file") and value.startswith("/run/secrets/")
+            if len(value) >= 16 and not is_reference and not is_placeholder and not is_secret_file_reference:
+                findings.append(
+                    Finding(path=path, line=line_number, rule="credential-field")
+                )
     return findings
 
 

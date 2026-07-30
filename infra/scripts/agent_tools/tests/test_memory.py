@@ -9,6 +9,7 @@ from infra.scripts.agent_tools.memory import (
     SupermemoryClient,
     build_save_payload,
     build_search_payload,
+    validate_search_scope,
     validate_save_scope,
 )
 
@@ -25,6 +26,18 @@ class MemoryPayloadTests(unittest.TestCase):
             validate_save_scope(
                 "complect:task:issue-142",
                 {"taskKey": "issue-143", "containerTag": "complect:task:issue-143", "status": "active"},
+            )
+
+    def test_task_search_requires_active_matching_task(self) -> None:
+        with self.assertRaisesRegex(ValueError, "active task"):
+            validate_search_scope(
+                "complect:task:issue-142",
+                {
+                    "version": 1,
+                    "taskKey": "issue-143",
+                    "containerTag": "complect:task:issue-143",
+                    "status": "active",
+                },
             )
 
     def test_save_requires_custom_id(self) -> None:
@@ -84,12 +97,28 @@ class SupermemoryClientTests(unittest.TestCase):
         )
 
     def test_search_prints_only_container_and_count(self) -> None:
-        count = self.client().search("complect:project", "agent doctor", 5)
+        count = self.client().search("complect:project", "agent doctor", 5, task_state=None)
 
         self.assertEqual(count, 1)
         self.assertEqual(self.output.getvalue(), "search container=complect:project count=1\n")
         self.assertNotIn("never print", self.output.getvalue())
         self.assertNotIn("sm_", self.output.getvalue())
+
+    def test_task_search_is_blocked_before_http_without_matching_state(self) -> None:
+        with self.assertRaisesRegex(ValueError, "active task"):
+            self.client().search(
+                "complect:task:unrelated-task",
+                "agent doctor",
+                5,
+                task_state={
+                    "version": 1,
+                    "taskKey": "issue-142",
+                    "containerTag": "complect:task:issue-142",
+                    "status": "active",
+                },
+            )
+
+        self.assertEqual(self.calls, [])
 
     def test_save_prints_only_custom_id_and_container(self) -> None:
         custom_id = self.client().save(
@@ -121,7 +150,7 @@ class SupermemoryClientTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(MemoryHttpError, "endpoint=/v4/search status=500 container=complect:project"):
-            client.search("complect:project", "agent doctor", 5)
+            client.search("complect:project", "agent doctor", 5, task_state=None)
 
         self.assertNotIn("sm_", self.output.getvalue())
 

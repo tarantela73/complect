@@ -13,6 +13,7 @@ from infra.scripts.agent_tools.common import (
     validate_container_tag,
     validate_task_key,
 )
+from infra.scripts.agent_tools import common
 from infra.scripts.agent_tools.task import close_task, read_task_status, start_task
 
 
@@ -132,6 +133,65 @@ class TaskLifecycleTests(unittest.TestCase):
 
         self.assertEqual(self.read_json(self.config_path), {"original": True})
         self.assertEqual(list(self.config_path.parent.glob(".config.json.*.tmp")), [])
+
+    def test_start_keeps_config_unchanged_when_state_write_fails(self) -> None:
+        self.write_json(self.config_path, {"repoContainerTag": "complect:task:old-task"})
+
+        def fail_state_write(path: Path, payload: dict[str, object]) -> None:
+            if path == self.state_path:
+                raise OSError("state write failed")
+            common.atomic_write_json(path, payload)
+
+        with patch(
+            "infra.scripts.agent_tools.task.atomic_write_json",
+            side_effect=fail_state_write,
+        ):
+            with self.assertRaisesRegex(OSError, "state write failed"):
+                start_task(self.config_path, self.state_path, "new-task", self.now)
+
+        self.assertEqual(
+            self.read_json(self.config_path)["repoContainerTag"],
+            "complect:task:old-task",
+        )
+        self.assertFalse(self.state_path.exists())
+
+    def test_start_rolls_back_state_when_config_write_fails(self) -> None:
+        old_state = {
+            "version": 1,
+            "taskKey": "old-task",
+            "containerTag": "complect:task:old-task",
+            "status": "closed",
+            "startedAt": self.now.isoformat(),
+            "closedAt": self.now.isoformat(),
+            "closedTaskKeys": ["old-task"],
+        }
+        old_config = {
+            "repoContainerTag": "complect:task:old-task",
+            "personalContainerTag": "complect:project",
+        }
+        self.write_json(self.state_path, old_state)
+        self.write_json(self.config_path, old_config)
+        write_paths: list[Path] = []
+
+        def fail_config_write(path: Path, payload: dict[str, object]) -> None:
+            write_paths.append(path)
+            if path == self.config_path:
+                raise OSError("config write failed")
+            common.atomic_write_json(path, payload)
+
+        with patch(
+            "infra.scripts.agent_tools.task.atomic_write_json",
+            side_effect=fail_config_write,
+        ):
+            with self.assertRaisesRegex(OSError, "config write failed"):
+                start_task(self.config_path, self.state_path, "new-task", self.now)
+
+        self.assertEqual(self.read_json(self.state_path), old_state)
+        self.assertEqual(self.read_json(self.config_path), old_config)
+        self.assertEqual(
+            write_paths,
+            [self.state_path, self.config_path, self.state_path],
+        )
 
 
 if __name__ == "__main__":
