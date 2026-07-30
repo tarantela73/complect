@@ -275,6 +275,27 @@ class TaskLifecycleTests(unittest.TestCase):
         self.assertEqual(self.read_json(self.state_path), recovered)
         self.assertFalse(self.state_path.with_name("task-transition.json").exists())
 
+    def test_close_clears_applied_intent_and_closed_task_cannot_reopen(self) -> None:
+        class SimulatedProcessDeath(BaseException):
+            pass
+
+        with patch(
+            "infra.scripts.agent_tools.task.durable_unlink",
+            side_effect=SimulatedProcessDeath,
+        ):
+            with self.assertRaises(SimulatedProcessDeath):
+                start_task(self.config_path, self.state_path, "issue-142", self.now)
+
+        self.assertEqual(self.read_json(self.state_path)["status"], "active")
+        self.assertTrue(self.state_path.with_name("task-transition.json").exists())
+
+        closed = close_task(self.config_path, self.state_path, self.now)
+
+        self.assertEqual(closed["status"], "closed")
+        self.assertFalse(self.state_path.with_name("task-transition.json").exists())
+        with self.assertRaisesRegex(ValueError, "already closed"):
+            start_task(self.config_path, self.state_path, "issue-142", self.now)
+
 
 if __name__ == "__main__":
     unittest.main()
