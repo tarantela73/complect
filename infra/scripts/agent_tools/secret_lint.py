@@ -20,7 +20,7 @@ RULES = (
 )
 CANDIDATE_SUFFIXES = {".md", ".toml", ".json", ".yaml", ".yml", ".sh", ".env", ".example"}
 SPECIAL_NAMES = {"Dockerfile", "Makefile", "docker-compose.dev.yml"}
-CREDENTIAL_CONFIG_SUFFIXES = {".toml", ".json", ".yaml", ".yml", ".env", ".example"}
+CREDENTIAL_FIELD_SUFFIXES = CANDIDATE_SUFFIXES - {".md"}
 CREDENTIAL_FIELD_PATTERN = re.compile(
     r"""(?ix)
     ["']?
@@ -59,21 +59,40 @@ def is_candidate_path(path: Path) -> bool:
 
 def scan_text(path: Path, text: str) -> list[Finding]:
     findings: list[Finding] = []
-    scan_credential_fields = path.suffix.lower() in CREDENTIAL_CONFIG_SUFFIXES
+    scan_credential_fields = (
+        path.name in SPECIAL_NAMES or path.suffix.lower() in CREDENTIAL_FIELD_SUFFIXES
+    )
     for line_number, line in enumerate(text.splitlines(), start=1):
-        matched_specific_rule = False
+        specific_spans: list[tuple[int, int]] = []
         for rule, pattern in RULES:
-            if pattern.search(line):
+            for match in pattern.finditer(line):
                 findings.append(Finding(path=path, line=line_number, rule=rule))
-                matched_specific_rule = True
-        credential_match = CREDENTIAL_FIELD_PATTERN.search(line) if scan_credential_fields else None
-        if credential_match and not matched_specific_rule:
+                specific_spans.append(match.span())
+        credential_matches = (
+            CREDENTIAL_FIELD_PATTERN.finditer(line) if scan_credential_fields else ()
+        )
+        for credential_match in credential_matches:
             field = credential_match.group("field")
             value = credential_match.group("value")
+            value_start, value_end = credential_match.span("value")
+            overlaps_specific_rule = any(
+                max(value_start, start) < min(value_end, end)
+                for start, end in specific_spans
+            )
             is_reference = value.startswith(("$", "<", "{", "`", "__"))
             is_placeholder = value.upper().startswith(CREDENTIAL_PLACEHOLDERS)
             is_secret_file_reference = field.lower().endswith("_file") and value.startswith("/run/secrets/")
-            if len(value) >= 16 and not is_reference and not is_placeholder and not is_secret_file_reference:
+            is_psql_reference = path.suffix.lower() == ".sh" and bool(
+                re.search(r"\bPASSWORD\s+:'[A-Za-z_][A-Za-z0-9_]*'\s*;", line, re.IGNORECASE)
+            )
+            if (
+                len(value) >= 16
+                and not overlaps_specific_rule
+                and not is_reference
+                and not is_placeholder
+                and not is_secret_file_reference
+                and not is_psql_reference
+            ):
                 findings.append(
                     Finding(path=path, line=line_number, rule="credential-field")
                 )

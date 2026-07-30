@@ -13,6 +13,7 @@ from pathlib import Path
 TASK_KEY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PROJECT_CONTAINER = "complect:project"
 TASK_CONTAINER_PREFIX = "complect:task:"
+DEFAULT_SUPERMEMORY_URL = "http://127.0.0.1:6767"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,14 @@ def validate_loopback_http_url(value: str) -> str:
     return value.rstrip("/")
 
 
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
@@ -115,6 +124,14 @@ def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
             os.fsync(temporary_file.fileno())
         os.replace(temporary_path, path)
         temporary_path = None
+        _fsync_directory(path.parent)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def durable_unlink(path: Path) -> None:
+    if not path.exists():
+        return
+    path.unlink()
+    _fsync_directory(path.parent)

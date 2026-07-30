@@ -16,6 +16,7 @@ from typing import Protocol
 from .common import (
     CommandResult,
     CommandRunner,
+    DEFAULT_SUPERMEMORY_URL,
     NoRedirectHandler,
     validate_loopback_http_url,
     validate_task_state,
@@ -176,9 +177,24 @@ def _check_memory_configuration(context: DoctorContext) -> list[Check]:
         return [
             hook_check,
             cadence_check,
+            Check("supermemory-url", Status.FAIL, "local Supermemory URL is missing or invalid"),
             Check("task-state", Status.FAIL, "missing local task state; run make agent-task-start"),
             Check("memory-scope", Status.FAIL, "local memory scope is not configured"),
         ]
+
+    base_url = config.get("baseUrl", DEFAULT_SUPERMEMORY_URL)
+    try:
+        if not isinstance(base_url, str):
+            raise ValueError("baseUrl must be a string")
+        validate_loopback_http_url(base_url)
+        url_valid = True
+    except ValueError:
+        url_valid = False
+    url_check = Check(
+        "supermemory-url",
+        Status.PASS if url_valid else Status.FAIL,
+        "loopback HTTP endpoint" if url_valid else "baseUrl must be loopback HTTP with an explicit port",
+    )
 
     try:
         _, container, status = validate_task_state(state, require_active=False)
@@ -200,12 +216,12 @@ def _check_memory_configuration(context: DoctorContext) -> list[Check]:
     personal_ok = config.get("personalContainerTag") == "complect:project"
     scope_check = Check(
         "memory-scope",
-        Status.PASS if personal_ok and matching and active else Status.FAIL,
+        Status.PASS if personal_ok and matching and active and url_valid else Status.FAIL,
         "project read scope and task write scope are isolated"
-        if personal_ok and matching and active
+        if personal_ok and matching and active and url_valid
         else "project and task memory scopes are inconsistent",
     )
-    return [hook_check, cadence_check, task_check, scope_check]
+    return [hook_check, cadence_check, url_check, task_check, scope_check]
 
 
 def _check_mcp(context: DoctorContext) -> list[Check]:
@@ -330,7 +346,7 @@ def run_live_checks(context: DoctorContext) -> list[Check]:
     checks = [_probe_check(context, "qwen-health", "http://127.0.0.1:8090/health")]
     try:
         base_url = validate_loopback_http_url(
-            str(config.get("baseUrl", "http://127.0.0.1:6767"))
+            str(config.get("baseUrl", DEFAULT_SUPERMEMORY_URL))
         )
     except ValueError:
         checks.append(Check("supermemory-url", Status.FAIL, "base URL is not an allowed loopback HTTP endpoint"))

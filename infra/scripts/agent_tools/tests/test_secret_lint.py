@@ -57,6 +57,31 @@ temp_password = secrets.token_urlsafe(32)
 
         self.assertEqual(scan_text(Path("setup.md"), documentation), [])
 
+    def test_reports_every_literal_credential_field_on_one_line(self) -> None:
+        text = '{"apiKey":"${API_KEY}","password":"literal-production-password-123456"}'
+
+        findings = scan_text(Path("settings.json"), text)
+
+        self.assertEqual([finding.rule for finding in findings], ["credential-field"])
+
+    def test_scans_shell_and_dockerfile_assignments(self) -> None:
+        shell_findings = scan_text(
+            Path("bootstrap.sh"),
+            'service_token="literal-production-token-123456"\n',
+        )
+        docker_findings = scan_text(
+            Path("Dockerfile"),
+            "ENV SERVICE_PASSWORD=literal-production-password-123456\n",
+        )
+
+        self.assertEqual([finding.rule for finding in shell_findings], ["credential-field"])
+        self.assertEqual([finding.rule for finding in docker_findings], ["credential-field"])
+
+    def test_allows_psql_variable_references_in_shell_scripts(self) -> None:
+        text = "PASSWORD :'replication_password';\n"
+
+        self.assertEqual(scan_text(Path("bootstrap.sh"), text), [])
+
     def test_ignores_unsupported_binary_and_local_env(self) -> None:
         self.assertFalse(is_candidate_path(Path(".env")))
         self.assertFalse(is_candidate_path(Path(".env.local")))
