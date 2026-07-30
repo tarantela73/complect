@@ -2,6 +2,9 @@ networks:
   erp_network:
     name: erp_network
     driver: bridge
+  supermemory_network:
+    name: complect_supermemory_network
+    driver: bridge
 
 volumes:
   pg_primary_data:
@@ -18,6 +21,8 @@ secrets:
     file: ./infra/secrets/dev_db_password.txt
   s3_root_password:
     file: ./infra/secrets/dev_s3_password.txt
+  replication_password:
+    file: ./infra/secrets/dev_replication_password.txt
 
 services:
   # --- DATABASE CONTEXT (PostgreSQL 16 + PostGIS кластер репликации) ---
@@ -44,6 +49,7 @@ services:
       - pg_primary_data:/var/lib/postgresql/data
     secrets:
       - db_root_password
+      - replication_password
     networks:
       - erp_network
     healthcheck:
@@ -56,14 +62,14 @@ services:
     image: postgis/postgis:16-3.4
     container_name: complect_postgres_replica
     restart: unless-stopped
-    environment:
-      PGPASSWORD: ${POSTGRES_REPLICATION_PASSWORD}2026
     ports:
       - "5433:5432"
     volumes:
       - pg_replica_data:/var/lib/postgresql/data
     networks:
       - erp_network
+    secrets:
+      - replication_password
     entrypoint: >
       bash -c "
       if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
@@ -73,7 +79,9 @@ services:
           sleep 1;
         done;
         rm -rf /var/lib/postgresql/data/*;
-        pg_basebackup -h postgres_primary -p 5432 -D /var/lib/postgresql/data -U replicator -v -P -R -X stream;
+        replication_password=$$(cat /run/secrets/replication_password);
+        PGPASSWORD=\"$$replication_password\" pg_basebackup -h postgres_primary -p 5432 -D /var/lib/postgresql/data -U replicator -v -P -R -X stream;
+        unset replication_password;
         echo 'Базовый бэкап завершен, запускаю реплику';
       fi;
       exec docker-entrypoint.sh postgres -c hot_standby=on
@@ -141,7 +149,7 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,size=512m
     networks:
-      - erp_network
+      - supermemory_network
     depends_on:
       supermemory_data_init:
         condition: service_completed_successfully
@@ -258,7 +266,7 @@ services:
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: ${SECRET_KEY}32chars
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -275,7 +283,7 @@ services:
       MAX_UPLOAD_SIZE_MB: 50
       DATA_UPLOAD_MAX_MEMORY_SIZE: 52428800
       FILE_UPLOAD_MAX_MEMORY_SIZE: 52428800
-      EXPECTED_GATEWAY_TOKEN: ${EXPECTED_GATEWAY_TOKEN}
+      EXPECTED_GATEWAY_TOKEN: "${EXPECTED_GATEWAY_TOKEN:?EXPECTED_GATEWAY_TOKEN is required}"
       DADATA_API_KEY: ${DADATA_API_KEY}
     ports:
       - "8010:8010"
@@ -328,7 +336,7 @@ services:
       DATABASE_HOST: postgres_primary
       DATABASE_REPLICA_HOST: postgres_replica
       DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: ${SECRET_KEY}32chars
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
       POSTGRES_REPLICA_ENABLED: "true"
       POSTGRES_REPLICA_MAX_LAG: "1.0"
       REDIS_DEFAULT_URL: redis://redis:6379/0
@@ -442,5 +450,3 @@ services:
     networks:
       - erp_network
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
-
-

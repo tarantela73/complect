@@ -13,6 +13,11 @@ Supermemory работает в Docker, использует встроенны�
 `llama.cpp` с локальной моделью `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`.
 Телеметрия отключена.
 
+Контейнер подключён только к выделенной сети `complect_supermemory_network`.
+ERP-сервисы к этой сети не подключаются: loopback binding защищает host-порт,
+а отдельная bridge-сеть исключает доступ к API и странице с ключом из
+backend/frontend/worker контейнеров.
+
 Pinned server `0.0.6` пока не поддерживает переменные
 `SUPERMEMORY_EMBEDDING_*`, появившиеся в документации после его выпуска.
 Поэтому `bge-m3` нельзя включить декларативно в этой версии. Для русских
@@ -116,6 +121,12 @@ Task scope:
 До запуска Supermemory должен работать `llama-server` на `0.0.0.0:8090` с
 OpenAI-compatible alias `qwen3-coder`. Compose обращается к нему через
 `host.docker.internal`; порт не публикуется из контейнера.
+
+Перед первым запуском dev-стека создать локальные Docker Secret files
+`infra/secrets/dev_db_password.txt`, `infra/secrets/dev_s3_password.txt` и
+`infra/secrets/dev_replication_password.txt`. Последний файл используется и
+primary init script, и `pg_basebackup`; значение не хранится в Compose, SQL или
+environment контейнера.
 
 Первый запуск Supermemory скачивает серверный образ и встроенную
 embedding-модель объёмом около 106 MB. Он может быть заметно дольше
