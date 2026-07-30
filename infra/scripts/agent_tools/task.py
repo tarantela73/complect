@@ -78,6 +78,16 @@ def _complete_start_transition(
     return state
 
 
+def _clear_applied_transition(state_path: Path, state: Mapping[str, object]) -> None:
+    transition_path = _transition_path(state_path)
+    pending_transition = _read_json(transition_path)
+    if not pending_transition:
+        return
+    if _transition_state(pending_transition) != state:
+        raise ValueError("task transition is pending; recover it with agent-task-start")
+    durable_unlink(transition_path)
+
+
 def start_task(
     config_path: Path,
     state_path: Path,
@@ -87,6 +97,7 @@ def start_task(
     task_key = validate_task_key(task_key)
     config = _read_json(config_path)
     _validate_memory_config(config)
+    previous_state = _read_json(state_path)
     transition_path = _transition_path(state_path)
     pending_transition = _read_json(transition_path)
     if pending_transition:
@@ -95,16 +106,32 @@ def start_task(
             pending_state,
             require_active=True,
         )
-        if pending_task_key != task_key:
-            raise ValueError(f"recover pending task {pending_task_key} before starting another task-key")
-        return _complete_start_transition(
-            config_path,
-            state_path,
-            config,
-            pending_state,
-        )
+        if previous_state == pending_state:
+            durable_unlink(transition_path)
+            pending_transition = {}
+        elif previous_state:
+            previous_task_key, _, previous_status = validate_task_state(
+                previous_state,
+                require_active=False,
+            )
+            already_closed = (
+                previous_status == "closed"
+                and previous_task_key == pending_task_key
+                and pending_task_key in _closed_task_keys(previous_state)
+            )
+            if already_closed:
+                durable_unlink(transition_path)
+                pending_transition = {}
+        if pending_transition:
+            if pending_task_key != task_key:
+                raise ValueError(f"recover pending task {pending_task_key} before starting another task-key")
+            return _complete_start_transition(
+                config_path,
+                state_path,
+                config,
+                pending_state,
+            )
 
-    previous_state = _read_json(state_path)
     closed_task_keys = _closed_task_keys(previous_state)
     if previous_state.get("status") == "active":
         active_task_key, active_container, _ = validate_task_state(
@@ -153,6 +180,7 @@ def close_task(config_path: Path, state_path: Path, now: datetime) -> dict[str, 
     state = read_task_status(config_path, state_path)
     if state.get("status") != "active":
         raise ValueError("no active task to close")
+    _clear_applied_transition(state_path, state)
     task_key = state.get("taskKey")
     if not isinstance(task_key, str):
         raise ValueError("task state has no valid taskKey")
