@@ -29,15 +29,16 @@ services:
           credentials: true
           preflight_continue: false
           max_age: 3600
-      - name: request-transformer
-        config:
-          add:
-            headers:
-              - "X-Gateway-Token:complect_internal_secure_mesh_token_2026"
       - name: pre-function
         config:
           access:
             - |
+              local gateway_token = kong.vault.get("{vault://env/EXPECTED_GATEWAY_TOKEN}")
+              if not gateway_token then
+                return kong.response.exit(500, { message = "Gateway trust configuration unavailable" })
+              end
+              kong.service.request.set_header("X-Gateway-Token", gateway_token)
+
               local auth = kong.request.get_header("Authorization")
               if auth and auth:sub(1, 7) == "Bearer " then
                 local token = auth:sub(8)
