@@ -229,6 +229,7 @@ services:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
       KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      EXPECTED_GATEWAY_TOKEN: "${EXPECTED_GATEWAY_TOKEN:?EXPECTED_GATEWAY_TOKEN is required}"
     ports:
       - "8000:8000"
     volumes:

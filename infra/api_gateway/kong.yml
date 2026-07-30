@@ -33,7 +33,7 @@ services:
         config:
           add:
             headers:
-              - "X-Gateway-Token:complect_internal_secure_mesh_token_2026"
+              - "X-Gateway-Token:{vault://env/EXPECTED_GATEWAY_TOKEN}"
       - name: pre-function
         config:
           access:

@@ -64,6 +64,24 @@ class AgentInfrastructureTests(unittest.TestCase):
             configuration["services"]["postgres_replica"].get("environment", {}),
         )
 
+    def test_gateway_token_is_loaded_from_the_environment_vault(self) -> None:
+        result = compose_config()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        configuration = json.loads(result.stdout)
+
+        gateway_environment = configuration["services"]["api_gateway"]["environment"]
+        self.assertEqual(
+            gateway_environment["EXPECTED_GATEWAY_TOKEN"],
+            "verification-only-gateway",
+        )
+
+        declarative_config = (PROJECT_ROOT / "infra/api_gateway/kong.yml").read_text()
+        self.assertIn(
+            "X-Gateway-Token:{vault://env/EXPECTED_GATEWAY_TOKEN}",
+            declarative_config,
+        )
+        self.assertNotIn("complect_internal_secure_mesh_token_2026", declarative_config)
+
 
 if __name__ == "__main__":
     unittest.main()
