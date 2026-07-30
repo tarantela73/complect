@@ -64,7 +64,27 @@ class AgentInfrastructureTests(unittest.TestCase):
             configuration["services"]["postgres_replica"].get("environment", {}),
         )
 
-    def test_gateway_token_is_loaded_from_the_environment_vault(self) -> None:
+    def test_existing_primary_reconciles_replication_password_before_replica(self) -> None:
+        result = compose_config()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        configuration = json.loads(result.stdout)
+
+        reconcile = configuration["services"]["postgres_replication_auth"]
+        self.assertEqual(reconcile["restart"], "no")
+        self.assertEqual(
+            {secret["source"] for secret in reconcile["secrets"]},
+            {"db_root_password", "replication_password"},
+        )
+        self.assertEqual(
+            configuration["services"]["postgres_replica"]["depends_on"]["postgres_replication_auth"]["condition"],
+            "service_completed_successfully",
+        )
+
+        reconcile_script = (PROJECT_ROOT / "infra/postgres/reconcile_replication.sh").read_text()
+        self.assertIn("ALTER ROLE replicator", reconcile_script)
+        self.assertIn("/run/secrets/replication_password", reconcile_script)
+
+    def test_gateway_token_is_loaded_by_the_pre_function(self) -> None:
         result = compose_config()
         self.assertEqual(result.returncode, 0, result.stderr)
         configuration = json.loads(result.stdout)
@@ -76,10 +96,9 @@ class AgentInfrastructureTests(unittest.TestCase):
         )
 
         declarative_config = (PROJECT_ROOT / "infra/api_gateway/kong.yml").read_text()
-        self.assertIn(
-            "X-Gateway-Token:{vault://env/EXPECTED_GATEWAY_TOKEN}",
-            declarative_config,
-        )
+        self.assertIn('kong.vault.get("{vault://env/EXPECTED_GATEWAY_TOKEN}")', declarative_config)
+        self.assertIn('kong.service.request.set_header("X-Gateway-Token", gateway_token)', declarative_config)
+        self.assertNotIn("name: request-transformer", declarative_config)
         self.assertNotIn("complect_internal_secure_mesh_token_2026", declarative_config)
 
 
