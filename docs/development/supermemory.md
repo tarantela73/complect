@@ -56,8 +56,10 @@ Code подключаются официальными плагинами с
 Если локальная Supermemory доступна и нужен межсессионный контекст:
 
 1. До первой операции памяти выбрать новый `task-key` и выполнить
-   `make agent-task-start TASK_KEY=<task-key>`. Команда атомарно синхронизирует
-   локальный `repoContainerTag` и task-state.
+   `make agent-task-start TASK_KEY=<task-key>`. Команда сначала сохраняет
+   recoverable intent, затем переключает канонический для Stop hook
+   `repoContainerTag` и только после этого фиксирует task-state. При аварийном
+   завершении повтор той же команды с тем же ключом безопасно завершает переход.
 2. Проверить конфигурацию командой `make agent-doctor`.
 3. Выполнить отдельный `recall` в `complect:project` с запросом по затронутым
    доменам и путям.
@@ -164,7 +166,7 @@ make agent-tools-test
 память, и не должна использоваться без актуального backup.
 
 `make agent-doctor` выполняет детерминированные offline-проверки конфигурации,
-hooks, task-state, MCP manifests, плагинов и tracked-файлов. Команда
+loopback `baseUrl`, hooks, task-state, MCP manifests, плагинов и tracked-файлов. Команда
 `make agent-doctor-live` дополнительно проверяет Qwen, Supermemory, Docker и
 делает два независимых scoped search. Для live-режима локальная
 `SUPERMEMORY_CODEX_API_KEY` должна уже находиться в окружении; облачный
@@ -226,7 +228,9 @@ Claude Code:
 текущей задачей, не должно коммититься и обязательно меняется перед первым
 flush следующей задачи. Там же хранится
 `personalContainerTag=complect:project`, чтобы Codex читал переиспользуемые
-знания только при работе внутри Complect.
+знания только при работе внутри Complect. Явный `baseUrl`, если он задан,
+обязан быть loopback HTTP URL с портом; при отсутствии используется безопасный
+локальный default `http://127.0.0.1:6767`.
 
 Ручной wrapper запускается как
 `python3 -m infra.scripts.agent_tools.memory search` и требует ровно один

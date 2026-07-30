@@ -8,15 +8,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .common import (
+    DEFAULT_SUPERMEMORY_URL,
     PROJECT_CONTAINER,
     TASK_CONTAINER_PREFIX,
     atomic_write_json,
+    durable_unlink,
+    validate_loopback_http_url,
     validate_task_key,
     validate_task_state,
 )
 
 DEFAULT_CONFIG_PATH = Path(".claude/.supermemory-claude/config.json")
 DEFAULT_STATE_PATH = Path(".claude/.supermemory-claude/task-state.json")
+TRANSITION_FILENAME = "task-transition.json"
 
 
 def _read_json(path: Path) -> dict[str, object]:
@@ -35,6 +39,45 @@ def _closed_task_keys(state: Mapping[str, object]) -> list[str]:
     return list(value)
 
 
+def _validate_memory_config(config: dict[str, object]) -> None:
+    base_url = config.get("baseUrl", DEFAULT_SUPERMEMORY_URL)
+    if not isinstance(base_url, str):
+        raise ValueError("Supermemory baseUrl must be configured")
+    validate_loopback_http_url(base_url)
+    personal_container = config.get("personalContainerTag")
+    if personal_container not in {None, PROJECT_CONTAINER}:
+        raise ValueError("personalContainerTag must be complect:project")
+
+
+def _transition_path(state_path: Path) -> Path:
+    return state_path.with_name(TRANSITION_FILENAME)
+
+
+def _transition_state(payload: Mapping[str, object]) -> dict[str, object]:
+    if payload.get("version") != 1 or payload.get("operation") != "start":
+        raise ValueError("task transition is invalid")
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        raise ValueError("task transition state is invalid")
+    validate_task_state(state, require_active=True)
+    return dict(state)
+
+
+def _complete_start_transition(
+    config_path: Path,
+    state_path: Path,
+    config: dict[str, object],
+    state: dict[str, object],
+) -> dict[str, object]:
+    _, container_tag, _ = validate_task_state(state, require_active=True)
+    config["repoContainerTag"] = container_tag
+    config.setdefault("personalContainerTag", PROJECT_CONTAINER)
+    atomic_write_json(config_path, config)
+    atomic_write_json(state_path, state)
+    durable_unlink(_transition_path(state_path))
+    return state
+
+
 def start_task(
     config_path: Path,
     state_path: Path,
@@ -42,6 +85,25 @@ def start_task(
     now: datetime,
 ) -> dict[str, object]:
     task_key = validate_task_key(task_key)
+    config = _read_json(config_path)
+    _validate_memory_config(config)
+    transition_path = _transition_path(state_path)
+    pending_transition = _read_json(transition_path)
+    if pending_transition:
+        pending_state = _transition_state(pending_transition)
+        pending_task_key, _, _ = validate_task_state(
+            pending_state,
+            require_active=True,
+        )
+        if pending_task_key != task_key:
+            raise ValueError(f"recover pending task {pending_task_key} before starting another task-key")
+        return _complete_start_transition(
+            config_path,
+            state_path,
+            config,
+            pending_state,
+        )
+
     previous_state = _read_json(state_path)
     closed_task_keys = _closed_task_keys(previous_state)
     if previous_state.get("status") == "active":
@@ -51,7 +113,6 @@ def start_task(
         )
         if active_task_key != task_key:
             raise ValueError("close active task before starting a different task-key")
-        config = _read_json(config_path)
         if config.get("repoContainerTag") != active_container:
             raise ValueError("Supermemory repoContainerTag does not match active task state")
         return previous_state
@@ -59,10 +120,6 @@ def start_task(
         raise ValueError(f"task {task_key} is already closed and cannot be reused")
 
     container_tag = f"{TASK_CONTAINER_PREFIX}{task_key}"
-    config = _read_json(config_path)
-    config["repoContainerTag"] = container_tag
-    config.setdefault("personalContainerTag", PROJECT_CONTAINER)
-
     state: dict[str, object] = {
         "version": 1,
         "taskKey": task_key,
@@ -72,19 +129,13 @@ def start_task(
         "closedAt": None,
         "closedTaskKeys": closed_task_keys,
     }
-    atomic_write_json(state_path, state)
-    try:
-        atomic_write_json(config_path, config)
-    except Exception:
-        try:
-            if previous_state:
-                atomic_write_json(state_path, previous_state)
-            else:
-                state_path.unlink(missing_ok=True)
-        except OSError as rollback_error:
-            raise RuntimeError("config write failed and task state rollback failed") from rollback_error
-        raise
-    return state
+    transition = {
+        "version": 1,
+        "operation": "start",
+        "state": state,
+    }
+    atomic_write_json(transition_path, transition)
+    return _complete_start_transition(config_path, state_path, config, state)
 
 
 def read_task_status(config_path: Path, state_path: Path) -> dict[str, object]:

@@ -48,6 +48,13 @@ class TaskLifecycleTests(unittest.TestCase):
         self.config_path = root / "config.json"
         self.state_path = root / "task-state.json"
         self.now = datetime(2026, 7, 25, tzinfo=UTC)
+        self.write_json(
+            self.config_path,
+            {
+                "baseUrl": "http://127.0.0.1:6767",
+                "personalContainerTag": "complect:project",
+            },
+        )
 
     @staticmethod
     def write_json(path: Path, payload: dict[str, object]) -> None:
@@ -83,6 +90,24 @@ class TaskLifecycleTests(unittest.TestCase):
             self.read_json(self.config_path)["personalContainerTag"],
             "complect:project",
         )
+
+    def test_start_rejects_remote_url_and_noncanonical_project_container(self) -> None:
+        unsafe_configs = (
+            {
+                "baseUrl": "http://attacker.example:6767",
+                "personalContainerTag": "complect:project",
+            },
+            {
+                "baseUrl": "http://127.0.0.1:6767",
+                "personalContainerTag": "other:project",
+            },
+        )
+        for config in unsafe_configs:
+            with self.subTest(config=config):
+                self.write_json(self.config_path, config)
+                with self.assertRaises(ValueError):
+                    start_task(self.config_path, self.state_path, "issue-142", self.now)
+                self.assertFalse(self.state_path.exists())
 
     def test_closed_task_cannot_be_reused(self) -> None:
         start_task(self.config_path, self.state_path, "issue-142", self.now)
@@ -134,8 +159,15 @@ class TaskLifecycleTests(unittest.TestCase):
         self.assertEqual(self.read_json(self.config_path), {"original": True})
         self.assertEqual(list(self.config_path.parent.glob(".config.json.*.tmp")), [])
 
-    def test_start_keeps_config_unchanged_when_state_write_fails(self) -> None:
-        self.write_json(self.config_path, {"repoContainerTag": "complect:task:old-task"})
+    def test_start_recovers_when_state_write_fails_after_config_commit(self) -> None:
+        self.write_json(
+            self.config_path,
+            {
+                "baseUrl": "http://127.0.0.1:6767",
+                "personalContainerTag": "complect:project",
+                "repoContainerTag": "complect:task:old-task",
+            },
+        )
 
         def fail_state_write(path: Path, payload: dict[str, object]) -> None:
             if path == self.state_path:
@@ -151,11 +183,17 @@ class TaskLifecycleTests(unittest.TestCase):
 
         self.assertEqual(
             self.read_json(self.config_path)["repoContainerTag"],
-            "complect:task:old-task",
+            "complect:task:new-task",
         )
         self.assertFalse(self.state_path.exists())
+        self.assertTrue(self.state_path.with_name("task-transition.json").exists())
 
-    def test_start_rolls_back_state_when_config_write_fails(self) -> None:
+        recovered = start_task(self.config_path, self.state_path, "new-task", self.now)
+
+        self.assertEqual(self.read_json(self.state_path), recovered)
+        self.assertFalse(self.state_path.with_name("task-transition.json").exists())
+
+    def test_start_recovers_when_config_write_fails_after_intent_commit(self) -> None:
         old_state = {
             "version": 1,
             "taskKey": "old-task",
@@ -166,6 +204,7 @@ class TaskLifecycleTests(unittest.TestCase):
             "closedTaskKeys": ["old-task"],
         }
         old_config = {
+            "baseUrl": "http://127.0.0.1:6767",
             "repoContainerTag": "complect:task:old-task",
             "personalContainerTag": "complect:project",
         }
@@ -190,8 +229,51 @@ class TaskLifecycleTests(unittest.TestCase):
         self.assertEqual(self.read_json(self.config_path), old_config)
         self.assertEqual(
             write_paths,
-            [self.state_path, self.config_path, self.state_path],
+            [self.state_path.with_name("task-transition.json"), self.config_path],
         )
+        self.assertTrue(self.state_path.with_name("task-transition.json").exists())
+
+        recovered = start_task(self.config_path, self.state_path, "new-task", self.now)
+
+        self.assertEqual(self.read_json(self.state_path), recovered)
+        self.assertEqual(
+            self.read_json(self.config_path)["repoContainerTag"],
+            "complect:task:new-task",
+        )
+        self.assertFalse(self.state_path.with_name("task-transition.json").exists())
+
+    def test_start_recovers_after_process_death_between_config_and_state(self) -> None:
+        class SimulatedProcessDeath(BaseException):
+            pass
+
+        original_write = common.atomic_write_json
+        write_count = 0
+
+        def die_before_state_commit(path: Path, payload: dict[str, object]) -> None:
+            nonlocal write_count
+            write_count += 1
+            if write_count == 3:
+                raise SimulatedProcessDeath
+            original_write(path, payload)
+
+        with patch(
+            "infra.scripts.agent_tools.task.atomic_write_json",
+            side_effect=die_before_state_commit,
+        ):
+            with self.assertRaises(SimulatedProcessDeath):
+                start_task(self.config_path, self.state_path, "issue-142", self.now)
+
+        self.assertEqual(
+            self.read_json(self.config_path)["repoContainerTag"],
+            "complect:task:issue-142",
+        )
+        self.assertFalse(self.state_path.exists())
+
+        recovered = start_task(self.config_path, self.state_path, "issue-142", self.now)
+
+        self.assertEqual(recovered["status"], "active")
+        self.assertEqual(self.read_json(self.state_path), recovered)
+        self.assertFalse(self.state_path.with_name("task-transition.json").exists())
 
 
 if __name__ == "__main__":

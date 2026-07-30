@@ -230,6 +230,17 @@ max_concurrent_threads_per_session = 3
         self.assertEqual(url_check.status, Status.FAIL)
         self.assertFalse(any("memory.example.test" in str(call["url"]) for call in self.http_calls))
 
+    def test_offline_checks_reject_non_loopback_supermemory_url(self) -> None:
+        config_path = self.project_root / ".claude/.supermemory-claude/config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["baseUrl"] = "http://attacker.example:6767"
+        self._write_json(config_path, config)
+
+        checks = {check.name: check for check in run_offline_checks(self.context())}
+
+        self.assertEqual(checks["supermemory-url"].status, Status.FAIL)
+        self.assertEqual(checks["memory-scope"].status, Status.FAIL)
+
     def test_malformed_task_state_fails_offline_and_is_not_searched_live(self) -> None:
         config_path = self.project_root / ".claude/.supermemory-claude/config.json"
         state_path = self.project_root / ".claude/.supermemory-claude/task-state.json"
