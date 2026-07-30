@@ -53,6 +53,29 @@ def validate_container_tag(value: str) -> tuple[str, str | None]:
     raise ValueError("container must be complect:project or complect:task:<task-key>")
 
 
+def validate_task_state(
+    state: Mapping[str, object],
+    *,
+    require_active: bool,
+) -> tuple[str, str, str]:
+    if state.get("version") != 1:
+        raise ValueError("task state version must be 1")
+    task_key = state.get("taskKey")
+    if not isinstance(task_key, str):
+        raise ValueError("task state must contain a valid taskKey")
+    validate_task_key(task_key)
+    container_tag = state.get("containerTag")
+    expected_container = f"{TASK_CONTAINER_PREFIX}{task_key}"
+    if container_tag != expected_container:
+        raise ValueError("task state containerTag must match taskKey")
+    status = state.get("status")
+    if status not in {"active", "closed"}:
+        raise ValueError("task state status must be active or closed")
+    if require_active and status != "active":
+        raise ValueError("operation requires the matching active task")
+    return task_key, expected_container, status
+
+
 def validate_loopback_http_url(value: str) -> str:
     try:
         parsed = urllib.parse.urlsplit(value)

@@ -21,17 +21,41 @@ class SecretScannerTests(unittest.TestCase):
         self.assertEqual([(finding.line, finding.rule) for finding in findings], [(1, "supermemory-token")])
         self.assertNotIn(secret, "\n".join(str(finding) for finding in findings))
 
+    def test_reports_literal_credential_fields_without_values(self) -> None:
+        json_secret = "literal-production-credential-123456"
+        toml_secret = "literal-production-password-123456"
+
+        findings = [
+            *scan_text(Path("settings.json"), f'{{"apiKey":"{json_secret}"}}'),
+            *scan_text(Path("config.toml"), f'password = "{toml_secret}"'),
+        ]
+
+        self.assertEqual([finding.rule for finding in findings], ["credential-field", "credential-field"])
+        rendered = "\n".join(str(finding) for finding in findings)
+        self.assertNotIn(json_secret, rendered)
+        self.assertNotIn(toml_secret, rendered)
+
     def test_allows_environment_references_and_placeholders(self) -> None:
         text = """
 API_KEY=${SUPERMEMORY_API_KEY}
 SECRET_KEY=REQUIRED_FROM_VAULT_HIGH_ENTROPY_STRING
 EXPECTED_GATEWAY_TOKEN=$EXPECTED_GATEWAY_TOKEN
+POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+apiKey="__CMDSUB_OUTPUT__"
 Authorization: Bearer <JWT>
 Authorization: Bearer `${accessToken}`
 Authorization: Bearer {runtime_token}
 """
 
         self.assertEqual(scan_text(Path(".env.example"), text), [])
+
+    def test_credential_field_rule_only_applies_to_configuration_files(self) -> None:
+        documentation = """
+const token = getAccessTokenFromRuntime()
+temp_password = secrets.token_urlsafe(32)
+"""
+
+        self.assertEqual(scan_text(Path("setup.md"), documentation), [])
 
     def test_ignores_unsupported_binary_and_local_env(self) -> None:
         self.assertFalse(is_candidate_path(Path(".env")))

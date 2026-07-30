@@ -81,6 +81,7 @@ max_concurrent_threads_per_session = 3
         self._write_json(
             self.project_root / ".claude/.supermemory-claude/task-state.json",
             {
+                "version": 1,
                 "taskKey": "issue-142",
                 "containerTag": "complect:task:issue-142",
                 "status": "active",
@@ -128,7 +129,12 @@ max_concurrent_threads_per_session = 3
         state_path = self.project_root / ".claude/.supermemory-claude/task-state.json"
         self._write_json(
             state_path,
-            {"taskKey": "issue-142", "containerTag": "complect:task:issue-142", "status": "closed"},
+            {
+                "version": 1,
+                "taskKey": "issue-142",
+                "containerTag": "complect:task:issue-142",
+                "status": "closed",
+            },
         )
 
         checks = run_offline_checks(self.context())
@@ -223,6 +229,46 @@ max_concurrent_threads_per_session = 3
         url_check = next(check for check in checks if check.name == "supermemory-url")
         self.assertEqual(url_check.status, Status.FAIL)
         self.assertFalse(any("memory.example.test" in str(call["url"]) for call in self.http_calls))
+
+    def test_malformed_task_state_fails_offline_and_is_not_searched_live(self) -> None:
+        config_path = self.project_root / ".claude/.supermemory-claude/config.json"
+        state_path = self.project_root / ".claude/.supermemory-claude/task-state.json"
+        self._write_json(
+            config_path,
+            {
+                "baseUrl": "http://127.0.0.1:6767",
+                "repoContainerTag": "other:secret",
+                "personalContainerTag": "complect:project",
+            },
+        )
+        self._write_json(
+            state_path,
+            {
+                "version": 1,
+                "taskKey": "issue-142",
+                "containerTag": "other:secret",
+                "status": "active",
+            },
+        )
+
+        offline = {check.name: check for check in run_offline_checks(self.context())}
+        live = run_live_checks(
+            self.context(environ={"SUPERMEMORY_CODEX_API_KEY": "not-printed"})
+        )
+
+        self.assertEqual(offline["task-state"].status, Status.FAIL)
+        self.assertEqual(offline["memory-scope"].status, Status.FAIL)
+        self.assertFalse(
+            any(
+                str(call["url"]).endswith("/v4/search")
+                and call.get("payload", {}).get("containerTag") == "other:secret"  # type: ignore[union-attr]
+                for call in self.http_calls
+            )
+        )
+        self.assertEqual(
+            next(check for check in live if check.name == "search-task").status,
+            Status.FAIL,
+        )
 
 
 if __name__ == "__main__":

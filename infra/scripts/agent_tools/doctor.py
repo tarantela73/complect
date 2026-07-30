@@ -13,7 +13,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
-from .common import CommandResult, CommandRunner, NoRedirectHandler, validate_loopback_http_url
+from .common import (
+    CommandResult,
+    CommandRunner,
+    NoRedirectHandler,
+    validate_loopback_http_url,
+    validate_task_state,
+)
 from .secret_lint import run_secret_lint, tracked_candidate_paths
 
 
@@ -174,21 +180,29 @@ def _check_memory_configuration(context: DoctorContext) -> list[Check]:
             Check("memory-scope", Status.FAIL, "local memory scope is not configured"),
         ]
 
-    active = state.get("status") == "active"
-    matching = config.get("repoContainerTag") == state.get("containerTag")
-    container = state.get("containerTag")
-    if active and matching and isinstance(container, str):
+    try:
+        _, container, status = validate_task_state(state, require_active=False)
+        state_valid = True
+    except ValueError:
+        container = ""
+        status = "invalid"
+        state_valid = False
+    active = status == "active"
+    matching = state_valid and config.get("repoContainerTag") == container
+    if active and matching:
         task_check = Check("task-state", Status.PASS, f"active {container}")
-    elif not active:
+    elif state_valid and not active:
         task_check = Check("task-state", Status.FAIL, "task is closed; run make agent-task-start with a unique key")
+    elif not state_valid:
+        task_check = Check("task-state", Status.FAIL, "task state schema or container is invalid")
     else:
         task_check = Check("task-state", Status.FAIL, "repo container does not match task state")
     personal_ok = config.get("personalContainerTag") == "complect:project"
     scope_check = Check(
         "memory-scope",
-        Status.PASS if personal_ok and matching else Status.FAIL,
+        Status.PASS if personal_ok and matching and active else Status.FAIL,
         "project read scope and task write scope are isolated"
-        if personal_ok and matching
+        if personal_ok and matching and active
         else "project and task memory scopes are inconsistent",
     )
     return [hook_check, cadence_check, task_check, scope_check]
@@ -344,13 +358,15 @@ def run_live_checks(context: DoctorContext) -> list[Check]:
         checks.append(Check("supermemory-auth", Status.FAIL, "SUPERMEMORY_CODEX_API_KEY is not set"))
         return checks
     checks.append(Check("supermemory-auth", Status.PASS, "credential is available through environment"))
-    task_container = state.get("containerTag")
-    containers = ["complect:project"]
-    if isinstance(task_container, str):
-        containers.append(task_container)
-    else:
+    try:
+        _, task_container, _ = validate_task_state(state, require_active=True)
+        if config.get("repoContainerTag") != task_container:
+            raise ValueError("repo container does not match task state")
+    except ValueError:
         checks.append(Check("search-task", Status.FAIL, "active task container is unavailable"))
         return checks
+    containers = ["complect:project"]
+    containers.append(task_container)
     checks.extend(_search_check(context, base_url, container, api_key) for container in containers)
     return checks
 

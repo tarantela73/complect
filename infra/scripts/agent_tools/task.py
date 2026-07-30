@@ -7,7 +7,13 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .common import PROJECT_CONTAINER, TASK_CONTAINER_PREFIX, atomic_write_json, validate_task_key
+from .common import (
+    PROJECT_CONTAINER,
+    TASK_CONTAINER_PREFIX,
+    atomic_write_json,
+    validate_task_key,
+    validate_task_state,
+)
 
 DEFAULT_CONFIG_PATH = Path(".claude/.supermemory-claude/config.json")
 DEFAULT_STATE_PATH = Path(".claude/.supermemory-claude/task-state.json")
@@ -39,10 +45,14 @@ def start_task(
     previous_state = _read_json(state_path)
     closed_task_keys = _closed_task_keys(previous_state)
     if previous_state.get("status") == "active":
-        if previous_state.get("taskKey") != task_key:
+        active_task_key, active_container, _ = validate_task_state(
+            previous_state,
+            require_active=True,
+        )
+        if active_task_key != task_key:
             raise ValueError("close active task before starting a different task-key")
         config = _read_json(config_path)
-        if config.get("repoContainerTag") != previous_state.get("containerTag"):
+        if config.get("repoContainerTag") != active_container:
             raise ValueError("Supermemory repoContainerTag does not match active task state")
         return previous_state
     if task_key in closed_task_keys:
@@ -62,8 +72,18 @@ def start_task(
         "closedAt": None,
         "closedTaskKeys": closed_task_keys,
     }
-    atomic_write_json(config_path, config)
     atomic_write_json(state_path, state)
+    try:
+        atomic_write_json(config_path, config)
+    except Exception:
+        try:
+            if previous_state:
+                atomic_write_json(state_path, previous_state)
+            else:
+                state_path.unlink(missing_ok=True)
+        except OSError as rollback_error:
+            raise RuntimeError("config write failed and task state rollback failed") from rollback_error
+        raise
     return state
 
 
@@ -71,8 +91,9 @@ def read_task_status(config_path: Path, state_path: Path) -> dict[str, object]:
     state = _read_json(state_path)
     if not state:
         raise ValueError("task state does not exist; start a task first")
+    _, container_tag, _ = validate_task_state(state, require_active=False)
     config = _read_json(config_path)
-    if config.get("repoContainerTag") != state.get("containerTag"):
+    if config.get("repoContainerTag") != container_tag:
         raise ValueError("Supermemory repoContainerTag does not match task state")
     return state
 
