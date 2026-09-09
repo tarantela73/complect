@@ -38,7 +38,7 @@ mode: repo-grounded
 ### 2. Draft / Published / Scheduled publishing
 **Description:** Поля `status: DRAFT|PUBLISHED|SCHEDULED`, `publish_at: DateTimeField?`. Публичный API отдаёт только `PUBLISHED`. Celery beat каждые 5 мин: `publish_scheduled_pages()`. Outbox → `PagePublished` event. RBAC: `cms.write` → DRAFT, `cms.publish` → PUBLISHED.
 **Axis:** A4
-**Basis:** `direct:` Celery beat + `notifications` queue в CLAUDE.md. `reasoned:` сейчас сохранение = немедленная публикация — нет staging.
+**Basis:** `direct:` the active CMS Sprint 3 plan and `publish_scheduled_pages_task` use Celery beat on the `default` queue. `reasoned:` сейчас сохранение = немедленная публикация — нет staging.
 **Rationale:** Предотвращает случайную публикацию, позволяет готовить контент заблаговременно, атомарная смена кампаний.
 **Downsides:** Нужна новая RBAC-роль `cms.publish` + миграция поля в `SitePageContent`.
 **Confidence:** 90%

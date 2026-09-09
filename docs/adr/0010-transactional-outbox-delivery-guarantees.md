@@ -198,6 +198,5 @@
 ## 6. Связанные ADR и разделы
 
 - [ADR-0002](0002-zero-downtime-migration-governance.md) — Expand & Contract для миграций `ProcessedEvent`
-- [ADR-0005](0005-bounded-context-ownership.md) — Cross-domain async через Outbox (не прямой import)
+- [ADR-0005](0005-bounded-context-ownership.md), Law 3 — Cross-domain async обязательно проходит через Transactional Outbox, не через прямой import
 - ADR-0011 (pending) — Outbox Lease Dispatcher: `lease_until`, авто-release, soft ordering guarantees
-- rule 4.3 CLAUDE.md — Transactional Outbox обязателен для cross-domain async
