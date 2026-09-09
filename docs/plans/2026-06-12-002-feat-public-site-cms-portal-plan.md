@@ -213,7 +213,7 @@ frontend/src/app/dashboard/cms/
 
 **Test scenarios:** `Test expectation: none — документационный артефакт.`
 
-**Verification:** Файл ADR создан, зафиксирован в реестре `CLAUDE.md`.
+**Verification:** Файл ADR создан, зафиксирован в реестре `docs/adr/` and reflected in `AGENTS.md` where an operational rule is needed.
 
 ---
 

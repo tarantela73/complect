@@ -63,7 +63,7 @@ Added trailing slashes to all four route definitions in `backend/apps/files/api/
 @router.get("/{file_id}/download-url/", response={200: DownloadUrlResponse, 403: dict, 422: dict})
 ```
 
-Also corrected `test_delete_legal_hold_returns_422` → `test_delete_legal_hold_returns_403`: Legal Hold is an authorisation block returning 403, not a business rule violation (422), per CLAUDE.md rule 6.6 ("403 RBAC/LegalHold/Tenant").
+Also corrected `test_delete_legal_hold_returns_422` → `test_delete_legal_hold_returns_403`: Legal Hold is an authorisation block returning 403, not a business rule violation (422), per the API error contract in `docs/Project_architecture.md` section 6.6 and ADR-0024's typed held-command semantics.
 
 ## Why This Works
 

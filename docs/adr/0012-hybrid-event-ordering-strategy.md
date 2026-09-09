@@ -170,7 +170,7 @@ Mode A: serial dispatch + per-aggregate serial consumption. Snapshot-домен�
   (см. Event Classification Rules ниже).
 - **Celery FIFO не абсолютен**: `prefetch_multiplier > 1`, redelivery после worker crash,
   broker visibility timeout — всё это нарушает порядок внутри слота. Митигация: `CELERY_WORKER_PREFETCH_MULTIPLIER = 1`
-  (уже в CLAUDE.md rule 4.15), `acks_late = True`, `max_tasks_per_child = 1` для serial воркеров.
+  (the queue topology is documented in `docs/Project_architecture.md`, section 4.15), `acks_late = True`, `max_tasks_per_child = 1` для serial воркеров.
   Без этих настроек Mode A деградирует до best-effort FIFO.
 - **Рост числа routing keys**: при большом числе агрегатов (>100K активных контрактов) количество
   Celery routing keys растёт. Митигация: hash-based sharding — `hash(aggregate_id) % N_SLOTS`

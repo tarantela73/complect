@@ -182,7 +182,6 @@ test-results/
 # Configuration for Claude Code
 # =========================================================
 .mcp.json
-CLAUDE.md
 .claude/*
 !.claude/skills/
 !.claude/commands/
