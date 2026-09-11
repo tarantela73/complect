@@ -38,6 +38,11 @@ def _signed_advisory_key(namespace: bytes, value: bytes) -> int:
     return int.from_bytes(raw, "big", signed=True)
 
 
+def identity_advisory_key(identity_id: UUID) -> int:
+    """Frozen iam-identity SHA256/network-byte/signed-bigint contract."""
+    return _signed_advisory_key(b"iam-identity", identity_id.bytes)
+
+
 def acquire_identity_merge_advisory_locks(
     *,
     user_pks: set[int] | list[int] | tuple[int, ...],
@@ -54,7 +59,7 @@ def acquire_identity_merge_advisory_locks(
         for identity_id in sorted(set(identity_ids), key=lambda value: value.bytes):
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(%s)",
-                [_signed_advisory_key(b"iam-identity", identity_id.bytes)],
+                [identity_advisory_key(identity_id)],
             )
 
 
@@ -256,6 +261,9 @@ class IdentityMergeLockCoordinator:
                 )
 
     def lock(self, *, user_pks: list[int], using: str = "default") -> LockedIdentityMergeGraph:
+        from apps.users.security.identity_audit_hold import require_read_committed
+
+        require_read_committed(using=using)
         bootstrap_users = list(User.objects.using(using).filter(pk__in=user_pks).order_by("pk"))
         identity_ids = self._discover_identity_ids(bootstrap_users, using=using)
         discovered_user_pks = set(

@@ -539,6 +539,103 @@ When normalization rules change:
 
 ### Identity merge locking and runtime enablement
 
+#### Audit Legal Hold identity fence (P0, 2026-09-10)
+
+`SHARED_IDENTITY_FENCE_PLUS_DB_TRIGGER` is the normative contract for
+identity-scoped audit Legal Hold and merge authority transitions. Both share
+the existing **exclusive, transaction-scoped** `iam-identity` advisory fence;
+"shared" means a common protocol, not a shared-mode identity lock. Its key is
+the signed big-endian int64 represented by the first eight bytes of
+`SHA256(UTF8("iam-identity:") || UUID network-order bytes)`. Python's
+`identity_advisory_key()` and PostgreSQL's
+`public.users_identity_fence_key(uuid)` implement that frozen contract.
+The complete deduplicated identity set is ordered by UUID bytes, never by the
+resulting signed advisory keys. No second identity namespace is introduced.
+
+Conflicting successful transactions serialize at fence acquisition. A hold
+that owns the fence commits before a waiting convergence reads its fresh hold
+snapshot. A later hold does not preempt a transition already owning the fence;
+the supported writer waits before its DML and installs the hold afterwards.
+
+The internal supported writer `latch_identity_audit_hold` has no HTTP/admin
+endpoint. A trusted caller must authorize the exact deduplicated audit-ID set
+before entering a short dedicated `READ COMMITTED` transaction. Ambient
+transactions are rejected. The order is: shared retirement barrier, complete
+identity discovery, exclusive UUID-byte-ordered identity fences, session rows
+ordered by ID, target audit rows ordered by ID, binding revalidation, then only
+the monotonic `FALSE -> TRUE` latch. An already-held row is a no-op, with no
+`TRUE -> TRUE` UPDATE. After identity fences the writer cannot start another
+graph command or acquire User/bootstrap locks. Batches are bounded to 1,000
+records; each of at most three whole attempts uses 2s lock and 5s statement
+timeouts. Only binding rediscovery and SQLSTATE `55P03` retry; permanent
+binding errors and statement timeout are returned to the caller.
+
+Stored audit `identity_id` is authoritative, including historical source
+identities; it is never replaced by a guessed canonical identity. Session-only
+evidence resolves through `IdentitySession.id -> identity_id`. Resolve before
+fences and revalidate under session row locks afterwards; a changed binding
+rolls back the entire operation before retry, without extending the fence set.
+Both references must agree. Missing or unresolved references fail closed and
+require a separate legal/reconciliation workflow; immutable payload is not
+rewritten and subject enums are not extended.
+
+Migration `0003a_identity_audit_fence` adds separate AFTER INSERT/UPDATE
+statement guards with transition tables. They guard held INSERT and precisely
+`FALSE -> TRUE` UPDATE, resolve/deduplicate/order identities, and use only
+`pg_try_advisory_xact_lock` after implicit DML locks. Session rechecks use
+`FOR KEY SHARE NOWAIT`; contention raises `55P03` and rolls back the statement.
+The audit table's existing retirement trigger is replaced with a try-shared
+retirement precondition so it also cannot block in reverse order. Contract
+violations use `23514`; unsupported isolation uses `25001`. Canonical `0003`'s
+audit append-only trigger remains installed and unchanged.
+
+Session ID and identity binding are immutable. Deleting a session referenced
+by any audit record is forbidden, including unheld evidence that may later be
+latched. Every new session-linked audit INSERT, even unheld, participates in
+the same fence and NOWAIT session-binding check. It must reference an existing,
+consistent session; this closes the race where uncommitted unheld evidence
+was invisible to a concurrent session DELETE/reuse check. Legacy unresolved
+unheld evidence may remain for reconciliation, but cannot be newly introduced
+with a session reference. Creating a session with an already-referenced UUID is also forbidden;
+the existing primary key prevents duplicate live UUIDs. This intentionally
+retains the minimal session linkage without adding a tombstone table. Session
+INSERT/DELETE guards use try-retirement/try-identity fences after DML row locks;
+they never wait for an identity fence. Legacy orphan audit references cannot
+be silently rebound by creating a replacement session. Expired/revoked session
+state may still change without reassigning its identity.
+
+All protected graph commands require `READ COMMITTED`; neither repeatable-read
+nor serializable snapshots are accepted. Owner start/complete, dormant
+convergence, requeue/expiry and cleanup call a fresh separate Legal Hold query
+after complete graph fence acquisition and before authority CAS in the same
+transaction. This query includes direct audit references and session-only
+audit evidence. Audit history is not added to convergence's row-lock ranks.
+Redis I/O placement is unchanged by this decision.
+
+Functions are migration-owned, schema-qualified, SECURITY INVOKER with fixed
+`search_path=pg_catalog`. The deterministic key is IMMUTABLE/STRICT/PARALLEL
+SAFE; trigger functions are VOLATILE. Runtime needs ordinary table privileges
+and EXECUTE on the key function, not object ownership. Active guards and a
+runtime role unable to disable, replace, ALTER/DROP or own them, transfer table
+ownership, or set replication bypass are mandatory deployment gates. A local
+admin connection or disposable restricted-role test is not production proof.
+
+Deployment is coordinated: stop and drain all old convergence, requeue,
+cleanup and credential/authority nodes; validate canonical `0003` schema and
+resolve any independent schema drift; apply `0003a` with bounded DDL timeouts;
+verify key vectors, enabled trigger/function metadata, existing held bindings
+and production privileges; deploy all nodes with fresh audit-hold discovery;
+only then re-enable authority processing and the supported writer. Mixed old
+and new authority nodes are forbidden. The migration fails closed on existing
+unresolved/conflicting held evidence. Forward DDL does not repair that data.
+
+Application rollback must retain fresh audit discovery and this fence protocol,
+or keep all affected authority processing disabled and drained. Reversing the
+fence migration is permitted only under that same quiescence; its explicit
+reverse restores the canonical audit retirement trigger and removes only
+fence-owned objects. A pre-fix build must never resume authority mutations
+merely because application or schema rollback succeeded.
+
 Every approval, convergence, credential synchronization, finalization,
 hold-release requeue and other merge-graph mutation uses one
 `IdentityMergeLockCoordinator`; individual repositories may not invent a
@@ -1322,6 +1419,20 @@ runs before SDK generation. Any future destructive DTO change requires
 `/api/v2` and ADR-0003's six-month migration window.
 
 ### Migration rollout
+
+Release N's corrective sequence is `0003_identity_expand` followed by
+`0003a_identity_audit_fence`. The canonical `0003` blob remains
+`d8275cb03cd9055d2b7925993ec1a4395939635d`. At the P0 implementation checkpoint,
+disk and the inspected development migration ledger contain only `0001`,
+`0002`, `0003`; no separate users schema-drift repair migration exists. Drift
+repair remains a separate responsibility stream and a deployment prerequisite
+where an environment differs from canonical `0003`; the fence migration does
+not restate or repair its schema. The named future `0004` and `0005` retain
+their responsibilities and numbers. When implemented, `0004` must depend on
+`0003a_identity_audit_fence`, rather than creating a sibling leaf from `0003`.
+References below to the `0003 -> 0004` boundary include this Release N fence
+expansion. The additional rollback/quiescence gates above apply to all older
+rollout and rollback examples in this ADR.
 
 Plan 1 IAM-IDENTITY must use Expand / Backfill / Contract:
 

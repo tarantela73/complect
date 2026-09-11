@@ -16,6 +16,47 @@ execution therefore stays disabled by default. The hard release boundary is
 unchanged: no Task 3 backfill, Task 4 contract migration or Tasks 5–17 auth
 foundation/retirement work is included in Release N.
 
+**P0 audit Legal Hold fence rollout (2026-09-10):** the normative protocol is
+in [ADR-0024, Audit Legal Hold identity fence](../../adr/0024-global-identity-tenant-membership.md#audit-legal-hold-identity-fence-p0-2026-09-10).
+This checkpoint supersedes older rollback examples wherever they would permit
+authority mutation without audit-hold discovery or with inactive DB guards.
+
+- Keep canonical `0003_identity_expand` byte-for-byte unchanged. Insert the
+  independently reversible `0003a_identity_audit_fence` after it. Existing
+  future `0004_identity_contract_constraints` and `0005_retire_legacy_user_authority`
+  keep their numbers; future `0004` depends on `0003a`. No users drift-repair
+  migration was found on disk or in the inspected development migration ledger.
+  Environmental schema drift must be reconciled separately before the fence
+  migration; it is not repaired implicitly by this stream.
+- Drain old authority/convergence, credential, requeue and cleanup processes.
+  Keep them disabled until all nodes run fresh post-fence audit discovery.
+  Run canonical schema and existing-held-binding preflight. Apply `0003a`
+  before enabling the supported writer or relying on trigger enforcement.
+  DDL lock timeout is 2s and statement timeout 30s; a timeout aborts the atomic
+  migration. Retry deployment in a fresh quiescent window, never weaken guards.
+- Verify PostgreSQL `sha256(bytea)`, Python/SQL positive and negative key vectors,
+  invoker/search_path/volatility/owner/grants, trigger enabled state and runtime
+  role restrictions. Exercise production login permissions and policies; the
+  local `codex_ro` inspection role and disposable test role are not production
+  application-role evidence. Existing missing/conflicting held references block
+  migration and require an explicit legal/reconciliation decision.
+- Deploy the repository-backed internal writer and fresh graph snapshot code
+  together. Writer authorization occurs before its dedicated transaction;
+  document the caller's actual policy before wiring any future entry point.
+  Preserve retirement-shared -> complete ordered identity set -> ordered
+  session/audit rows -> revalidated monotonic latch. No endpoint is introduced.
+- Confirm both hold/convergence orderings for owner and dormant flows, held
+  INSERT/latch bypass rejection, session linkage/reuse, unsupported isolation,
+  bulk order, append-only semantics and restricted-role enforcement with
+  `bash infra/scripts/run_iam_fence_tests.sh`. This creates a unique disposable
+  PostGIS database plus isolated Redis and removes both after the run. Follow
+  with `bash infra/scripts/run_iam_fence_tests.sh apps/users/tests`.
+- Roll back application only to builds retaining audit discovery and fences,
+  or leave all authority processors disabled. Reverse `0003a` only after
+  draining these flows; canonical append-only and retirement behavior is
+  restored, but that does not authorize old nodes to resume. Keep the existing
+  later retirement and durable-merge rollback-floor gates as well.
+
 **Execution checkpoint (2026-09-05):** migration `0003`, RLS/integrity
 triggers, normalized-email reconciliation, signed collision decisions,
 owner/dormant convergence, merge-aware credential guards, complete graph lock

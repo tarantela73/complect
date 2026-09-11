@@ -26,6 +26,8 @@ from apps.users.models import (
     TenantSessionGrant,
 )
 from apps.users.models_identity import MergeActionKind, MergeHoldSubjectType
+from apps.users.repositories.identity_audit_hold_repository import IdentityAuditHoldRepository
+from apps.users.security.identity_audit_hold import require_read_committed
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -59,6 +61,7 @@ class IdentityMergeLegalHoldActive(PermissionDenied):
 
 
 def collect_legal_hold_snapshot(graph: Any, *, using: str = "default") -> LegalHoldSnapshot:
+    require_read_committed(using=using)
     subjects: set[LegalHoldSubject] = set()
     canonical_ids = {operation.canonical_identity_id for operation in graph.operations}
 
@@ -72,6 +75,8 @@ def collect_legal_hold_snapshot(graph: Any, *, using: str = "default") -> LegalH
         )
         subjects.add(LegalHoldSubject(resolved_type, identity_id))
 
+    for identity_id in IdentityAuditHoldRepository.held_identity_ids(graph.identity_ids, using=using):
+        add_identity(identity_id)
     for user in graph.users:
         if user.identity_legal_hold:
             add_identity(user.identity_id)
