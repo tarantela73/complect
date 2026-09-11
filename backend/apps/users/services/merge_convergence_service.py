@@ -417,7 +417,7 @@ class MergeConvergenceService:
                 if requeue is not None:
                     MergeConvergenceRepository.create_applied_requeue_result(
                         requeue=requeue,
-                        observed_operation_version=operation.version + 1,
+                        observed_operation_version=operation.version,
                         now=now,
                         using=self.using,
                     )
