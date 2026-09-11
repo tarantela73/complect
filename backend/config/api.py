@@ -7,6 +7,10 @@ from apps.common.api.errors import (
     ninja_permission_denied_handler,
     ninja_validation_error_handler,
 )
+from apps.common.contracts.auth_context import register_auth_context_validator
+from apps.users.contracts.auth_context_impl import users_auth_context_validator
+
+register_auth_context_validator(users_auth_context_validator)
 
 api = NinjaAPI(
     title="ERP Комплект API",

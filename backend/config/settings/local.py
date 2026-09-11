@@ -1,4 +1,5 @@
 # backend/config/settings/local.py
+import json
 import os
 
 import redis
@@ -16,6 +17,27 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 DEBUG = _env_bool("DEBUG", default=True)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+
+IAM_DEFERRED_MERGE_EXECUTION_ENABLED = _env_bool(
+    "IAM_DEFERRED_MERGE_EXECUTION_ENABLED",
+    default=False,
+)
+IAM_DEFERRED_MERGE_COVERAGE_DIGEST = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_DIGEST", "")
+IAM_DEFERRED_MERGE_COVERAGE_KEY_ID = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_KEY_ID", "")
+IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE", "")
+IAM_DEFERRED_MERGE_COVERAGE_COMMIT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_COMMIT", "")
+IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT", "")
+IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT", "")
+IAM_DEFERRED_MERGE_COVERAGE_NONCE = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_NONCE", "")
+BUILD_COMMIT = os.getenv("BUILD_COMMIT", "")
+IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS = json.loads(
+    os.getenv("IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS", "{}"),
+)
+IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS = json.loads(
+    os.getenv("IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS", "{}"),
+)
+IAM_MFA_CURRENT_KEY_ID = os.getenv("IAM_MFA_CURRENT_KEY_ID", "")
+IAM_MFA_ENCRYPTION_KEYS = json.loads(os.getenv("IAM_MFA_ENCRYPTION_KEYS", "{}"))
 
 # Gradual rollout: log denials without blocking during development.
 # Production overrides this to "ENFORCE" via prod.py.

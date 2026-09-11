@@ -4,13 +4,34 @@
 
 **Goal:** Migrate authentication from tenant-bound `users.User` state to the ADR-0024 global Identity, mandatory MFA, IdentitySession and tenant-grant foundation without replacing `AUTH_USER_MODEL` or breaking existing domain consumers.
 
-**Architecture:** `users.User` remains the physical Identity table and keeps its integer Django primary key. A nullable expand release introduces a stable `identity_id`, global security records and tenant memberships; reconciliation and batched backfill run before a separately deployed contract migration adds final uniqueness, non-null and foreign-key constraints. A signed collision decision first creates an immutable `APPROVED_PENDING_CONVERGENCE` operation without changing login, email or membership authority. An owner-confirmed active ceremony, or a narrowly defined dormant fail-closed ceremony, establishes one canonical password/MFA authority before membership ownership and synthetic normalized email change atomically. Password verification creates only a five-minute pre-auth challenge: identities with a confirmed factor receive `MFA_PARTIAL`, while identities that must enroll receive `MFA_SETUP_PARTIAL`. Access/refresh tokens and tenant grants are created only after factor verification or setup confirmation and tenant selection. A signed current-context token gives the narrow RLS-safe switch repository the old tenant/grant coordinates, while durable operation records and post-rollback reconciliation enforce idempotency and fail-closed DB/Redis recovery.
+**Architecture:** `users.User` remains the physical Identity table and keeps its integer Django primary key. A nullable expand release introduces a stable `identity_id`, global security records and tenant memberships; reconciliation and batched backfill run before a separately deployed contract migration adds final uniqueness, non-null and foreign-key constraints. A signed collision decision first creates a durable, versioned `APPROVED_PENDING_CONVERGENCE` operation with immutable approval/identity payload and without changing login, email or membership authority. An owner-confirmed active ceremony, or a narrowly defined dormant fail-closed ceremony, establishes one canonical password/MFA authority before membership ownership and synthetic normalized email change atomically. Password verification creates only a five-minute pre-auth challenge: identities with a confirmed factor receive `MFA_PARTIAL`, while identities that must enroll receive `MFA_SETUP_PARTIAL`. Access/refresh tokens and tenant grants are created only after factor verification or setup confirmation and tenant selection. A signed current-context token gives the narrow RLS-safe switch repository the old tenant/grant coordinates, while durable operation records and post-rollback reconciliation enforce idempotency and fail-closed DB/Redis recovery.
 
 **Tech Stack:** Django 5.2, django-ninja, PostgreSQL 16 with RLS, Redis DB 4, Celery, PyJWT, `cryptography` AES-GCM, pyotp, Next.js 15/React 19, Docker-only pytest.
 
-**Status:** EXECUTION READY (v12). The first implementation/deployment slice is
-strictly Release N, Tasks 1–2; no backfill, contract migration or auth
-foundation is included in that deployment.
+**Status:** RELEASE N LOCALLY IMPLEMENTED; PRODUCTION GATE PENDING (v12.1).
+Tasks 1–2 are implemented and verified against PostgreSQL in Docker. The
+protected production reconciliation report, operator signatures, coverage
+attestation and deployment approval remain manual release evidence; merge
+execution therefore stays disabled by default. The hard release boundary is
+unchanged: no Task 3 backfill, Task 4 contract migration or Tasks 5–17 auth
+foundation/retirement work is included in Release N.
+
+**Execution checkpoint (2026-09-05):** migration `0003`, RLS/integrity
+triggers, normalized-email reconciliation, signed collision decisions,
+owner/dormant convergence, merge-aware credential guards, complete graph lock
+ordering, legal-hold evidence, expiry/requeue workers and runtime coverage
+attestation are present. Explicit-alias tenant ORM now uses a same-connection
+`tenant_rls_scope`; Release N also persists a narrow merge Redis-cleanup record
+and closed requeue `action_kind`/`resume_mode` without introducing
+IdentitySession authority. Owner/dormant convergence now uses exact locked
+Legal Hold snapshots, focused CAS repositories and same-transaction
+pseudonymous audit/outbox evidence; durable PII audit metadata contains no raw
+User PK. `apps/users/tests` passes (117 tests), Django reports
+no pending `users` model changes, and `git diff --check` is clean. The
+repository migration quality gate remains blocked only by the pre-existing,
+out-of-scope `backend/apps/requests/migrations/0002_add_resource_types.py`
+finding called out below. Step 7 commits are deliberately left unchecked
+because this execution did not create commits.
 
 ## Global Constraints
 
@@ -31,6 +52,17 @@ foundation is included in that deployment.
   changes no membership, normalized email, password, MFA, status, session or
   token authority. `APPROVED_PENDING_CONVERGENCE` remains an unresolved email
   collision and blocks Task 4.
+- `--correct-email` rejects a target participating as source or canonical
+  Identity in a live `APPROVED_PENDING_CONVERGENCE` operation with
+  `MERGE_OPERATION_ACTIVE`. The
+  operator must first execute a separately signed `--cancel-merge`, then
+  obtain a new purpose-bound signature for `--correct-email`; correction never
+  performs an implicit cancellation or reuses merge approval. This is an
+  additional guard, not sufficient eligibility: realized
+  deferred/ready/finalized sources remain non-correctable compatibility rows.
+  The correction envelope binds expected target `security_version` and the
+  canonical digest of all locked participant operation IDs/states/versions;
+  replaying a pre-cancel signature fails with `APPROVAL_CONTEXT_STALE`.
 - `APPROVED_PENDING_CONVERGENCE -> APPROVED_DEFERRED` is the only merge point.
   For an active graph it requires a fully authenticated source owner, one new
   password hash written once to the canonical Identity and non-held source
@@ -278,8 +310,8 @@ in root `backend/conftest.py`. Ownership is explicit:
 
 | Task | Fixtures/factories added before its test step |
 | --- | --- |
-| 1 | `identity`, `recovery_token`, `iam_nobypassrls_role`, `two_tenant_rls_rows`, `iam_migration_connection`; deterministic UUID/time helpers |
-| 2 | `collision_pair`, `signed_reconciliation_approval`, `viewer_role`, `legacy_user_without_identity_foundation` (with non-null legacy tenant), `protected_report_dir`, `pending_merge_with_distinct_credentials`, `dormant_pending_merge`, `held_pending_merge`, `valid_runtime_merge_coverage_attestation`, PostgreSQL concurrency barriers |
+| 1 | `identity`, `recovery_token`, `identity_merge_operation_factory`, `iam_nobypassrls_role`, `two_tenant_rls_rows`, `iam_migration_connection`; deterministic UUID/time helpers |
+| 2 | `collision_pair`, `signed_reconciliation_approval`, `identity_collision_resolution_service`, `viewer_role`, `legacy_user_without_identity_foundation` (with non-null legacy tenant), `protected_report_dir`, `pending_merge_with_distinct_credentials`, `dormant_pending_merge`, `held_pending_merge`, `valid_runtime_merge_coverage_attestation`, PostgreSQL concurrency barriers |
 | 3 | `identity_expand_apps`, `admin_actor`, `approved_merged_collision_state`; reuse Task 1/2 identities and roles |
 | 4 | `active_membership`, `identity_session`, `active_grant`, `role`; tenant-context factory |
 | 5 | legal-hold/session factories and transaction barriers |
@@ -384,7 +416,7 @@ engines and validates/quotes its generated schema identifier.
   integer primary key. Task 4 creates Identity uniqueness first and only then
   adds/validates the two UUID-target FKs.
 
-- [ ] **Step 1: Write failing expand-schema tests**
+- [x] **Step 1: Write failing expand-schema tests**
 
 First create the Task 1 `identity` and `recovery_token` factories in the shared
 test harness, then create
@@ -590,6 +622,95 @@ def test_merge_state_and_hold_evidence_are_closed_and_append_only():
     assert IdentityMergeHoldBlock._meta.get_field("operation").remote_field.on_delete is models.PROTECT
     assert IdentityMergeRequeue._meta.get_field("hold_block").remote_field.on_delete is models.PROTECT
     assert IdentityMergeRequeueResult._meta.get_field("requeue").one_to_one is True
+
+
+@pytest.mark.parametrize(
+    "initial_state",
+    [value for value, _ in IdentityMergeOperation.State.choices],
+)
+@pytest.mark.django_db(transaction=True)
+def test_merge_operation_insert_requires_pending_initial_state(
+    identity_merge_operation_factory,
+    initial_state,
+):
+    if initial_state == IdentityMergeOperation.State.APPROVED_PENDING_CONVERGENCE:
+        operation = identity_merge_operation_factory(state=initial_state)
+        assert operation.credential_epoch == 0
+        assert operation.convergence_mode is None
+        assert operation.credentials_changed_at is None
+        assert operation.credentials_converged_at is None
+        assert operation.finalized_at is None
+        return
+
+    with pytest.raises(IntegrityError, match="identity_merge_invalid_initial_state"):
+        with transaction.atomic():
+            identity_merge_operation_factory(state=initial_state)
+
+
+MERGE_OPERATION_ALLOWED_TRANSITIONS = {
+    (
+        IdentityMergeOperation.State.APPROVED_PENDING_CONVERGENCE,
+        IdentityMergeOperation.State.APPROVED_DEFERRED,
+    ),
+    (
+        IdentityMergeOperation.State.APPROVED_PENDING_CONVERGENCE,
+        IdentityMergeOperation.State.CANCELLED,
+    ),
+    (
+        IdentityMergeOperation.State.APPROVED_PENDING_CONVERGENCE,
+        IdentityMergeOperation.State.EXPIRED,
+    ),
+    (
+        IdentityMergeOperation.State.APPROVED_DEFERRED,
+        IdentityMergeOperation.State.READY_TO_FINALIZE,
+    ),
+    (
+        IdentityMergeOperation.State.READY_TO_FINALIZE,
+        IdentityMergeOperation.State.FINALIZED,
+    ),
+}
+MERGE_OPERATION_TRANSITION_CASES = [
+    (source, target)
+    for source, _ in IdentityMergeOperation.State.choices
+    for target, _ in IdentityMergeOperation.State.choices
+    if source != target
+]
+
+
+@pytest.mark.parametrize("source_state,target_state", MERGE_OPERATION_TRANSITION_CASES)
+@pytest.mark.django_db(transaction=True)
+def test_merge_operation_trigger_enforces_exact_transition_matrix(
+    identity_merge_operation_factory,
+    source_state,
+    target_state,
+):
+    operation = identity_merge_operation_factory.advance_to(source_state)
+    transition = (source_state, target_state)
+    now = timezone.now()
+    updates = {
+        "state": target_state,
+        "version": models.F("version") + 1,
+        "updated_at": now,
+    }
+    if target_state == IdentityMergeOperation.State.APPROVED_DEFERRED:
+        updates.update(
+            convergence_mode=IdentityMergeOperation.ConvergenceMode.OWNER_CONFIRMED,
+            credential_epoch=1,
+            credentials_changed_at=now,
+            credentials_converged_at=now,
+        )
+    if target_state == IdentityMergeOperation.State.FINALIZED:
+        updates["finalized_at"] = now
+
+    if transition in MERGE_OPERATION_ALLOWED_TRANSITIONS:
+        assert IdentityMergeOperation.objects.filter(pk=operation.pk).update(**updates) == 1
+        operation.refresh_from_db()
+        assert operation.state == target_state
+        return
+
+    with pytest.raises(IntegrityError, match="identity_merge_invalid_transition"):
+        with transaction.atomic():
+            IdentityMergeOperation.objects.filter(pk=operation.pk).update(**updates)
 
 
 def test_membership_status_foundation_includes_draft():
@@ -945,7 +1066,7 @@ trigger on each. A two-connection test holds the exclusive advisory lock in A,
 attempts a legal-hold latch in B with bounded `lock_timeout`, and proves B
 cannot commit or mutate the row until A releases it.
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest apps/users/tests/test_identity_expand_schema.py -v
@@ -953,7 +1074,7 @@ docker compose -f docker-compose.dev.yml exec backend pytest apps/users/tests/te
 
 Expected: import/model failures because the expand models do not exist.
 
-- [ ] **Step 3: Add nullable Identity fields**
+- [x] **Step 3: Add nullable Identity fields**
 
 In `backend/apps/users/models.py` add no default and no uniqueness:
 
@@ -1006,7 +1127,7 @@ from apps.users.models_membership import (  # noqa: E402, F401
 )
 ```
 
-- [ ] **Step 4: Define global and tenant records**
+- [x] **Step 4: Define global and tenant records**
 
 Define the tenant-free durable registry and abstract security base in
 `models_identity.py`:
@@ -1210,8 +1331,11 @@ An immediate/deferred integrity trigger rejects a requeue unless
 
 `APPROVED_PENDING_CONVERGENCE` changes no external authority.
 `APPROVED_DEFERRED` is reachable exactly once with `credential_epoch=1` and
-non-null convergence mode/timestamp. `FINALIZED`, `CANCELLED` and `EXPIRED`
-are terminal. There is no `BLOCKED_BY_LEGAL_HOLD` state and no
+non-null convergence mode/timestamp. The closed transition set is pending to
+`APPROVED_DEFERRED`, `CANCELLED` or `EXPIRED`, followed only by
+`APPROVED_DEFERRED -> READY_TO_FINALIZE -> FINALIZED`. `FINALIZED`,
+`CANCELLED` and `EXPIRED` are terminal. There is no
+`BLOCKED_BY_LEGAL_HOLD` state and no
 `blocked_by_hold_at` mutation: hold observation lives only in the separate
 append-only evidence rows.
 
@@ -1712,7 +1836,7 @@ class TenantSessionGrant(BaseEnterpriseModel):
         ]
 ```
 
-- [ ] **Step 5: Create and inspect the expand migration**
+- [x] **Step 5: Create and inspect the expand migration**
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend python manage.py makemigrations users --name identity_expand
@@ -1750,9 +1874,15 @@ It raises `identity_audit_append_only` for every delete and every update except
 an isolated `is_legal_hold FALSE -> TRUE`; that exception compares every other
 column with `IS NOT DISTINCT FROM` and rejects combined changes.
 
-Install `trg_users_identity_merge_operation_guard`. It rejects delete,
-authority-field rewrites and invalid state transitions, and rejects every
-ordinary update when either old or new `is_legal_hold` is true. It permits
+Install `trg_users_identity_merge_operation_guard` as
+`BEFORE INSERT OR UPDATE OR DELETE`. Insert accepts only
+`APPROVED_PENDING_CONVERGENCE` with `credential_epoch=0`, null convergence
+mode/timestamps and null `finalized_at`; every other initial state raises
+`identity_merge_invalid_initial_state`. Update rejects authority-field
+rewrites and every state edge except pending to deferred/cancelled/expired,
+deferred to ready and ready to finalized; every other edge raises
+`identity_merge_invalid_transition`. Delete is always rejected, and every
+ordinary update is rejected when either old or new `is_legal_hold` is true. It permits
 `convergence_mode` only during the single
 `APPROVED_PENDING_CONVERGENCE -> APPROVED_DEFERRED` CAS and requires that CAS
 to set `credential_epoch=1` plus `credentials_converged_at`. The separate
@@ -1787,6 +1917,10 @@ transaction. Install
 `trg_users_reconciliation_switch_session_match` to reject a linked switch
 operation whose `session_id` differs from the reconciliation row. Trigger
 functions raise stable marker codes asserted by the schema tests.
+The Task 1 `identity_merge_operation_factory.advance_to(state)` always inserts
+the required pending initial row and reaches a requested non-pending fixture
+state only through this allowed transition matrix; it never disables the
+trigger or inserts a forged realized state.
 
 Install `trg_users_membership_actor_immutable` as `BEFORE UPDATE OF
 legacy_actor_user_id`. During expand it permits exactly one `NULL -> actor`
@@ -1812,7 +1946,7 @@ Expected SQL: every newly added `users_users` column is nullable and has no
 persistent `DEFAULT`; no `UNIQUE`, `NOT NULL` or `CREATE INDEX` is added to
 the active table.
 
-- [ ] **Step 6: Run schema and migration checks**
+- [x] **Step 6: Run schema and migration checks**
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest apps/users/tests/test_identity_expand_schema.py -v
@@ -1837,6 +1971,7 @@ git commit -m "feat(iam): add nullable identity foundation"
 
 - Create: `backend/apps/users/services/email_normalization.py`
 - Create: `backend/apps/users/services/identity_foundation.py`
+- Create: `backend/apps/users/services/identity_collision_resolution.py`
 - Create: `backend/apps/users/services/pii_access_audit_service.py`
 - Create: `backend/apps/users/repositories/__init__.py`
 - Create: `backend/apps/users/repositories/membership_repository.py`
@@ -1880,6 +2015,11 @@ git commit -m "feat(iam): add nullable identity foundation"
 
 - Produces `normalize_email(email: str) -> NormalizedEmail`.
 - Produces `build_collision_groups(queryset) -> list[EmailCollisionGroup]` from current email candidates, not from an already-unique column.
+- Produces closed `IdentityCollisionResolutionErrorCode` and
+  `IdentityCollisionResolutionError`. At minimum the closed codes include
+  `MERGE_OPERATION_ACTIVE`, `APPROVAL_CONTEXT_STALE`, `LEGAL_HOLD_ACTIVE` and
+  `MERGE_GRAPH_CHANGED_RETRY`; repositories/services raise the typed error and
+  the management command maps only its sanitized `.code` to `CommandError`.
 - Produces `report_identity_email_duplicates --output
   /protected/path/report.json --fail-on-duplicates
   --fail-on-invalid-candidates --actor-type operator --actor-ref <operator>
@@ -1906,7 +2046,13 @@ git commit -m "feat(iam): add nullable identity foundation"
   `resolve_identity_collision --correct-email ...` with mandatory dry-run,
   CAS, protected approval reference and pseudonymized audit. Approval creates
   `APPROVED_PENDING_CONVERGENCE` only; it does not move membership or mutate
-  email/credentials.
+  email/credentials. Correction fails with `MERGE_OPERATION_ACTIVE` while its
+  target participates in a live pending merge; only a separately signed cancellation
+  followed by a newly signed correction may proceed, subject to every other
+  correction-eligibility guard. Realized deferred/ready/finalized source rows
+  remain ineligible compatibility rows. Its signed envelope includes the
+  expected target security version and post-lock participant-operation digest;
+  a pre-cancel signature is stale after cancellation.
 - Produces signed `resolve_identity_collision --cancel-merge OPERATION_ID` and
   idempotent retention-queue `expire_pending_identity_merges --batch-size
   500`. Both can only CAS a still-pending operation to terminal `CANCELLED` or
@@ -1957,7 +2103,7 @@ git commit -m "feat(iam): add nullable identity foundation"
   `NOT_PRESENT_AT_RELEASE_N`; the task that introduces any one of them must
   register and guard it in the same commit.
 
-- [ ] **Step 1: Write failing normalization/report tests**
+- [x] **Step 1: Write failing normalization/report tests**
 
 ```python
 import json
@@ -1984,6 +2130,10 @@ from apps.users.repositories.identity_collision_repository import (
 from apps.users.repositories.membership_repository import MembershipRepository
 from apps.users.services.auth_service import _pk_to_uuid4
 from apps.users.services.email_normalization import normalize_email
+from apps.users.services.identity_collision_resolution import (
+    IdentityCollisionResolutionError,
+    IdentityCollisionResolutionErrorCode,
+)
 from apps.users.services.pii_access_audit_service import (
     PiiAccessAuditService,
     PiiAuditUnavailable,
@@ -2212,6 +2362,145 @@ def test_collision_resolution_requires_dry_run_and_approval_reference(
     assert collision_pair.second.email != "corrected@example.com"
 
 
+@pytest.mark.parametrize("participant", ["source", "canonical"])
+@pytest.mark.django_db(transaction=True)
+def test_correct_email_requires_fresh_signature_after_pending_merge_cancellation(
+    pending_merge_with_distinct_credentials,
+    signed_reconciliation_approval,
+    identity_collision_resolution_service,
+    participant,
+):
+    state = pending_merge_with_distinct_credentials
+    target = getattr(state, participant)
+    original_snapshot = (
+        target.email,
+        target.normalized_email,
+        target.security_version,
+        state.operation.state,
+        state.operation.version,
+    )
+    blocked_correction = signed_reconciliation_approval.for_correct_email(
+        user_pk=target.pk,
+        email="corrected@example.com",
+        reference="IAM-CHANGE-44-BLOCKED",
+    )
+
+    with pytest.raises(IdentityCollisionResolutionError) as typed_active:
+        identity_collision_resolution_service.correct_email(
+            user_pk=target.pk,
+            new_email="corrected@example.com",
+            approval=blocked_correction,
+        )
+    assert (
+        typed_active.value.code
+        is IdentityCollisionResolutionErrorCode.MERGE_OPERATION_ACTIVE
+    )
+
+    with pytest.raises(CommandError, match="MERGE_OPERATION_ACTIVE"):
+        call_command(
+            "resolve_identity_collision",
+            "--correct-email",
+            str(target.pk),
+            "--email",
+            "corrected@example.com",
+            "--approval-reference",
+            blocked_correction.reference,
+            "--approval-key-id",
+            blocked_correction.key_id,
+            "--approval-signature",
+            blocked_correction.signature,
+            "--execute",
+        )
+
+    state.refresh()
+    target = getattr(state, participant)
+    assert (
+        target.email,
+        target.normalized_email,
+        target.security_version,
+        state.operation.state,
+        state.operation.version,
+    ) == original_snapshot
+
+    cancellation = signed_reconciliation_approval.for_cancel_merge(
+        operation_id=state.operation.id,
+        expected_version=state.operation.version,
+        reference="IAM-CHANGE-44-CANCEL",
+    )
+    call_command(
+        "resolve_identity_collision",
+        "--cancel-merge",
+        str(state.operation.id),
+        "--approval-reference",
+        cancellation.reference,
+        "--approval-key-id",
+        cancellation.key_id,
+        "--approval-signature",
+        cancellation.signature,
+        "--execute",
+    )
+
+    state.operation.refresh_from_db()
+    assert state.operation.state == IdentityMergeOperation.State.CANCELLED
+    assert IdentityMergeOperation.objects.filter(id=state.operation.id).count() == 1
+
+    with pytest.raises(IdentityCollisionResolutionError) as typed_stale:
+        identity_collision_resolution_service.correct_email(
+            user_pk=target.pk,
+            new_email="corrected@example.com",
+            approval=blocked_correction,
+        )
+    assert (
+        typed_stale.value.code
+        is IdentityCollisionResolutionErrorCode.APPROVAL_CONTEXT_STALE
+    )
+
+    with pytest.raises(CommandError, match="APPROVAL_CONTEXT_STALE"):
+        call_command(
+            "resolve_identity_collision",
+            "--correct-email",
+            str(target.pk),
+            "--email",
+            "corrected@example.com",
+            "--approval-reference",
+            blocked_correction.reference,
+            "--approval-key-id",
+            blocked_correction.key_id,
+            "--approval-signature",
+            blocked_correction.signature,
+            "--execute",
+        )
+
+    correction = signed_reconciliation_approval.for_correct_email(
+        user_pk=target.pk,
+        email="corrected@example.com",
+        reference="IAM-CHANGE-44-CORRECT",
+    )
+    call_command(
+        "resolve_identity_collision",
+        "--correct-email",
+        str(target.pk),
+        "--email",
+        "corrected@example.com",
+        "--approval-reference",
+        correction.reference,
+        "--approval-key-id",
+        correction.key_id,
+        "--approval-signature",
+        correction.signature,
+        "--execute",
+    )
+
+    target.refresh_from_db()
+    assert target.email == "corrected@example.com"
+    assert state.operation.state == IdentityMergeOperation.State.CANCELLED
+    pending_merge_count = IdentityMergeOperation.objects.filter(
+        id=state.operation.id,
+        state=IdentityMergeOperation.State.APPROVED_PENDING_CONVERGENCE,
+    ).count()
+    assert pending_merge_count == 0
+
+
 @pytest.mark.django_db(transaction=True)
 def test_signed_approval_creates_pending_operation_without_authority_change(
     collision_pair,
@@ -2366,7 +2655,7 @@ def test_correct_email_initializes_nullable_expand_fields_before_cas(
         clear_tenant_context()
 ```
 
-- [ ] **Step 2: Run the tests and verify failure**
+- [x] **Step 2: Run the tests and verify failure**
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest \
@@ -2381,7 +2670,7 @@ docker compose -f docker-compose.dev.yml exec backend pytest \
 Expected: FAIL because normalization, the report/approval commands, convergence
 services, merge guard, runtime attestation and lock coordinator do not exist.
 
-- [ ] **Step 3: Implement versioned normalization**
+- [x] **Step 3: Implement versioned normalization**
 
 ```python
 import unicodedata
@@ -2414,7 +2703,7 @@ The order is exact: trim, Unicode NFKC normalization, casefold, length check,
 email syntax validation. Do not perform provider-specific dot removal or
 plus-address stripping.
 
-- [ ] **Step 4: Implement candidate grouping and command behavior**
+- [x] **Step 4: Implement candidate grouping and command behavior**
 
 The command first uses
 `IdentityCollisionRepository.enumerate_subjects()` to read only `pk` and
@@ -2579,7 +2868,7 @@ tenant with a DRAFT membership and proves the provider includes it. The merge
 test records A/B RLS entry and proves no tenant-scoped query occurs outside its
 matching context.
 
-- [ ] **Step 5: Implement supported collision resolution**
+- [x] **Step 5: Implement supported collision resolution**
 
 `resolve_identity_collision` has mutually exclusive modes:
 
@@ -2589,15 +2878,29 @@ matching context.
 --cancel-merge OPERATION_ID
 ```
 
-Both default to `--dry-run`. Dry-run prints a canonical SHA-256 action digest.
+All modes default to `--dry-run`. Dry-run prints a canonical SHA-256 action digest.
 Execute requires `--approval-reference`, `--approval-key-id` and
 `--approval-signature`; `ReconciliationApprovalVerifier` verifies Ed25519 over
 the canonical action envelope. A free-form ticket is not approval.
 
 `--correct-email` keeps the existing behavior: initialize nullable foundation
-under lock, replace both email authorities when applicable, update
-`normalized_email`, increment `security_version`, ensure the source actor
-membership and write only keyed old/new HMACs to audit.
+under the shared `IdentityMergeLockCoordinator` bootstrap/participant locks,
+re-read the target and complete participant merge graph after locking, replace both email
+authorities when applicable, update
+`normalized_email`, increment `security_version`, ensure the target actor
+membership and write only keyed old/new HMACs to audit. Before mutation it
+computes a canonical digest of every operation ID/state/version in which the
+target participates as source or canonical Identity. The signed action
+envelope binds that digest and the target's expected `security_version`.
+A live `APPROVED_PENDING_CONVERGENCE` operation returns the typed
+`MERGE_OPERATION_ACTIVE` conflict without changing either row. The operator
+must execute a separately signed `--cancel-merge OPERATION_ID` first and then
+submit a newly signed `--correct-email` action; the correction path never
+performs an implicit cancel or accepts the merge/cancellation signature. This
+pending check is additional to the existing correction eligibility checks;
+deferred/ready/finalized source rows remain ineligible compatibility rows. A
+pre-cancellation correction signature binds the prior participant digest and
+therefore returns `APPROVAL_CONTEXT_STALE` if replayed after cancellation.
 
 `--merge` is intentionally approval-only and non-converging. Under the global lock
 coordinator it validates the same normalized candidate, disjoint tenant actor
@@ -2606,9 +2909,10 @@ source and at most one pending convergence for a canonical Identity. It
 reserves
 `merged+<source-identity-uuid>@identity.invalid`, verifies that value is absent
 from both `User.normalized_email` and
-non-terminal `IdentityMergeOperation.synthetic_normalized_email` reservations,
-then inserts an immutable
-`APPROVED_PENDING_CONVERGENCE` operation. Membership, source/canonical email,
+non-cancelled/non-expired
+`IdentityMergeOperation.synthetic_normalized_email` reservations, then inserts
+a durable, versioned `APPROVED_PENDING_CONVERGENCE` operation with immutable
+approval/identity payload. Membership, source/canonical email,
 password, MFA, status, session and token state remain byte-for-byte unchanged.
 Normal Identity create/update/correct-email rejects the exact reserved domain.
 
@@ -2624,8 +2928,12 @@ signed pending operation can reuse the released deterministic synthetic value.
 
 The collision report treats states exactly:
 
-- pending, expired or cancelled approval remains unresolved until a fresh
-  approval is completed or the email is corrected;
+- a pending approval remains unresolved and makes correction return
+  `MERGE_OPERATION_ACTIVE`; it must first reach `CANCELLED` through the
+  separately signed command or `EXPIRED` through the explicit retention CAS;
+- an expired or cancelled approval leaves the underlying duplicate unresolved
+  until a fresh merge approval is completed or a newly signed email correction
+  succeeds;
 - `APPROVED_DEFERRED` is resolved only when the operation row, source actor,
   canonical Identity, synthetic normalized email and every moved membership
   form the exact relational proof;
@@ -2686,7 +2994,9 @@ sessions, refresh families,
 challenges and recovery operations. It moves membership/synthetic normalized
 email, sets epoch `1` and keeps canonical locked without creating/changing
 password or MFA. An active source, active membership or mixed graph rejects
-this mode; use owner convergence, owner recovery or `--correct-email`.
+this mode; use owner convergence, owner recovery, or separately sign and
+execute `--cancel-merge` before obtaining a new signature for
+`--correct-email`.
 
 #### Runtime-enforced coverage attestation
 
@@ -2716,8 +3026,9 @@ Startup computes `effective_merge_execution = boolean && attestation_valid`.
 Invalid evidence keeps the application available but forces effective false,
 emits one reason-coded metric/log and makes `check --deploy` non-zero when the
 boolean was requested. The shared policy re-verifies immediately before owner
-completion, dormant completion and every CAS from pending into
-`APPROVED_DEFERRED` or a later state; checking only at startup is insufficient.
+completion, dormant completion, the pending-to-deferred convergence CAS and
+each `APPROVED_DEFERRED -> READY_TO_FINALIZE -> FINALIZED` finalization CAS;
+checking only at startup is insufficient.
 The approval-only `--execute --merge` stores a signed pending operation and
 changes no authority, so report, dry-run and that pending-approval storage
 remain available while effective execution is false.
@@ -2862,7 +3173,7 @@ The focused tests are mandatory, not illustrative:
   reverse of `0003` fail closed, while merge-aware `LEGACY` mode remains a
   supported rollback floor.
 
-- [ ] **Step 6: Run the report and resolution tests**
+- [x] **Step 6: Run the report and resolution tests**
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest \
@@ -2880,7 +3191,7 @@ Expected: PASS; no report artifact exists inside the repository.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/apps/users/services/email_normalization.py backend/apps/users/services/identity_foundation.py backend/apps/users/services/pii_access_audit_service.py backend/apps/users/repositories/__init__.py backend/apps/users/repositories/membership_repository.py backend/apps/users/repositories/iam_tenant_registry_repository.py backend/apps/users/repositories/identity_collision_repository.py backend/apps/users/repositories/identity_merge_repository.py backend/apps/users/services/deferred_merge_guard.py backend/apps/users/services/deferred_merge_credential_synchronizer.py backend/apps/users/services/merge_convergence_service.py backend/apps/users/security/deferred_merge_execution_policy.py backend/apps/users/security/credential_entrypoints.py backend/apps/users/security/credential_entrypoint_manifest.json backend/apps/users/security/identity_merge_locking.py backend/apps/common/contracts/iam_tenant_inventory.py backend/apps/users/infrastructure/iam_tenant_inventory.py backend/apps/users/security/reconciliation_approval.py backend/apps/users/management/commands/report_identity_email_duplicates.py backend/apps/users/management/commands/resolve_identity_collision.py backend/apps/users/tasks/__init__.py backend/apps/users/tasks/identity_merge_maintenance.py backend/apps/users/tasks/identity_merge_requeue.py backend/apps/users/management/commands/expire_pending_identity_merges.py backend/apps/users/management/commands/requeue_identity_merge.py backend/apps/users/services/auth_service.py backend/apps/users/services/mfa_service.py backend/apps/users/services/user_admin_service.py backend/apps/users/api.py backend/apps/users/schemas/auth.py backend/apps/common/api/auth.py backend/config/settings/base.py backend/config/settings/prod.py .env.example backend/apps/users/tests/test_email_reconciliation.py backend/apps/users/tests/test_iam_tenant_inventory.py backend/apps/users/tests/test_deferred_merge_convergence.py backend/apps/users/tests/test_deferred_merge_entrypoint_coverage.py backend/apps/users/tests/test_identity_merge_locking.py backend/apps/users/tests/test_identity_merge_requeue.py backend/apps/users/tests/conftest.py backend/apps/users/tests/iam_factories.py
+git add backend/apps/users/services/email_normalization.py backend/apps/users/services/identity_foundation.py backend/apps/users/services/identity_collision_resolution.py backend/apps/users/services/pii_access_audit_service.py backend/apps/users/repositories/__init__.py backend/apps/users/repositories/membership_repository.py backend/apps/users/repositories/iam_tenant_registry_repository.py backend/apps/users/repositories/identity_collision_repository.py backend/apps/users/repositories/identity_merge_repository.py backend/apps/users/services/deferred_merge_guard.py backend/apps/users/services/deferred_merge_credential_synchronizer.py backend/apps/users/services/merge_convergence_service.py backend/apps/users/security/deferred_merge_execution_policy.py backend/apps/users/security/credential_entrypoints.py backend/apps/users/security/credential_entrypoint_manifest.json backend/apps/users/security/identity_merge_locking.py backend/apps/common/contracts/iam_tenant_inventory.py backend/apps/users/infrastructure/iam_tenant_inventory.py backend/apps/users/security/reconciliation_approval.py backend/apps/users/management/commands/report_identity_email_duplicates.py backend/apps/users/management/commands/resolve_identity_collision.py backend/apps/users/tasks/__init__.py backend/apps/users/tasks/identity_merge_maintenance.py backend/apps/users/tasks/identity_merge_requeue.py backend/apps/users/management/commands/expire_pending_identity_merges.py backend/apps/users/management/commands/requeue_identity_merge.py backend/apps/users/services/auth_service.py backend/apps/users/services/mfa_service.py backend/apps/users/services/user_admin_service.py backend/apps/users/api.py backend/apps/users/schemas/auth.py backend/apps/common/api/auth.py backend/config/settings/base.py backend/config/settings/prod.py .env.example backend/apps/users/tests/test_email_reconciliation.py backend/apps/users/tests/test_iam_tenant_inventory.py backend/apps/users/tests/test_deferred_merge_convergence.py backend/apps/users/tests/test_deferred_merge_entrypoint_coverage.py backend/apps/users/tests/test_identity_merge_locking.py backend/apps/users/tests/test_identity_merge_requeue.py backend/apps/users/tests/conftest.py backend/apps/users/tests/iam_factories.py
 git commit -m "feat(iam): gate and converge approved identity merges"
 ```
 
@@ -2891,7 +3202,8 @@ external path with both fail flags, and keep
 Enable effective execution only after the runtime signature, current build,
 manifest digest, expiry and behavioral coverage gate all pass; then complete
 each collision through owner-confirmed convergence, dormant fail-closed
-convergence or `--correct-email`. Stop before production Task 3 backfill. Do
+convergence or, after separately cancelling any live pending operation, a
+newly signed `--correct-email`. Stop before production Task 3 backfill. Do
 not start Task 4 while any duplicate/invalid candidate, pending convergence or
 invalid deferred relational proof remains.
 
