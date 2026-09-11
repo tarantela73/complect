@@ -171,6 +171,9 @@ CELERY_IMPORTS = (
     "apps.notifications.consumer.notifications_consumer",
     "apps.integration.tasks.webhook_consumer",
     "apps.site.tasks.publisher",
+    "apps.users.tasks.identity_merge_maintenance",
+    "apps.users.tasks.identity_merge_requeue",
+    "apps.users.tasks.identity_merge_redis_cleanup",
 )
 
 # rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
@@ -214,6 +217,21 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.consumer.notifications_consumer.run_notifications_consumer_task",
         "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
         "options": {"queue": "notifications"},
+    },
+    "identity-merge-expiry": {
+        "task": "apps.users.tasks.identity_merge_maintenance.expire_pending_identity_merges",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
+    },
+    "identity-merge-requeue": {
+        "task": "apps.users.tasks.identity_merge_requeue.process_identity_merge_requeues",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
+    },
+    "identity-merge-redis-cleanup": {
+        "task": "apps.users.tasks.identity_merge_redis_cleanup.process_identity_merge_redis_cleanup",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
     },
     "webhook-fanout-consumer": {
         "task": "apps.integration.tasks.webhook_consumer.run_webhook_fanout_consumer_task",
@@ -337,6 +355,22 @@ POSTGRES_REPLICA_MAX_LAG = 1.0
 RBAC_ENFORCEMENT_MODE = "ENFORCE"
 # Per-user permission set cache TTL in seconds. Short enough for security, long for perf.
 RBAC_POLICY_CACHE_TTL = 60
+
+# IAM Release N: convergence remains fail-closed until a signed, build-bound
+# credential-entrypoint coverage attestation is present.
+IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS: dict[str, str] = {}
+IAM_DEFERRED_MERGE_EXECUTION_ENABLED = False
+IAM_DEFERRED_MERGE_COVERAGE_DIGEST = ""
+IAM_DEFERRED_MERGE_COVERAGE_KEY_ID = ""
+IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE = ""
+IAM_DEFERRED_MERGE_COVERAGE_COMMIT = ""
+IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT = ""
+IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT = ""
+IAM_DEFERRED_MERGE_COVERAGE_NONCE = ""
+IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS: dict[str, str] = {}
+IAM_MFA_CURRENT_KEY_ID = ""
+IAM_MFA_ENCRYPTION_KEYS: dict[str, str] = {}
+BUILD_COMMIT = ""
 
 # ===========================================================================
 # AUDIT / RETENTION

@@ -395,9 +395,24 @@ Rollout order:
    `resolve_identity_collision --correct-email` both support dry-run, use CAS,
    require an externally signed protected approval bound to the exact action
    digest, and append a pseudonymized security audit record.
-   `--correct-email` performs the separately approved correction directly.
-   `--merge` does **not** merge on approval: it inserts an immutable
-   `IdentityMergeOperation(APPROVED_PENDING_CONVERGENCE)` and changes no
+   As an additional fail-closed eligibility guard, `--correct-email` rejects a
+   target that participates as either source or canonical Identity in a live
+   `APPROVED_PENDING_CONVERGENCE` operation using `MERGE_OPERATION_ACTIVE`;
+   the operator must first execute a separately
+   signed `--cancel-merge OPERATION_ID` and then obtain and execute a new,
+   separately signed `--correct-email` action. Correction never implicitly
+   cancels or reuses the approval for a merge operation. Absence of a pending
+   operation is necessary but not sufficient: all other correction guards
+   still apply, and a realized deferred/ready/finalized source does not become
+   correctable merely because it is no longer pending. The signed correction
+   envelope binds the target's expected `security_version` and a canonical
+   digest of every locked merge-operation ID/state/version in which that
+   target participates. The command recomputes the digest after acquiring the
+   shared merge locks, so a pre-cancellation correction signature is rejected
+   as `APPROVAL_CONTEXT_STALE` after cancellation.
+   `--merge` does **not** merge on approval: it inserts a durable, versioned
+   `IdentityMergeOperation(APPROVED_PENDING_CONVERGENCE)` with immutable
+   approval/identity payload and changes no
    membership, email/normalized-email, password, MFA, security status/version,
    session, refresh family, challenge, recovery or token authority. A pending
    operation remains an unresolved normalized-email collision and blocks the
@@ -407,11 +422,12 @@ Rollout order:
    resolution of the still-existing duplicate.
 
    ```text
-   APPROVED_PENDING_CONVERGENCE -> APPROVED_DEFERRED
-                                -> READY_TO_FINALIZE
-                                -> FINALIZED
-   APPROVED_PENDING_CONVERGENCE -> CANCELLED
-   APPROVED_PENDING_CONVERGENCE -> EXPIRED
+   APPROVED_PENDING_CONVERGENCE
+       |-> CANCELLED
+       |-> EXPIRED
+       `-> APPROVED_DEFERRED
+               `-> READY_TO_FINALIZE
+                       `-> FINALIZED
    ```
 
    `CANCELLED`, `EXPIRED` and `FINALIZED` are terminal; no transition returns
@@ -594,11 +610,12 @@ deferred_merge_execution_effective =
     AND attested_entrypoint_digest == runtime_entrypoint_digest
 ```
 
-Startup and every convergence/finalization execution recompute this result.
+Startup, the pending-to-deferred convergence CAS and every later finalization
+CAS recompute this result.
 Missing, stale, malformed, wrong-build or incomplete evidence makes the
 effective value false and fails closed before graph mutation. Reporting,
 signed pending approval, correction of a genuinely wrong email and hold
-evidence remain available; transition to `APPROVED_DEFERRED` or beyond does
+evidence remain available; the convergence and finalization transitions do
 not.
 
 ### Session and grant model
@@ -1359,7 +1376,8 @@ Plan 1 IAM-IDENTITY must use Expand / Backfill / Contract:
   attestation make the effective gate true.
 - Release N: add the duplicate email dry-run report and block contract
   migration while unresolved duplicates exist. A pending approval remains
-  unresolved; only correction or `APPROVED_DEFERRED` removes the collision.
+  unresolved; it must be separately cancelled before a newly signed correction
+  may run. Only that correction or `APPROVED_DEFERRED` removes the collision.
 - Release N+1: backfill identities and memberships in advisory-coordinated
   batches using the shared bootstrap/Identity lock order; do not log raw
   email/token/MFA data.
@@ -1428,6 +1446,13 @@ mismatches; no fixed high-volume threshold is used for a low-traffic tenant.
   authority mutation. `CANCELLED` and `EXPIRED` close only that approval and
   do not prevent a separately signed resolution of the still-unresolved
   duplicate.
+- Participation as source or canonical Identity in a live
+  `APPROVED_PENDING_CONVERGENCE` operation makes `--correct-email` fail with
+  `MERGE_OPERATION_ACTIVE`. The pending operation must first be
+  cancelled by its own signed `--cancel-merge` action; correction then requires
+  a new purpose-bound signature over the post-lock participant-operation
+  digest and never acts as an implicit cancellation. A signature bound to the
+  pre-cancellation graph fails with `APPROVAL_CONTEXT_STALE`.
 - `APPROVED_PENDING_CONVERGENCE -> APPROVED_DEFERRED` is the only merge point.
   It requires either owner-confirmed password/canonical-MFA convergence or the
   complete dormant fail-closed predicate, plus drained security artifacts and

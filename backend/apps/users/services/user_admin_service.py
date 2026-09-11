@@ -25,6 +25,8 @@ from django.db import transaction
 from apps.common.models.rbac import Role, RoleBinding
 from apps.users.models import User
 from apps.users.services.auth_service import _pk_to_uuid4
+from apps.users.services.deferred_merge_guard import DeferredMergeGuard
+from apps.users.services.email_normalization import is_reserved_merge_email
 
 
 def _to_uuid(pk: int) -> uuid.UUID:
@@ -80,6 +82,8 @@ def create_user(
     Returns (user, temp_password) — caller is responsible for delivering
     the temp_password to the new user securely (email or admin copy).
     """
+    if is_reserved_merge_email(email):
+        raise ValidationError({"email": "RESERVED_IDENTITY_EMAIL"}, code="RESERVED_IDENTITY_EMAIL")
     if User.objects.filter(email=email).exists():
         raise ValidationError(
             {"email": "EMAIL_ALREADY_EXISTS"},
@@ -152,6 +156,18 @@ def enable_user(
     user_id: int,
     actor_id: uuid.UUID,
 ) -> None:
+    try:
+        user = User.objects.get(pk=user_id, tenant_id=tenant_id)
+    except User.DoesNotExist:
+        return
+    authority = DeferredMergeGuard.resolve_legacy_actor(user)
+    if authority.identity.identity_id:
+        DeferredMergeGuard.require_activation_allowed(authority.identity.identity_id)
+    if authority.is_alias:
+        raise ValidationError(
+            {"user_id": "MERGE_SOURCE_COMPATIBILITY_ROW"},
+            code="MERGE_SOURCE_COMPATIBILITY_ROW",
+        )
     User.objects.filter(pk=user_id, tenant_id=tenant_id).update(is_active=True)
 
 

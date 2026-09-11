@@ -1,9 +1,10 @@
-import uuid
 from typing import Any, Optional
 
 import jwt
 from django.conf import settings
 from ninja.security import HttpBearer
+
+from apps.common.contracts.auth_context import get_auth_context_validator
 
 
 class JWTAuth(HttpBearer):
@@ -15,13 +16,16 @@ class JWTAuth(HttpBearer):
         except jwt.InvalidTokenError:
             return None
 
-        user_id = payload.get("user_id")
-        tenant_id = payload.get("tenant_id")
-        if not user_id or not tenant_id:
+        validator = get_auth_context_validator()
+        if validator is None:
+            return None
+        try:
+            context = validator.validate(payload)
+        except Exception:
             return None
 
-        request.jwt_user_id = uuid.UUID(user_id)
-        request.jwt_tenant_id = uuid.UUID(tenant_id)
+        request.jwt_user_id = context.actor_id
+        request.jwt_tenant_id = context.tenant_id
         return payload
 
 
