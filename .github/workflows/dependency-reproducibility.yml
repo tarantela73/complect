@@ -1,0 +1,42 @@
+name: Dependency reproducibility
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify toolchain declarations and backend locks
+        run: make check-toolchain check-backend-lock
+      - name: Lock metadata and host policy regression tests
+        run: |
+          docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace \
+            complect-dependency-toolchain:uv-0.11.21 python -B -m unittest discover \
+            -s infra/scripts/tests -p test_dependency_tooling.py -v
+      - name: Build and validate the locked backend
+        run: |
+          set -euo pipefail
+          docker build -f backend/Dockerfile.dev -t complect-dependency-validation backend
+          docker run --rm --network none complect-dependency-validation uv pip check --system
+      - name: Validate both npm clean installs
+        run: |
+          set -euo pipefail
+          node_image=$(jq -r .node.image toolchain.json)
+          docker run --rm -v "$PWD/frontend:/app" -w /app \
+            -e EXPECTED_NODE="$(jq -r .node.version toolchain.json)" \
+            -e EXPECTED_NPM="$(jq -r .npm.version toolchain.json)" "$node_image" \
+            sh -ec 'test "$(node --version)" = "v$EXPECTED_NODE"; test "$(npm --version)" = "$EXPECTED_NPM"; npm ci --no-audit --no-fund; npm --prefix e2e ci --no-audit --no-fund'
+          git diff --exit-code -- frontend/package-lock.json frontend/e2e/package-lock.json

@@ -1,0 +1,6 @@
+# Normalize detected text to LF; binary files remain untouched.
+* text=auto eol=lf
+
+# Keep shell entrypoints portable even when cloned with core.autocrlf=true.
+*.sh text eol=lf
+Makefile text eol=lf

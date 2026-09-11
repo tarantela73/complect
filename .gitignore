@@ -203,3 +203,6 @@ clinerules
 
 # Isolated development worktrees
 .worktrees/
+
+# Machine-local code intelligence (never synchronize indexes).
+.codegraph/

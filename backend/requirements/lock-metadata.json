@@ -1,0 +1,13 @@
+{
+  "python": "3.12.13",
+  "python_platform": "x86_64-unknown-linux-gnu",
+  "schema_version": 1,
+  "sha256": {
+    "base.lock": "ccddaba6be1c54d975500cc7da815fa7c5ade5a85b8794dd0449a16a74630ba9",
+    "base.txt": "f138883ccdc671293108fb15133ca5aff646b25d2574c9bd4e48d914bed4dc02",
+    "dev.lock": "e3f90f86b4ef8de9377dec3036c823597f16a1b374aae879080ee006b8399587",
+    "dev.txt": "c320251bf916b8631e04b9f07562360e377a592ba28b1cd917c4af573fe9f797",
+    "lock.py": "913779fa6e4e2b26bf7222e74b4b02c7636dac6b49970f550e9cae98fdf2d2e4"
+  },
+  "uv": "0.11.21"
+}
