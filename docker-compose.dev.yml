@@ -2,9 +2,6 @@ networks:
   erp_network:
     name: erp_network
     driver: bridge
-  supermemory_network:
-    name: complect_supermemory_network
-    driver: bridge
 
 volumes:
   pg_primary_data:
@@ -14,7 +11,6 @@ volumes:
   grafana_data:
   frontend_nm:
   frontend_next:
-  supermemory_data:
 
 secrets:
   db_root_password:
@@ -125,58 +121,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  # --- LOCAL AGENT MEMORY (host llama.cpp + Supermemory) ---
-  supermemory_data_init:
-    image: busybox:1.37.0
-    container_name: complect_supermemory_data_init
-    restart: "no"
-    user: "0:0"
-    network_mode: none
-    command: ["sh", "-c", "chown -R 10001:10001 /data"]
-    volumes:
-      - supermemory_data:/data
-
-  supermemory:
-    build:
-      context: ./infra/supermemory
-      args:
-        SUPERMEMORY_SERVER_VERSION: 0.0.6
-    container_name: complect_supermemory
-    restart: unless-stopped
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    environment:
-      HOME: /data
-      PORT: "6767"
-      OPENAI_BASE_URL: http://host.docker.internal:8090/v1
-      OPENAI_API_KEY: local-llama-cpp
-      OPENAI_MODEL: qwen3-coder
-      WORKFLOW_ENGINE: direct
-      SUPERMEMORY_DATA_DIR: /data
-      SUPERMEMORY_DISABLE_TELEMETRY: "1"
-    ports:
-      - "127.0.0.1:6767:6767"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - supermemory_data:/data
-    tmpfs:
-      - /tmp:rw,nosuid,size=512m
-    networks:
-      - supermemory_network
-    depends_on:
-      supermemory_data_init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
 
   # --- STORAGE LAYER CONTEXT (MinIO S3 API) ---
   minio:

@@ -36,17 +36,6 @@ class AgentInfrastructureTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(variable, result.stderr)
 
-    def test_supermemory_uses_a_dedicated_network(self) -> None:
-        result = compose_config()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        configuration = json.loads(result.stdout)
-
-        supermemory_networks = set(configuration["services"]["supermemory"]["networks"])
-        self.assertEqual(supermemory_networks, {"supermemory_network"})
-        for service_name, service in configuration["services"].items():
-            if service_name != "supermemory":
-                self.assertNotIn("supermemory_network", service.get("networks", {}))
-
     def test_replication_password_is_one_docker_secret(self) -> None:
         result = compose_config()
         self.assertEqual(result.returncode, 0, result.stderr)
