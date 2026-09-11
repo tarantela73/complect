@@ -10,14 +10,17 @@ from django.contrib.auth.hashers import check_password
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 
+from apps.common.models.outbox import OutboxRecord
 from apps.common.tenancy.context import tenant_rls_scope
 from apps.users.contracts.auth_context_impl import UsersAuthContextValidator
+from apps.users.events import IdentityMergeAuthorityChangedEvent
 from apps.users.models import (
     IamTenantRegistryEntry,
     IdentityMergeHoldBlock,
     IdentityMergeOperation,
     IdentityMergeRequeue,
     IdentityMergeRequeueResult,
+    IdentitySecurityAuditRecord,
     TenantMembership,
     User,
 )
@@ -439,3 +442,18 @@ def test_owner_requeue_is_applied_only_with_fresh_authenticated_convergence(
     )
     result = IdentityMergeRequeueResult.objects.using("default").get(requeue=requeue)
     assert result.outcome == MergeRequeueOutcome.APPLIED
+    persisted_operation = IdentityMergeOperation.objects.using("default").get(pk=operation.id)
+    assert persisted_operation.state == IdentityMergeOperation.State.APPROVED_DEFERRED
+    audit = IdentitySecurityAuditRecord.objects.using("default").get(
+        event_type="identity.merge_authority_changed",
+        correlation_id=requeue.correlation_id,
+        metadata__operation_id=str(operation.id),
+    )
+    outbox = OutboxRecord.objects.using("default").get(
+        event_type=IdentityMergeAuthorityChangedEvent.EVENT_TYPE,
+        correlation_id=requeue.correlation_id,
+        payload_json__operation_id=str(operation.id),
+    )
+    assert audit.metadata["operation_version"] == persisted_operation.version
+    assert outbox.payload_json["operation_version"] == persisted_operation.version
+    assert result.observed_operation_version == persisted_operation.version
