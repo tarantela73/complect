@@ -1,0 +1,146 @@
+name: IAM CI
+
+# No path filters: common/auth/settings/migrations/infra can affect this gate.
+on:
+  push:
+    branches:
+      - main
+      - docs/iam-identity-roadmap
+  pull_request:
+    branches:
+      - main
+  # Manual dispatch becomes available after this workflow reaches the default branch.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_PROJECT_NAME: iam-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      DADATA_API_KEY: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Generate disposable credentials
+        run: |
+          set -euo pipefail
+          umask 077
+          for file in dev_db_password.txt dev_s3_password.txt dev_replication_password.txt; do
+            if [[ -e "infra/secrets/$file" || -L "infra/secrets/$file" ]]; then
+              echo "Refusing to overwrite an existing secret file: $file" >&2
+              exit 1
+            fi
+          done
+          install -d -m 700 infra/secrets
+          touch "$RUNNER_TEMP/iam-ci-owned-secrets"
+          for file in dev_db_password.txt dev_s3_password.txt dev_replication_password.txt; do
+            value=$(openssl rand -hex 32)
+            printf '::add-mask::%s\n' "$value"
+            printf '%s\n' "$value" > "infra/secrets/$file"
+          done
+          for key in SECRET_KEY EXPECTED_GATEWAY_TOKEN; do
+            value=$(openssl rand -hex 32)
+            printf '::add-mask::%s\n' "$value"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+          done
+          unset value
+
+      - name: Validate configuration and pull dependencies
+        run: |
+          set -euo pipefail
+          docker compose version
+          # The unmodified test runner uses this fixed network. Hosted jobs get
+          # a fresh daemon; never attach this CI stack to an existing dev network.
+          if docker network inspect erp_network >/dev/null 2>&1; then
+            echo "Refusing to use an existing erp_network" >&2
+            exit 1
+          fi
+          docker compose -f docker-compose.dev.yml config --quiet
+          touch "$RUNNER_TEMP/iam-ci-owned-stack"
+          docker compose -f docker-compose.dev.yml pull postgres_primary redis minio clamav
+          # File-backed Compose secrets retain host ownership/mode. PostgreSQL
+          # sources its replication init script after dropping to the postgres UID.
+          pg_uid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -u postgres)
+          pg_gid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -g postgres)
+          s3_uid=$(docker run --rm --entrypoint id minio/minio:latest -u)
+          s3_gid=$(docker run --rm --entrypoint id minio/minio:latest -g)
+          sudo chown "$pg_uid:$pg_gid" infra/secrets/dev_db_password.txt infra/secrets/dev_replication_password.txt
+          sudo chown "$s3_uid:$s3_gid" infra/secrets/dev_s3_password.txt
+
+      - name: Build and boot the minimal stack
+        run: |
+          set -euo pipefail
+          # These are backend's four healthy dependencies. Files tests use the
+          # configured STUB backend, so s3_bootstrap and a replica are unnecessary.
+          docker compose -f docker-compose.dev.yml up -d --build --wait --wait-timeout 600 \
+            postgres_primary redis minio clamav backend
+          docker compose -f docker-compose.dev.yml ps
+          docker compose -f docker-compose.dev.yml exec -T backend \
+            curl --fail --silent --show-error http://localhost:8010/health/
+
+      - name: Django system check
+        run: docker compose -f docker-compose.dev.yml exec -T backend python manage.py check
+
+      - name: Users migration drift
+        run: docker compose -f docker-compose.dev.yml exec -T backend python manage.py makemigrations users --check --dry-run
+
+      - name: IAM fence critical tests
+        run: bash infra/scripts/run_iam_fence_tests.sh apps/users/tests/test_identity_audit_fence.py
+
+      - name: Full backend regression
+        run: bash infra/scripts/run_iam_fence_tests.sh apps --maxfail=10
+
+      # Repository-wide mypy, migration/DDD linters, makemigrations, frontend,
+      # E2E and CodeQL are deliberately not required here: existing findings
+      # need separate classification/remediation before adding green gates.
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          docker compose -f docker-compose.dev.yml ps || true
+          docker compose -f docker-compose.dev.yml logs --no-color --tail=200 backend || true
+          docker compose -f docker-compose.dev.yml logs --no-color --tail=200 postgres_primary || true
+
+      - name: Remove disposable resources
+        if: always()
+        run: |
+          set +e
+          cleanup_status=0
+          if [[ -f "$RUNNER_TEMP/iam-ci-owned-stack" ]]; then
+            # Remove runner Redis orphans before removing their network. This
+            # name prefix is safe on this job's fresh GitHub-hosted daemon.
+            redis_ids=$(docker ps -aq --filter 'name=^/complect-iam-test-')
+            result=$?
+            if (( result != 0 )); then cleanup_status=$result; fi
+            if [[ -n "$redis_ids" ]]; then
+              readarray -t redis_containers <<< "$redis_ids"
+              docker rm -f "${redis_containers[@]}"
+              result=$?
+              if (( result != 0 )); then cleanup_status=$result; fi
+            fi
+            docker compose -f docker-compose.dev.yml down -v --remove-orphans
+            result=$?
+            if (( result != 0 )); then cleanup_status=$result; fi
+          fi
+          if [[ -f "$RUNNER_TEMP/iam-ci-owned-secrets" ]]; then
+            rm -f infra/secrets/dev_db_password.txt infra/secrets/dev_s3_password.txt \
+              infra/secrets/dev_replication_password.txt
+            result=$?
+            if (( result != 0 )); then cleanup_status=$result; fi
+          fi
+          rm -f "$RUNNER_TEMP/iam-ci-owned-secrets" "$RUNNER_TEMP/iam-ci-owned-stack"
+          exit "$cleanup_status"
