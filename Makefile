@@ -119,7 +119,7 @@ from config.urls import api; print(json.dumps(api.get_openapi_schema()))" \
 	$(COMPOSE) exec frontend npx openapi-typescript /tmp/openapi.json -o src/shared/api/generated/schema.d.ts
 
 test-e2e:
-	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm install --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
+	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm ci --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
 
 # ============================================
 # QUALITY
@@ -164,3 +164,20 @@ prune:
 
 health:
 	curl http://localhost:8010/health/
+
+# Dependency tooling runs in disposable containers, without the development stack.
+.PHONY: lock-backend check-backend-lock check-toolchain
+TOOLCHAIN_IMAGE := complect-dependency-toolchain:uv-0.11.21
+
+lock-backend:
+	docker build --target toolchain -f backend/Dockerfile.dev -t $(TOOLCHAIN_IMAGE) backend
+	docker run --rm --user "$$(id -u):$$(id -g)" -e UV_CACHE_DIR=/tmp/uv-cache -v "$(CURDIR):/workspace" -w /workspace $(TOOLCHAIN_IMAGE) python backend/requirements/lock.py compile
+
+check-backend-lock:
+	docker build --target toolchain -f backend/Dockerfile.dev -t $(TOOLCHAIN_IMAGE) backend
+	docker run --rm --user "$$(id -u):$$(id -g)" -e UV_CACHE_DIR=/tmp/uv-cache -v "$(CURDIR):/workspace:ro" -w /workspace $(TOOLCHAIN_IMAGE) python backend/requirements/lock.py check
+
+check-toolchain:
+	docker run --rm -v "$(CURDIR):/workspace:ro" -w /workspace $$(jq -r .python.image toolchain.json) python infra/scripts/check_toolchain.py \
+		--host-version docker="$$(docker version --format '{{.Server.Version}}')" \
+		--host-version docker_compose="$$(docker compose version --short)"

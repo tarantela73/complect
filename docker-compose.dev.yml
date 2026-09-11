@@ -394,7 +394,7 @@ services:
 
   # --- FRONTEND CLIENT COMPONENTS ---
   frontend:
-    image: node:22-alpine
+    image: node:22.22.3-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
     container_name: complect_frontend_dev
     restart: unless-stopped
     working_dir: /app
@@ -412,4 +412,4 @@ services:
       - WATCHPACK_POLLING=true
     networks:
       - erp_network
-    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
