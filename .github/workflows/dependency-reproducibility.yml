@@ -21,16 +21,16 @@ jobs:
           persist-credentials: false
       - name: Verify toolchain declarations and backend locks
         run: make check-toolchain check-backend-lock
-      - name: Lock metadata and host policy regression tests
-        run: |
-          docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace \
-            complect-dependency-toolchain:uv-0.11.21 python -B -m unittest discover \
-            -s infra/scripts/tests -p test_dependency_tooling.py -v
       - name: Build and validate the locked backend
         run: |
           set -euo pipefail
           docker build -f backend/Dockerfile.dev -t complect-dependency-validation backend
           docker run --rm --network none complect-dependency-validation uv pip check --system
+      - name: Lock metadata and host policy regression tests
+        run: |
+          docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace \
+            complect-dependency-validation python -B -m unittest discover \
+            -s infra/scripts/tests -p test_dependency_tooling.py -v
       - name: Validate both npm clean installs
         run: |
           set -euo pipefail

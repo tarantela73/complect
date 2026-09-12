@@ -1,8 +1,11 @@
 """Regression checks for lock metadata coverage and host version semantics."""
+
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -81,6 +84,26 @@ class LockMetadataTests(unittest.TestCase):
         self.write_metadata(metadata)
         with self.assertRaisesRegex(ValueError, "Invalid SHA-256"):
             LOCK.verify_inputs()
+
+    def test_rehashed_new_input_cannot_bypass_offline_install_validation(self):
+        source = self.directory / "dev.txt"
+        source.write_text(source.read_text() + "\nnot-in-the-reviewed-lock==1.0\n")
+        metadata = self.metadata()
+        metadata["sha256"]["dev.txt"] = hashlib.sha256(source.read_bytes()).hexdigest()
+        self.write_metadata(metadata)
+        with self.assertRaisesRegex(ValueError, "Missing locked requirement"):
+            LOCK.verify_inputs()
+
+    def test_installed_transitive_dependencies_cannot_be_omitted_from_lock(self):
+        target = self.directory / "dev.lock"
+        content, count = re.subn(r"^certifi==[^\n]*(?:\n[ \t][^\n]*)*\n?", "", target.read_text(), flags=re.M)
+        self.assertEqual(count, 1)
+        target.write_text(content)
+        metadata = self.metadata()
+        metadata["sha256"]["dev.lock"] = hashlib.sha256(target.read_bytes()).hexdigest()
+        self.write_metadata(metadata)
+        with self.assertRaisesRegex(ValueError, "Missing locked dependency"):
+            LOCK.verify_installed()
 
     def test_unsupported_schema_is_rejected(self):
         metadata = self.metadata()

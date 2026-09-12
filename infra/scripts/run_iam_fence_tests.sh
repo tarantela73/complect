@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Run from the repository root. All Python and services run in Docker.
 set -euo pipefail
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "$project_root"
+compose=(python3 -B infra/scripts/dev_environment.py compose)
+backend_id=$("${compose[@]}" ps -q backend)
+test -n "$backend_id" || { echo 'Run make bootstrap first' >&2; exit 1; }
+project_network=$(docker inspect --format '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}' "$backend_id")
+test -n "$project_network"
 test_run_id=$(cat /proc/sys/kernel/random/uuid)
 test_redis_name="complect-iam-test-${test_run_id}"
-docker run --rm -d --name "$test_redis_name" --network erp_network redis:7.2-alpine >/dev/null
+docker run --rm -d --name "$test_redis_name" --network "$project_network" redis:7.2-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8 >/dev/null
 trap 'docker rm -f "$test_redis_name" >/dev/null' EXIT
-docker compose -f docker-compose.dev.yml exec -T \
+"${compose[@]}" exec -T \
   -e REDIS_DEFAULT_URL="redis://${test_redis_name}:6379/0" \
   -e REDIS_CACHE_URL="redis://${test_redis_name}:6379/1" \
   -e REDIS_CELERY_URL="redis://${test_redis_name}:6379/2" \

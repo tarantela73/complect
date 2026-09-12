@@ -104,10 +104,11 @@
       "different_tested_version": "warn"
     },
     "host_python": {
-      "required": false,
-      "kind": "optional_host_tool",
-      "version_policy": "presence",
-      "different_tested_version": "warn"
+      "required": true,
+      "kind": "required_host_tool",
+      "version_policy": "compatible",
+      "compatibility_constraint": ">=3.10",
+      "purpose": "stdlib-only safe lifecycle orchestration; application Python remains pinned in Docker"
     },
     "host_uv": {
       "required": false,
@@ -117,21 +118,20 @@
     },
     "host_node": {
       "required": false,
-      "required_when": "using transitional host E2E until Phase 2 containerization",
       "kind": "optional_host_tool",
       "version_policy": "presence",
-      "different_tested_version": "warn",
-      "tested_version": "24.20.0",
-      "compatibility_constraint": null
+      "purpose": "optional external MCP tooling; E2E no longer uses host Node"
     },
     "host_npm": {
       "required": false,
-      "required_when": "using transitional host E2E until Phase 2 containerization",
       "kind": "optional_host_tool",
-      "version_policy": "presence",
-      "different_tested_version": "warn",
-      "tested_version": "12.0.2",
-      "compatibility_constraint": null
+      "version_policy": "presence"
     }
+  },
+  "e2e": {
+    "playwright_version": "1.49.1",
+    "image": "mcr.microsoft.com/playwright:v1.49.1-noble@sha256:70e367e0cbf60340a5b5fd562f6247a34eb3196efab9f88a3dd56482d9fe09d2",
+    "kind": "pinned_runtime",
+    "version_policy": "exact"
   }
 }

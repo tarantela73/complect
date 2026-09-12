@@ -25,16 +25,15 @@ that machine snapshot is not an installation input or a repository artifact.
 
 Commit changed input files, both affected locks and `lock-metadata.json`
 together. Metadata must contain exactly the declared input/lock keys and valid
-SHA-256 values. The Docker build also independently recompiles and compares both
-locks before installing the full dev.lock with `--require-hashes --no-deps`, then runs
-`uv pip check`. The pinned base image contains pip; uv is pinned separately in
-its toolchain stage. These two installer tools are not application dependencies.
-Fingerprints detect accidental changes, not hostile edits to the whole repository.
-Rehashing a stale input in metadata cannot make the full resolver comparison pass.
-Trust in deliberate lock/version changes still comes from patch review; metadata
-is not a signature. Regeneration has no timestamp/header and sorts metadata keys;
-existing locks preserve reviewed version selections, independently of installed
-packages, machine snapshots, caches or development volumes.
+SHA-256 values. Full resolver regeneration/comparison stays in
+`make check-backend-lock` and CI. Docker installs validate input constraints
+offline, install dev.lock with `--require-hashes --no-deps`, then validate the
+installed transitive closure (including selected extras) and run `uv pip check`.
+This keeps bootstrap/sync from invoking a dependency resolver while retaining
+independent stale-root and missing-transitive-dependency checks. pip is in the
+pinned base image; uv is pinned in the toolchain stage. Neither is an application
+dependency. Fingerprints are integrity checks, not signatures over an untrusted
+repository; deliberate code/lock updates still require review.
 
 A normal regeneration does not request upgrades. To deliberately update a
 package, change its input constraint to the reviewed version and regenerate.
@@ -51,29 +50,12 @@ are not snapshotted by this phase.
 
 ## Frontend
 
-The frontend container is pinned to Node 22.22.3 / npm 10.9.8 by an immutable
-image digest. Compose installs with `npm ci`; CI checks both actual versions
-against the manifest before clean installs. Neither npm project adds
-engine-strict or exact host engines. Both package manifests and lockfiles retain
-their pre-Phase-1 package selections and metadata.
-
-The existing host-run `make test-e2e` is a transitional legacy workflow. It uses
-`npm ci` and remains compatible with the observed WSL host Node 24.20.0 /
-npm 12.0.2 without changing the host installation. That legacy workflow will be
-removed after E2E containerization in Phase 2. Its existing absolute browser
-paths and Vitest/Playwright collection problem remain outside this phase.
-Generated SDK files remain local artifacts; their existing generation workflow
-is unchanged. Full frontend typecheck still needs that SDK.
-
-## Host tooling policy
-
-Exact pins apply to container Python/Node/npm, build uv and agent CodeGraph.
-Docker Engine, Compose, Git, Bash, Make and jq use presence/functional
-compatibility. Docker 29.7.2 and Compose 5.5.0 are tested baselines, not exact
-requirements. No unsupported minimum/range is invented. `make check-toolchain`
-reports different observed Docker/Compose versions as WARN, not a version
-failure. A missing required tool or actual failed operation still fails.
-Optional host Node/npm versions are also observations, not required downgrades.
+The frontend container uses the digest-pinned Node 22.22.3 / npm 10.9.8 image.
+An explicit npm-ci stage records both package inputs and actual runtime versions.
+It reuses the installed tree only when those inputs match. Host engines are not
+constrained. Playwright 1.49.1 now runs in its matching pinned browser container;
+the transitional host E2E target has been replaced. See
+[workstations.md](workstations.md) for SDK, E2E, ports and lifecycle commands.
 
 ## Local artifacts and agent settings
 
@@ -96,7 +78,6 @@ must not be made executable as a blanket normalization step.
 ## Scope
 
 The dependency CI gate checks both locks, the pinned backend build and both npm
-clean installs without starting the persistent development stack. No secrets,
-ports, SELinux policy, IAM/migration behavior, database roles, bootstrap/sync/
-doctor commands or Fedora installation are changed in Phase 1. Fixed dependency
+clean installs without starting the persistent development stack. Phase 2 adds the development lifecycle documented in workstations.md, without
+changing application dependencies, IAM business logic or production deployment. Fixed dependency
 versions are a compatibility baseline, not a security-update certification.

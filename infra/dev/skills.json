@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "required": [
+    "supabase-postgres-best-practices",
+    "tdd",
+    "diagnosing-bugs",
+    "code-review"
+  ],
+  "optional": [
+    "security-reviewer"
+  ],
+  "note": "Agent skills are installed separately from source at their approved revisions. Doctor reports unverifiable host availability; it never installs skills or changes global Codex configuration."
+}
