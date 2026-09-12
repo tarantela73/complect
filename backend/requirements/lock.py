@@ -1,7 +1,9 @@
 """Compile and verify requirements locks inside the pinned Docker toolchain."""
+
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import platform
 import re
@@ -26,6 +28,55 @@ def uv_version() -> str:
     return subprocess.check_output(["uv", "--version"], text=True).split()[1]
 
 
+def locked_versions(group: str) -> dict[str, str]:
+    from pip._vendor.packaging.utils import canonicalize_name
+
+    content = (DIRECTORY / f"{group}.lock").read_text()
+    return {canonicalize_name(name): version for name, version in re.findall(r"^([\w.-]+)==([^\s;\\]+)", content, re.M)}
+
+
+def input_requirements(group: str):
+    from pip._vendor.packaging.requirements import Requirement
+
+    pending = [f"{group}.txt"]
+    visited = set()
+    result = []
+    while pending:
+        name = pending.pop()
+        if name in visited:
+            continue
+        if name not in {"base.txt", "dev.txt"}:
+            raise ValueError("Requirements include an unverified input path")
+        visited.add(name)
+        for line in (DIRECTORY / name).read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("-r "):
+                pending.append(line[3:].strip())
+            else:
+                requirement = Requirement(line)
+                if requirement.url:
+                    raise ValueError("Direct URL inputs require a separately reviewed lock policy")
+                result.append(requirement)
+    return result
+
+
+def verify_root_constraints() -> None:
+    from pip._vendor.packaging.utils import canonicalize_name
+
+    for group in ("base", "dev"):
+        versions = locked_versions(group)
+        for requirement in input_requirements(group):
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
+            name = canonicalize_name(requirement.name)
+            if name not in versions:
+                raise ValueError(f"Missing locked requirement: {name}")
+            if not requirement.specifier.contains(versions[name], prereleases=True):
+                raise ValueError(f"Locked version does not satisfy input: {name}")
+
+
 def verify_inputs() -> None:
     metadata = json.loads((DIRECTORY / METADATA).read_text())
     required_fields = {"schema_version", "python", "uv", "python_platform", "sha256"}
@@ -46,6 +97,48 @@ def verify_inputs() -> None:
         raise ValueError("Use the Python/uv versions in toolchain.json")
     if platform.machine() != "x86_64" or sys.platform != "linux":
         raise ValueError("This lock targets Linux amd64; another target needs separate validation")
+    verify_root_constraints()
+
+
+def verify_installed() -> None:
+    """Validate the installed dependency closure offline, including selected extras."""
+    from pip._vendor.packaging.requirements import Requirement
+    from pip._vendor.packaging.utils import canonicalize_name
+
+    verify_inputs()
+    versions = locked_versions("dev")
+    for name, version in versions.items():
+        try:
+            actual = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError as error:
+            raise ValueError(f"Locked package not installed: {name}") from error
+        if actual != version:
+            raise ValueError(f"Installed version differs from lock: {name}")
+    requirements = input_requirements("dev")
+    visited: set[tuple[str, tuple[str, ...]]] = set()
+    while requirements:
+        requirement = requirements.pop()
+        name = canonicalize_name(requirement.name)
+        if name not in versions:
+            raise ValueError(f"Missing locked dependency: {name}")
+        if not requirement.specifier.contains(versions[name], prereleases=True):
+            raise ValueError(f"Locked transitive version violates constraint: {name}")
+        extras = tuple(sorted(requirement.extras))
+        state = (name, extras)
+        if state in visited:
+            continue
+        visited.add(state)
+        for value in importlib.metadata.requires(name) or []:
+            dependency = Requirement(value)
+            if dependency.marker is None or any(
+                dependency.marker.evaluate({"extra": extra}) for extra in ("", *extras)
+            ):
+                requirements.append(dependency)
+    installed = {canonicalize_name(package.metadata["Name"]) for package in importlib.metadata.distributions()}
+    unexpected = installed - set(versions) - {"pip", "uv"}
+    if unexpected:
+        raise ValueError("Unexpected installed packages: " + ", ".join(sorted(unexpected)))
+    print("Installed package versions and transitive closure match the reviewed lock (offline)")
 
 
 def generate(destination: Path) -> dict:
@@ -68,10 +161,15 @@ def generate(destination: Path) -> dict:
         if source.exists():
             shutil.copyfile(source, destination / name)
     options = [
-        "--python-version", python,
-        "--python-platform", target,
-        "--generate-hashes", "--no-header", "--no-annotate",
-        "--default-index", "https://pypi.org/simple",
+        "--python-version",
+        python,
+        "--python-platform",
+        target,
+        "--generate-hashes",
+        "--no-header",
+        "--no-annotate",
+        "--default-index",
+        "https://pypi.org/simple",
     ]
     for group in ("base", "dev"):
         command = ["uv", "--no-config", "pip", "compile", f"{group}.txt", *options]
@@ -92,9 +190,12 @@ def generate(destination: Path) -> dict:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"compile", "check", "check-inputs"}:
-        raise ValueError("Usage: lock.py compile|check|check-inputs")
+    if len(sys.argv) != 2 or sys.argv[1] not in {"compile", "check", "check-inputs", "verify-installed"}:
+        raise ValueError("Usage: lock.py compile|check|check-inputs|verify-installed")
     mode = sys.argv[1]
+    if mode == "verify-installed":
+        verify_installed()
+        return
     if mode in {"check", "check-inputs"}:
         verify_inputs()
     if mode == "check-inputs":

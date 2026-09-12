@@ -1,0 +1,4 @@
+# Reference for user-level Codex config. Do not duplicate an existing server ID.
+[mcp_servers.codegraph]
+command = "codegraph"
+args = ["serve", "--mcp"]

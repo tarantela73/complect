@@ -1,4 +1,4 @@
-COMPOSE=docker compose -f docker-compose.dev.yml
+COMPOSE=python3 -B infra/scripts/dev_environment.py compose
 
 # ============================================
 # CORE LIFECYCLE
@@ -47,7 +47,7 @@ agent-infra-test:
 # ============================================
 
 migrate:
-	$(COMPOSE) exec backend python manage.py migrate --noinput
+	$(COMPOSE) run --rm --no-deps migrate
 
 makemigrations:
 	$(COMPOSE) exec backend python manage.py makemigrations
@@ -106,20 +106,14 @@ coverage:
 build-frontend:
 	$(COMPOSE) exec -e NODE_ENV=production frontend sh -c "cd /app && npm run build"
 
-tsc:
-	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit"
+tsc: generate-sdk
+	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit --incremental false"
 
 generate-sdk:
-	docker compose -f docker-compose.dev.yml exec backend python -c "\
-import os, json; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local');\
-import django; django.setup();\
-from config.urls import api; print(json.dumps(api.get_openapi_schema()))" \
-	> /tmp/openapi.json
-	docker cp /tmp/openapi.json complect_frontend_dev:/tmp/openapi.json
-	$(COMPOSE) exec frontend npx openapi-typescript /tmp/openapi.json -o src/shared/api/generated/schema.d.ts
+	python3 -B infra/scripts/dev_environment.py sdk
 
-test-e2e:
-	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm ci --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
+test-e2e: generate-sdk
+	python3 -B infra/scripts/dev_environment.py e2e
 
 # ============================================
 # QUALITY
@@ -163,7 +157,7 @@ prune:
 # ============================================
 
 health:
-	curl http://localhost:8010/health/
+	bash infra/scripts/doctor.sh
 
 # Dependency tooling runs in disposable containers, without the development stack.
 .PHONY: lock-backend check-backend-lock check-toolchain
@@ -181,3 +175,13 @@ check-toolchain:
 	docker run --rm -v "$(CURDIR):/workspace:ro" -w /workspace $$(jq -r .python.image toolchain.json) python infra/scripts/check_toolchain.py \
 		--host-version docker="$$(docker version --format '{{.Server.Version}}')" \
 		--host-version docker_compose="$$(docker compose version --short)"
+
+.PHONY: bootstrap sync doctor
+bootstrap:
+	bash infra/scripts/bootstrap.sh
+
+sync:
+	bash infra/scripts/sync.sh
+
+doctor:
+	bash infra/scripts/doctor.sh

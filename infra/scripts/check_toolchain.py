@@ -1,4 +1,5 @@
 """Check exact container pins separately from host compatibility diagnostics."""
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,11 @@ def main() -> None:
     require(f"FROM {manifest['python']['image']} AS toolchain" in dockerfile, "Python image drift")
     require(f"uv=={manifest['uv']['version']}" in dockerfile, "uv version drift")
     require(f"image: {manifest['node']['image']}" in compose, "Node image drift")
-    require("npm ci --no-audit --no-fund" in compose, "Container must use npm ci")
+    require(
+        "command: [node, /opt/complect/npm_install.mjs]" in compose
+        and "['ci'," in (ROOT / "infra/scripts/npm_install.mjs").read_text(),
+        "Container must use npm ci",
+    )
     require(manifest["target"]["os"] == "linux" and manifest["target"]["architecture"] == "amd64", "Target drift")
     for name in ("python", "node", "npm", "uv"):
         require(manifest[name]["version_policy"] == "exact", f"{name} must have exact container/build pins")

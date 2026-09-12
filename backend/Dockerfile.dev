@@ -22,11 +22,14 @@ WORKDIR /app
 
 # Копируем и кэшируем слои зависимостей
 COPY requirements ./requirements
-RUN python requirements/lock.py check \
+RUN python requirements/lock.py check-inputs \
     && uv pip install --system --require-hashes --no-deps -r requirements/dev.lock \
+    && python requirements/lock.py verify-installed \
     && uv pip check --system
 
 # Копируем исходный код бэкенда
 COPY . .
+ARG DEV_SOURCE_DIGEST=unmanaged
+LABEL complect.source_digest=$DEV_SOURCE_DIGEST
 
 # CMD по умолчанию переопределяется в docker-compose под запуск конкретного сервиса
