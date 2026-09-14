@@ -37,6 +37,27 @@ validation; no guessed minimum/range is imposed.
 Host Node/npm and host Chromium are not needed for application or E2E commands.
 Use the container versions and dependency locks described in [dependencies.md](dependencies.md).
 
+### AmneziaVPN and Docker network allocation
+
+On the tested Fedora workstation, AmneziaVPN installs TUN routes
+`0.0.0.0/1` and `128.0.0.0/1`. While these routes are active, Docker/Moby
+IPAM cannot allocate a new bridge subnet and returns
+`all predefined address pools have been fully subnetted`.
+
+With AmneziaVPN disconnected, new Docker network creation succeeded. After
+reconnecting the VPN, the existing network remained usable: container DNS
+resolution and outbound HTTPS with HTTP 200 were verified. This is an observed
+host/workstation limitation; it does not establish a general defect in Complect,
+Fedora, or Docker runtime on existing networks, or universal incompatibility
+between AmneziaVPN and Docker.
+
+If the Complect project network does not yet exist, temporarily disconnect
+AmneziaVPN before the first `make bootstrap` or another operation that creates
+a new bridge network. Reconnect it after network creation; existing networks
+do not require the VPN to remain disconnected. Do not add a machine-specific
+subnet to `docker-compose.dev.yml`. Do not change Docker `default-address-pools`
+without a separate host-network analysis.
+
 ## New checkout
 
 ```bash
