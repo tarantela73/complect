@@ -260,3 +260,30 @@ immutability, Docker command tracing and negative cases. The explicit
 `--allow-candidate-patch` flag is only for reviewing an uncommitted patch applied
 to a clean baseline clone; this must be reported separately from committed-checkout
 CI evidence. Native Fedora with SELinux Enforcing still requires Phase 3.
+
+## Frozen MinIO image sourcing
+
+The dev server and bucket initializer use the official `quay.io/minio/minio`
+`RELEASE.2025-09-07T16-13-09Z` and `quay.io/minio/mc`
+`RELEASE.2025-08-13T08-35-41Z` images. Each exact release tag is paired with its
+multiarch manifest-list digest in Compose; both digests are unchanged from the
+previous Docker Hub pins. Linux amd64 resolves to the corresponding child
+manifest. Do not substitute a floating tag, community rebuild or newer release.
+
+On 2026-09-14, anonymous Docker Hub tag and digest requests were denied while
+Quay served the same manifest lists. Quay publication is confirmed by the
+upstream release scripts for
+[server](https://github.com/minio/minio/blob/RELEASE.2025-09-07T16-13-09Z/docker-buildx.sh)
+and [client](https://github.com/minio/mc/blob/RELEASE.2025-08-13T08-35-41Z/docker-buildx.sh).
+The Compose infrastructure tests check both exact references and the unchanged
+MinIO ports, command, healthcheck and bucket initialization commands.
+
+Supply-chain follow-up, outside this portability fix: Docker Hub marks both
+repositories Archived; the GitHub [server](https://github.com/minio/minio) and
+[client](https://github.com/minio/mc) repositories are also archived. The server
+community distribution is source-only. The frozen server predates
+[Security/CVE RELEASE.2025-10-15T17-29-55Z](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z).
+Preserving this version is not a security-update certification. After Fedora
+portability, separately decide whether to retain frozen community MinIO only
+for local dev, adopt a maintained S3-compatible dev backend, or choose another
+approved option. This patch does not make that decision or upgrade MinIO.
