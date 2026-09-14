@@ -13,6 +13,8 @@ def compose_config() -> dict:
         [
             "docker",
             "compose",
+            "--profile",
+            "tools",
             "-f",
             str(PROJECT_ROOT / "docker-compose.dev.yml"),
             "config",
@@ -28,6 +30,42 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_minio_server_uses_reviewed_upstream_release_and_index(self):
+        self.assertEqual(
+            compose_config()["services"]["minio"]["image"],
+            "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
+            "@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+        )
+
+    def test_minio_client_uses_reviewed_upstream_release_and_index(self):
+        self.assertEqual(
+            compose_config()["services"]["s3_bootstrap"]["image"],
+            "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z"
+            "@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727",
+        )
+
+    def test_minio_runtime_contract_is_preserved(self):
+        services = compose_config()["services"]
+        server = services["minio"]
+        self.assertEqual(
+            [(p["host_ip"], str(p["published"]), p["target"]) for p in server["ports"]],
+            [("127.0.0.1", "9000", 9000), ("127.0.0.1", "9001", 9001)],
+        )
+        self.assertEqual(server["command"], ["server", "/data", "--console-address", ":9001"])
+        self.assertEqual(server["healthcheck"], {
+            "test": ["CMD", "curl", "-fsS", "--connect-timeout", "1", "--max-time", "2",
+                     "http://localhost:9000/minio/health/live"],
+            "interval": "3s", "timeout": "3s", "retries": 30,
+        })
+        client = services["s3_bootstrap"]
+        self.assertEqual(client["entrypoint"], ["/bin/sh", "-ec"])
+        self.assertEqual(client["command"], [
+            'mc alias set local http://minio:9000 complect_root_user '
+            '"$$(cat /run/complect-secrets/minio_password)" >/dev/null; '
+            'mc mb --ignore-existing local/complect-quarantine; '
+            'mc mb --ignore-existing local/complect-production'
+        ])
+
     def test_credentials_are_files_and_shared_runtime_volume_is_read_only(self):
         services = compose_config()["services"]
         for name in ("backend", "celery_worker", "celery_beat"):
