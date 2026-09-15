@@ -258,6 +258,17 @@ and local credential storage. A failed MCP login must be fixed through the prope
 credential flow, never by weakening database authentication. Bootstrap does not
 reconfigure global Codex, create MCP credentials or alter production roles.
 
+MCP configuration changes require explicit task scope or user authorization.
+Within that authorized scope, apply the add-only policy by default: inspect
+global and project config and run `codex mcp list`, then add a new server under
+a unique ID. Deletion, disabling, renaming, replacement or overriding an
+existing server's transport/auth/tool policy needs an explicit user request
+that names the exact server ID. Reusable configuration belongs in
+`~/.codex/config.toml`; Complect-only configuration belongs in
+`.codex/config.toml`; never duplicate one ID across both. Reference credentials
+through environment variables, functionally verify the intended read-only
+capability when safe, and run `codex mcp list` again after a change.
+
 ## Disposable acceptance verification
 
 The `Workstation reproducibility` CI job starts from a clean committed checkout.
