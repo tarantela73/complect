@@ -218,6 +218,27 @@ container Xvfb, not a host browser window.
 Vitest excludes Playwright specs. If no unit tests exist, run it with the explicit
 `--passWithNoTests` option and report zero tests rather than claiming unit coverage.
 
+## Test isolation and authorization
+
+In a verified local Docker environment with disposable test data and no production
+access, run task-relevant tests and repair regressions caused by your changes
+without asking again at every step. This authorization does not cover unrelated
+failures, production access or destructive changes to persistent development data.
+Before relying on it, verify the selected Docker endpoint, database/service targets,
+credential sources, external integrations and the test's cleanup boundary without
+printing secret values. Recheck when those inputs or the test scope change.
+
+Ordinary `make test*` commands execute in the existing backend container using
+`config.settings.local`; they are not a blanket disposable environment. Backend
+fixtures can open a database before normal pytest database setup, and Redis,
+external credentials and service connectivity may be shared with development.
+`infra/scripts/run_iam_fence_tests.sh` redirects all database aliases to a unique
+temporary database and isolates six Redis URLs, but does not override the channel
+layer/result-backend URLs, inherited credentials or network egress. Use it only for
+tests whose remaining dependencies have been verified; its cleanup is not proof
+that production is unreachable. If isolation cannot be established, report the
+specific limitation and continue independent checks rather than claiming safety.
+
 ## Doctor is read-only
 
 Doctor performs version/config/ownership checks, Docker inspections, bounded HTTP
