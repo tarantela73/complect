@@ -23,6 +23,22 @@ Plugin, Skill or MCP server was used unless it was actually available and used
 in the current task; final reports list only Skills that were read/applied and
 tools that were invoked.
 
+## Installed project-local skills
+
+Read [local skill policy](local-skills.md) for precedence, Fedora execution and
+controlled updates; [provenance](skills-provenance.json) pins the upstream source.
+These are editable copies in `.agents/skills/`, not global/plugin duplicates.
+
+| Task | Installed method |
+| --- | --- |
+| Hard bug, race, performance regression | [diagnosing-bugs](../../.agents/skills/diagnosing-bugs/SKILL.md) |
+| Module/interface/seam design | [codebase-design](../../.agents/skills/codebase-design/SKILL.md) |
+| Approved behavioral change, regression fix | [tdd](../../.agents/skills/tdd/SKILL.md) |
+| Root/scoped AGENTS, Codex profiles, docs/agents or skill edits | [writing-for-agents](../../.agents/skills/writing-for-agents/SKILL.md) |
+| Substantial code review | [code-review](../../.agents/skills/code-review/SKILL.md) with `complect_reviewer` |
+| Domain terminology/model change | [domain-modeling](../../.agents/skills/domain-modeling/SKILL.md) |
+| External technology/standard investigation | [research](../../.agents/skills/research/SKILL.md) |
+
 ## Complect capability routing
 
 - **Repository and architecture analysis:** after the mandatory CodeGraph
@@ -54,10 +70,10 @@ tools that were invoked.
   `diagnosing-bugs` to establish a reproducible feedback loop; use CodeGraph
   before broad fixes.
 - **Formal diff review:** use `$code-review` only after loading its actual `SKILL.md`
-  and pinning a commit, branch, tag, merge-base or explicitly accepted
-  baseline. Keep its Standards axis (root/scoped instructions, Accepted ADRs and applicable
-  security/database rules) separate from its Spec axis (issue, task or
-  approved plan). When the `codex-security` plugin is available, select its
+  and pinning the requested commit/range or working-tree snapshot, including
+  relevant staged, unstaged and untracked files. Use `complect_reviewer`. Keep its Standards axis (root/scoped instructions, Accepted ADRs and applicable
+  security/database rules) separate from its Spec axis (explicit request, issue, ADR, specification or
+  approved plan). An existing authoritative spec needs no issue tracker/setup. When the `codex-security` plugin is available, select its
   `security-diff-scan` for a security diff review or `security-scan` for a
   scoped repository audit. Security-specific scan/review plugins are additional only
   when the task explicitly requires a security review; do not launch
