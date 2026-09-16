@@ -18,6 +18,50 @@
 
 ## 3. Решение
 
+### Уточнение Release N: VERIFIED_AUTH_TENANT_CONTEXT_BOUNDARY (2026-09-17)
+
+Для этого P0 repair slice следующие правила заменяют описанные ниже доверие
+к identity headers и запрет повторной backend JWT verification. Историческая
+модель ниже не является разрешением принимать неподтверждённый HTTP context.
+
+- Kong удаляет клиентские `X-User-ID`, `X-Tenant-ID`, `X-CTX-User-ID` и
+  `X-CTX-Tenant-ID`, устанавливает свой `X-Gateway-Token` и передаёт исходный
+  `Authorization` backend. Gateway не извлекает identity из JWT payload.
+- Backend `JWTAuth` проверяет подпись HS256, обязательный `exp` и `type=access`,
+  затем вызывает действующий users auth-context validator через common Protocol.
+  Tenant-qualified actor, canonical authority, disabled identity и применимые
+  identity/version/epoch guards сохраняются. Новый issuer/audience contract,
+  IdentitySession и tenant grants этим изменением не вводятся.
+- Tenant middleware вызывает этот authenticator до idempotency, tenant ORM и
+  остальных потребителей контекста. Только успешный verified result одновременно
+  устанавливает `request.jwt_*` и user/tenant ContextVar. Проверка gateway secret
+  остаётся дополнительной защитой; даже при её отключении headers не дают identity.
+- `require_permission` требует тот же verified result независимо от `auth=None`
+  или отсутствия router auth. Повторная проверка в одном request использует его
+  только при совпадении bearer, request attributes и ContextVar; mismatch
+  отклоняется, а не исправляется перезаписью контекста.
+- Users adapter регистрируется в `UsersConfig.ready()` до первого HTTP request;
+  отсутствие adapter закрывает доступ. Common не импортирует users implementation.
+- Context-free auth allowlist содержит только точные POST login, refresh, logout
+  и MFA verify. MFA setup/confirm и merge-convergence защищены access JWT уже в
+  middleware. GET/HEAD docs/OpenAPI, health/static/public и OPTIONS сохраняют
+  явные исключения. Public API по ADR-0023 получает tenant только из конфигурации
+  и не получает authenticated actor. Очистка выполняется и при исключениях.
+- Внутренние propagation serializers/parsers сохраняют формат и поведение.
+  Они не удостоверяют отправителя: доверие обязан установить внутренний transport
+  caller. Внешний HTTP не вызывает их для назначения actor/tenant. Наличие helper
+  не доказывает production wiring или аутентификацию внутреннего транспорта.
+
+Компромисс: криптографическая проверка и users validation выполняются на backend
+до чтения tenant-контекста; это устраняет зависимость authority от sanitation Kong.
+Повторные router/RBAC проверки переиспользуют один результат в пределах request.
+Rollback не должен возвращать доверие к внешним identity headers.
+
+Проверки: `test_verified_auth_boundary.py`, `test_verified_auth_http.py`,
+`test_endpoint_coverage.py`, context/RBAC regressions и
+`infra/scripts/tests/test_gateway_runtime.py`. Статическая проверка конфигурации
+не заменяет runtime Kong evidence; локальная БД не доказывает production RLS role.
+
 Трёхуровневая модель доверия в `AsgiTenantEnforcementMiddleware`.
 
 ### Уровень 1 — Публичные маршруты (PUBLIC_PREFIXES)
