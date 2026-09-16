@@ -3,7 +3,7 @@ name: research
 description: Investigate external technologies and standards against primary sources, preserving cited findings and separating them from Complect repository facts and decisions.
 ---
 
-Before applying this method, read [Complect skill policy](../../../docs/agents/local-skills.md).
+Follow root/scoped instruction hierarchy. For skill installation, provenance or updates, see [local skill policy](../../../docs/agents/local-skills.md); ordinary skill use does not require loading it.
 
 # Research for Complect
 
@@ -24,7 +24,8 @@ alongside independent work; otherwise investigate locally and disclose the scope
 3. Before proposing adoption, check applicable ADRs, Project_architecture.md,
    root/scoped AGENTS.md and the active plan. A best practice becomes a Complect
    rule only through the project's decision process.
-4. Save a cited Markdown artifact using an existing relevant documentation
-   location; reuse a relevant note where appropriate. Preserve provenance and
+4. Create a durable research artifact when the user requests one or the result
+   must support an accepted decision/plan; reuse a relevant note where appropriate.
+   Otherwise a source-backed answer is sufficient. Preserve provenance and
    uncertainty. If network access fails, state which claims remain unverified;
    do not turn inaccessible or stale sources into confirmed facts.

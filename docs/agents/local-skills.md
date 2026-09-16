@@ -1,6 +1,6 @@
 # Complect local skill policy
 
-Read this before applying any skill under `.agents/skills/`. These are editable,
+Read this for skill installation, provenance or updates; ordinary skill use follows root/scoped instructions without requiring this primer. These are editable,
 versioned Codex skills; each installed directory contains its supporting resources.
 
 ## Authority and runtime

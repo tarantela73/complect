@@ -3,7 +3,7 @@ name: codebase-design
 description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill needs the deep-module vocabulary.
 ---
 
-Before applying this method, read [Complect skill policy](../../../docs/agents/local-skills.md). It routes to root/scoped instructions and accepted decisions; this skill is methodology, not architectural authority.
+Follow root/scoped instruction hierarchy. For skill installation, provenance or updates, see [local skill policy](../../../docs/agents/local-skills.md); ordinary skill use does not require loading it.
 
 
 # Codebase Design
@@ -32,33 +32,7 @@ Use these terms for design reasoning. Preserve canonical CONCEPTS.md domain term
 
 ## Deep vs shallow
 
-**Deep module** = small interface + lots of implementation:
-
-```
-┌─────────────────────┐
-│   Small Interface   │  ← Few methods, simple params
-├─────────────────────┤
-│                     │
-│  Deep Implementation│  ← Complex logic hidden
-│                     │
-└─────────────────────┘
-```
-
-**Shallow module** = large interface + little implementation (avoid):
-
-```
-┌─────────────────────────────────┐
-│       Large Interface           │  ← Many methods, complex params
-├─────────────────────────────────┤
-│  Thin Implementation            │  ← Just passes through
-└─────────────────────────────────┘
-```
-
-When designing an interface, ask:
-
-- Can I reduce the number of methods?
-- Can I simplify the parameters?
-- Can I hide more complexity inside?
+Prefer a small interface that hides meaningful complexity. Simplify methods and parameters when doing so preserves the caller's contract.
 
 ## Principles
 
@@ -69,33 +43,7 @@ When designing an interface, ask:
 
 ## Designing for testability
 
-Good interfaces make testing natural:
-
-1. **Accept dependencies, don't create them.**
-
-   ```typescript
-   // Testable
-   function processOrder(order, paymentGateway) {}
-
-   // Hard to test
-   function processOrder(order) {
-     const gateway = new StripeGateway();
-   }
-   ```
-
-2. **Return results, don't produce side effects.**
-
-   ```typescript
-   // Testable
-   function calculateDiscount(cart): Discount {}
-
-   // Hard to test
-   function applyDiscount(cart): void {
-     cart.total -= discount;
-   }
-   ```
-
-3. **Small surface area.** Fewer methods = fewer tests needed. Fewer params = simpler test setup.
+Expose dependencies at established seams when this improves testing. Separate computation and external effects where it clarifies contracts and testing. Preserve established command/read separation and transaction boundaries; commands may intentionally change state. Keep the public test surface focused on observable behavior.
 
 ## Relationships
 

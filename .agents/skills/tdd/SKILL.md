@@ -3,14 +3,14 @@ name: tdd
 description: Behavior-first RED/GREEN development for approved behavioral changes, regression fixes and integration tests in Complect.
 ---
 
-Before applying this method, read [Complect skill policy](../../../docs/agents/local-skills.md). It routes to root/scoped instructions and accepted decisions; this skill is methodology, not architectural authority.
+Follow root/scoped instruction hierarchy. For skill installation, provenance or updates, see [local skill policy](../../../docs/agents/local-skills.md); ordinary skill use does not require loading it.
 
 
 # Test-Driven Development
 
-TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle: consult them before and during the loop, not after.
+Apply RED/GREEN to the selected behavior. Consult seam/mocking guidance when the task actually raises those questions.
 
-When exploring the codebase, read canonical `CONCEPTS.md` so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching.
+Use `CONCEPTS.md` when the task depends on domain terminology or changes/adds domain concepts. Select ADRs by the contract affected.
 
 ## What a good test is
 

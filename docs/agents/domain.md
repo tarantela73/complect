@@ -4,8 +4,8 @@ How the engineering skills should consume this repository's domain documentation
 
 ## Canonical sources
 
-After the required CodeGraph impact pass, read [CONCEPTS.md](../../CONCEPTS.md)
-for domain vocabulary and the applicable [ADRs](../adr/) for decisions.
+Use [CONCEPTS.md](../../CONCEPTS.md) when the task depends on domain terminology or changes/adds domain concepts.
+Select the applicable [ADRs](../adr/) by the contract affected; preserve the required CodeGraph-first impact analysis.
 `CONCEPTS.md` is Complect's canonical domain glossary. Do not create `CONTEXT.md`,
 `CONTEXT-MAP.md` or per-context glossary files unless the user explicitly requests
 that documentation change. A shared glossary does not imply one bounded context:
