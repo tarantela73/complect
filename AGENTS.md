@@ -54,3 +54,9 @@ Read the linked instructions for every matching impact, including work in `docs/
 CodeGraph establishes impact first; then use the narrowest available Skill, reading its actual `SKILL.md`. Plugins, Skills and MCP servers are separate layers: cached/configured does not mean enabled or functional. Report only capabilities actually used. Specialized exploration/review/verification guidance lives in [.codex/agents](.codex/agents/), with detailed routing in [capabilities.md](docs/agents/capabilities.md).
 
 Do not install, enable, disable, update, remove or reconfigure Plugins/MCP without explicit task scope or authorization; confirm external app connections individually. Authorized MCP changes follow add-only policy by default; replacing/disabling/renaming/deleting or overriding an existing server requires an explicit request naming its ID. Read the linked configuration policy before such changes. Local instruction files must be usable without network access; external references are not runtime instructions.
+
+Отдавай независимую работу помощникам, когда параллельный запуск сокращает общее время или расширяет охват и при этом не создает конфликтующих правок.
+
+Хорошо делегируется: исследование по разным направлениям, независимый разбор репозиториев, вычитка документации, анализ отдельных наборов данных.
+
+Не делегируется: строго последовательная работа, мелочь, где согласование дороже выигрыша, одновременные правки одного и того же куска кода.
