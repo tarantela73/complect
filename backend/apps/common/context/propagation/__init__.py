@@ -8,7 +8,12 @@ from apps.common.context.core import set_correlation_id, set_request_id, set_ten
 def apply_propagation_context(
     raw_headers: Dict[str, Any],
 ) -> tuple[bool, uuid.UUID | None, uuid.UUID | None]:
-    """Return (success, user_uuid, tenant_uuid). On failure returns (False, None, None)."""
+    """Restore context from a trusted internal transport, not external HTTP input.
+
+    This parser does not authenticate the sender. Its caller must establish the
+    internal transport's trust before invoking it. HTTP uses JWTAuth instead.
+    Return (success, user_uuid, tenant_uuid); missing identity returns False.
+    """
     tenant_id = raw_headers.get("x-ctx-tenant-id") or raw_headers.get("X-Tenant-ID")
     user_id = raw_headers.get("x-ctx-user-id") or raw_headers.get("X-User-ID")
     request_id = raw_headers.get("x-ctx-request-id") or raw_headers.get("X-Request-ID")
