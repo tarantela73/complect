@@ -16,7 +16,7 @@ Do not claim production-like RLS enforcement until the deployed database login r
 
 ## IAM, Identity and RBAC
 
-Read ADR-0024 and the active IAM plan before changing this area. `users.User` is evolving as the global Identity (stable `identity_id` UUID); membership, tenant-local status and authorization state are separate security-sensitive authorities. A browser `IdentitySession` has one active tenant grant, and protected tenant context follows the validated grant/JWT path.
+`users.User` is evolving as the global Identity (stable `identity_id` UUID); membership, tenant-local status and authorization state are separate security-sensitive authorities. A browser `IdentitySession` has one active tenant grant, and protected tenant context follows the validated grant/JWT path.
 
 Treat identity lifecycle, membership, authorization state, session grants, MFA/recovery state, refresh rotation and reconciliation as one security graph. `RoleBinding` remains a compatibility authority until the future membership role model is introduced. Its `user_id` is the deterministic tenant-local actor UUID derived from `TenantMembership.legacy_actor_user_id`, not the canonical `identity_id` or a raw Django integer PK. Preserve that immutable actor mapping through identity merges; never rebind existing roles to the canonical Identity UUID. Do not invent tables or assume later-plan authorities already exist.
 

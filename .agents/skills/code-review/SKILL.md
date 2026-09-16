@@ -3,10 +3,10 @@ name: code-review
 description: Review scoped commits, branches or working-tree changes on separate Standards and Spec axes using the existing Complect reviewer profile.
 ---
 
-Before applying this method, read [Complect skill policy](../../../docs/agents/local-skills.md). It routes to root/scoped instructions and accepted decisions; this skill is methodology, not architectural authority.
+Follow root/scoped instruction hierarchy. For skill installation, provenance or updates, see [local skill policy](../../../docs/agents/local-skills.md); ordinary skill use does not require loading it.
 
 
-Two independent axes use the existing [complect_reviewer profile](../../../.codex/agents/complect-reviewer.toml):
+Always assess both axes using the existing [complect_reviewer profile](../../../.codex/agents/complect-reviewer.toml):
 
 - **Standards**: root/scoped instructions, Accepted ADRs, applicable plan and database/security contracts.
 - **Spec**: the explicit task and its authoritative requirements.
@@ -48,35 +48,17 @@ continuing Standards review.
 
 Read root/scoped AGENTS.md by impact, applicable Accepted ADRs, approved active plans and relevant project docs. CodeGraph precedes targeted reads for substantial review. Keep code-smell heuristics subordinate to these sources.
 
-On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
-
-- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
-- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation. Like any standard here, skip anything tooling already enforces.
-
-Each smell reads *what it is* → *how to fix*; match it against the diff:
-
-- **Mysterious Name**: a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
-- **Duplicated Code**: the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
-- **Feature Envy**: a method that reaches into another object's data more than its own. → move the method onto the data it envies.
-- **Data Clumps**: the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
-- **Primitive Obsession**: a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
-- **Repeated Switches**: the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
-- **Shotgun Surgery**: one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
-- **Divergent Change**: one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
-- **Speculative Generality**: abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
-- **Message Chains**: long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
-- **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
-- **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
+Raise code smells only when they materially affect correctness, architecture, security, maintainability or the requested scope. Explain the concrete impact and label heuristic judgments as such; documented Complect standards take precedence. Skip observations already enforced by tooling.
 
 ### 4. Run the two axes through complect_reviewer
 
-Use separate `complect_reviewer` instances for Standards and Spec when available and capacity permits. Otherwise run separate passes with the same profile and report reduced independence; never install another reviewer profile. Pass the fixed snapshot, scoped instructions and task to both.
+Use independent reviewer instances when change size, risk or domain separation justifies an additional pass. One `complect_reviewer` may cover both axes for a small bounded change. Never install another reviewer profile. Pass each reviewer the fixed snapshot/diff, acceptance criteria, relevant Complect standards and specific risk areas.
 
 **Standards sub-agent prompt** should include:
 
 - The full snapshot manifest, diff commands and relevant commit list.
-- The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full (the sub-agent has no other access to it).
-- The brief: "Report, per file/hunk where relevant, (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls: documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Keep findings concise without truncating material security or correctness evidence."
+- Relevant standards-source files, acceptance criteria and specific risk areas; no full generic code-smell catalogue.
+- The brief: "Report material violations of documented standards with the file, rule and affected hunk. Distinguish hard violations from heuristic judgments; explain concrete impact. Keep findings concise without truncating material security or correctness evidence."
 
 **Spec sub-agent prompt** should include:
 

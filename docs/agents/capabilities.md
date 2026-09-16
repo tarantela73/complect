@@ -25,8 +25,8 @@ tools that were invoked.
 
 ## Installed project-local skills
 
-Read [local skill policy](local-skills.md) for precedence, Fedora execution and
-controlled updates; [provenance](skills-provenance.json) pins the upstream source.
+Read [local skill policy](local-skills.md) for skill installation, provenance or
+updates; ordinary skill use follows root/scoped instructions without requiring this primer. [Provenance](skills-provenance.json) pins the upstream source.
 These are editable copies in `.agents/skills/`, not global/plugin duplicates.
 
 | Task | Installed method |
@@ -94,8 +94,8 @@ These are editable copies in `.agents/skills/`, not global/plugin duplicates.
   first when its Skill requires one; otherwise use the repository's Playwright
   workflow and record why.
 - **External technical research:** use `research` for a primary-source
-  investigation with a persisted Markdown artifact. It does not replace local
-  repository analysis through CodeGraph.
+  investigation. Persist an artifact when requested or needed for an accepted decision/plan; otherwise a source-backed answer is sufficient.
+  Research does not replace local repository analysis through CodeGraph.
 - **Merge/rebase conflicts:** use `resolving-merge-conflicts`; trace
   architecture-sensitive intent through the applicable ADR/plan and
   CodeGraph before resolving a hunk.

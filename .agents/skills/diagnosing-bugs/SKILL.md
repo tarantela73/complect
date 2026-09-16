@@ -3,14 +3,14 @@ name: diagnosing-bugs
 description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
 ---
 
-Before applying this method, read [Complect skill policy](../../../docs/agents/local-skills.md). It routes to root/scoped instructions and accepted decisions; this skill is methodology, not architectural authority.
+Follow root/scoped instruction hierarchy. For skill installation, provenance or updates, see [local skill policy](../../../docs/agents/local-skills.md); ordinary skill use does not require loading it.
 
 
 # Diagnosing Bugs
 
-A discipline for hard bugs. Skip phases only when explicitly justified.
+A diagnosis method for hard bugs; select the steps needed to establish the cause.
 
-When exploring the codebase, read canonical `CONCEPTS.md` to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
+Use `CONCEPTS.md` when the task depends on domain terminology or changes/adds domain concepts. Select ADRs by the contract affected.
 
 ## Complect diagnosis boundary
 
@@ -26,9 +26,7 @@ If the redacted output is not enough to diagnose the bug, say so and ask the use
 
 ## Phase 1: Build a feedback loop
 
-**This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug (one that goes red on _this_ bug), you will find the cause; bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
-
-Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
+Prefer a testable reproduction with a pass/fail signal for the reported symptom. It provides evidence for experiments and regression checks.
 
 ### Ways to construct one, in roughly this order
 
@@ -42,8 +40,6 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
 10. **HITL bash script.** Last resort. If a human must click, drive _them_ with `scripts/hitl-loop.template.sh` so the loop is still structured. Captured output feeds back to you.
-
-Build the right feedback loop, and the bug is 90% fixed.
 
 ### Tighten the loop
 
@@ -61,7 +57,7 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 ### When you genuinely cannot build a loop
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a redacted captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop.
+If reproduction is unavailable, continue safe source/log analysis and clearly distinguish hypotheses from confirmed causes. Report what remains unverified and request missing evidence or access only when needed. Production instrumentation still requires explicit authorization.
 
 ### Completion criterion: a tight loop that goes red
 
@@ -72,7 +68,7 @@ Phase 1 is done when the loop is **tight** and **red-capable**: you can name **o
 - [ ] **Fast**: seconds, not minutes.
 - [ ] **Agent-runnable**: you can run it unattended; a human in the loop only via `scripts/hitl-loop.template.sh`.
 
-The required CodeGraph/source impact pass may precede the loop. Hypothesis testing begins only after the red-capable command exists; source inspection alone is not reproduction evidence.
+The required CodeGraph/source impact pass may precede the loop. Safe analysis and hypothesis testing may guide construction of a reproduction; source inspection alone is not reproduction evidence.
 
 ## Phase 2: Reproduce + minimise
 
@@ -92,11 +88,11 @@ Why bother: a minimal repro shrinks the hypothesis space in Phase 3 (fewer movin
 
 Done when **every remaining element is load-bearing**: removing any one of them makes the loop go green.
 
-Do not proceed until you have reproduced **and** minimised.
+Minimise a reproduction when doing so helps distinguish causes; unavailable reproduction does not block safe analysis.
 
 ## Phase 3: Hypothesise
 
-Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.
+When the cause is ambiguous, compare plausible hypotheses and choose experiments that best discriminate between them. Do not invent alternatives merely to reach a fixed count.
 
 Each hypothesis must be **falsifiable**: state the prediction it makes.
 
@@ -140,7 +136,7 @@ If a correct seam exists:
 
 Required before declaring done:
 
-- [ ] Original repro no longer reproduces (re-run the Phase 1 loop)
+- [ ] Re-run the original reproduction when available; otherwise report that verification as BLOCKED, not PASS.
 - [ ] Regression test passes (or absence of seam is documented)
 - [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
