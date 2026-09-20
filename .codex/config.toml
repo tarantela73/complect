@@ -1,13 +1,21 @@
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
+model = "gpt-6-astra"
+model_reasoning_effort = "low"
+
+[features.context_management]
+experimental_mode = true
+
 # MCP servers are inherited from ~/.codex/config.toml. Keep project-only
 # additions unique and follow the add-only policy in ../AGENTS.md.
 
 [agents]
 enabled = true
 max_concurrent_threads_per_session = 3
+default_subagent_model = "gpt-5.6-luna"
+default_subagent_reasoning_effort = "medium"
 
 [sandbox_workspace_write]
-network_access = false
+network_access = true
 writable_roots = []
