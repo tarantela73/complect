@@ -28,6 +28,8 @@ from apps.contracts.models.contract import Contract, ContractStatus
 from apps.objects.models.supply_object import ObjectStatus, SupplyObject, SupplyObjectType
 from apps.payments.models.bank_statement import BankStatement, BankStatementStatus
 from apps.payments.models.bank_statement_line import BankStatementLine
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token, _pk_to_uuid4
 
 GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 URL = "/api/v1/dashboard/director/"
@@ -38,11 +40,15 @@ URL = "/api/v1/dashboard/director/"
 # ---------------------------------------------------------------------------
 
 
-def _gw_headers(tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+def _make_authenticated_user(tenant_id: uuid.UUID) -> User:
+    email = f"director_{uuid.uuid4().hex[:8]}@test.com"
+    return User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=tenant_id)
+
+
+def _auth_headers(user: User) -> dict:
     return {
         "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
-        "HTTP_X_TENANT_ID": str(tenant_id),
-        "HTTP_X_USER_ID": str(user_id),
+        "HTTP_AUTHORIZATION": f"Bearer {_make_access_token(user)}",
     }
 
 
@@ -125,12 +131,12 @@ class TestDirectorDashboardPermissionOff:
     def _rbac_off(self, settings):
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
 
-    def test_returns_200_with_gateway_context(self):
+    def test_returns_200_with_verified_gateway_context(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
 
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
 
         assert resp.status_code == 200
         data = resp.json()
@@ -143,18 +149,14 @@ class TestDirectorDashboardPermissionOff:
         assert "period_from" in data
         assert "period_to" in data
 
-    def test_missing_context_headers_returns_401(self):
+    def test_missing_bearer_returns_401_even_when_rbac_is_off(self):
         resp = Client().get(URL, HTTP_X_GATEWAY_TOKEN=GW_TOKEN)
         assert resp.status_code == 401
 
     def test_missing_gateway_token_returns_403(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-        resp = Client().get(
-            URL,
-            HTTP_X_TENANT_ID=str(tenant_id),
-            HTTP_X_USER_ID=str(user_id),
-        )
+        user = _make_authenticated_user(tenant_id)
+        resp = Client().get(URL, HTTP_AUTHORIZATION=f"Bearer {_make_access_token(user)}")
         assert resp.status_code == 403
 
 
@@ -167,22 +169,22 @@ class TestDirectorDashboardPermissionEnforce:
 
     def test_no_permission_returns_403(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
 
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
 
         assert resp.status_code == 403
 
     def test_with_director_dashboard_read_permission_returns_200(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
 
         perm = _make_permission("read", "director_dashboard")
         role = _make_role(f"director_{uuid.uuid4().hex[:6]}", perm)
-        _bind(user_id, tenant_id, role)
+        _bind(uuid.UUID(_pk_to_uuid4(user.pk)), tenant_id, role)
 
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
 
         assert resp.status_code == 200
 
@@ -199,9 +201,9 @@ class TestDirectorDashboardPayments:
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
 
     def _call(self, tenant_id: uuid.UUID) -> dict:
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
         assert resp.status_code == 200
         return resp.json()
 
@@ -272,9 +274,9 @@ class TestDirectorDashboardOpenContracts:
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
 
     def _call(self, tenant_id: uuid.UUID) -> dict:
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
         assert resp.status_code == 200
         return resp.json()
 
@@ -325,9 +327,9 @@ class TestDirectorDashboardObjectsSummary:
         settings.RBAC_ENFORCEMENT_MODE = "OFF"
 
     def _call(self, tenant_id: uuid.UUID) -> dict:
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
         assert resp.status_code == 200
         return resp.json()
 
@@ -438,10 +440,10 @@ class TestDirectorDashboardPeriod:
 
     def test_period_from_is_first_day_of_month(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
 
-        resp = Client().get(URL, **_gw_headers(tenant_id, user_id))
+        resp = Client().get(URL, **_auth_headers(user))
         data = resp.json()
 
         today = date.today()
@@ -464,10 +466,10 @@ class TestDirectorDashboardCache:
 
     def test_second_call_uses_cache(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
 
-        headers = _gw_headers(tenant_id, user_id)
+        headers = _auth_headers(user)
         resp1 = Client().get(URL, **headers)
         assert resp1.status_code == 200
 
@@ -478,10 +480,10 @@ class TestDirectorDashboardCache:
 
     def test_cache_invalidate_allows_fresh_data(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
+        user = _make_authenticated_user(tenant_id)
         cache.delete(_director_key(tenant_id))
 
-        headers = _gw_headers(tenant_id, user_id)
+        headers = _auth_headers(user)
         resp1 = Client().get(URL, **headers)
         assert resp1.status_code == 200
 
