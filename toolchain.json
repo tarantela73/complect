@@ -1,0 +1,137 @@
+{
+  "schema_version": 2,
+  "target": {
+    "os": "linux",
+    "architecture": "amd64",
+    "python_platform": "x86_64-unknown-linux-gnu"
+  },
+  "python": {
+    "version": "3.12.13",
+    "image": "python:3.12.13-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203",
+    "required": true,
+    "kind": "pinned_runtime",
+    "scope": "container",
+    "version_policy": "exact"
+  },
+  "node": {
+    "version": "22.22.3",
+    "image": "node:22.22.3-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920",
+    "required": true,
+    "kind": "pinned_runtime",
+    "scope": "container",
+    "version_policy": "exact"
+  },
+  "npm": {
+    "version": "10.9.8",
+    "required": true,
+    "kind": "pinned_runtime",
+    "scope": "container",
+    "version_policy": "exact"
+  },
+  "uv": {
+    "version": "0.11.21",
+    "required": true,
+    "kind": "pinned_build_tool",
+    "scope": "container",
+    "version_policy": "exact"
+  },
+  "external_tools": {
+    "docker": {
+      "required": true,
+      "tested_version": "29.7.2",
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "docker_compose": {
+      "required": true,
+      "tested_version": "5.5.0",
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "git": {
+      "required": true,
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "bash": {
+      "required": true,
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "make": {
+      "required": true,
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "jq": {
+      "required": true,
+      "purpose": "read this manifest in Make targets",
+      "kind": "required_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn",
+      "compatibility_constraint": null
+    },
+    "codegraph": {
+      "required": true,
+      "scope": "repository analysis with agents",
+      "version": "1.6.0",
+      "package": "@colbymchenry/codegraph",
+      "kind": "required_agent_tool",
+      "version_policy": "exact"
+    },
+    "codex": {
+      "required": false,
+      "tested_version": "0.153.4",
+      "kind": "optional_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn"
+    },
+    "gh": {
+      "required": false,
+      "purpose": "GitHub issue and PR workflows",
+      "kind": "optional_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn"
+    },
+    "host_python": {
+      "required": true,
+      "kind": "required_host_tool",
+      "version_policy": "compatible",
+      "compatibility_constraint": ">=3.10",
+      "purpose": "stdlib-only safe lifecycle orchestration; application Python remains pinned in Docker"
+    },
+    "host_uv": {
+      "required": false,
+      "kind": "optional_host_tool",
+      "version_policy": "presence",
+      "different_tested_version": "warn"
+    },
+    "host_node": {
+      "required": false,
+      "kind": "optional_host_tool",
+      "version_policy": "presence",
+      "purpose": "optional external MCP tooling; E2E no longer uses host Node"
+    },
+    "host_npm": {
+      "required": false,
+      "kind": "optional_host_tool",
+      "version_policy": "presence"
+    }
+  },
+  "e2e": {
+    "playwright_version": "1.49.1",
+    "image": "mcr.microsoft.com/playwright:v1.49.1-noble@sha256:70e367e0cbf60340a5b5fd562f6247a34eb3196efab9f88a3dd56482d9fe09d2",
+    "kind": "pinned_runtime",
+    "version_policy": "exact"
+  }
+}

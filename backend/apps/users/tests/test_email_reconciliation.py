@@ -47,7 +47,7 @@ def test_normalization_rejects_invalid_or_overlong_email(raw):
         normalize_email(raw)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_audits_before_writing_protected_collision_data(protected_report_dir):
     for email in ("Ivan@Example.com", "ivan@example.com"):
         identity_id = uuid.uuid4()
@@ -107,7 +107,7 @@ def test_report_commits_audit_before_pii_query_and_fails_closed(protected_report
     assert not output.exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_collects_invalid_identifiers_without_aborting(protected_report_dir):
     first = User.objects.create(username="not-an-email", email="")
     second = User.objects.create(username="", email="missing-at.example.com")

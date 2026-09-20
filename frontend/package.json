@@ -8,11 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "generate:api": "openapi-typescript http://complect_backend_dev:8010/api/v1/openapi.json -o src/shared/api/generated/schema.d.ts",
+    "generate:api": "make -C .. generate-sdk",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "cd e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test",
-    "test:e2e:ui": "cd e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test --headed"
+    "test:e2e": "make -C .. test-e2e",
+    "test:e2e:ui": "make -C .. test-e2e E2E_HEADED=1"
   },
   "dependencies": {
     "@bprogress/next": "^3.2.12",

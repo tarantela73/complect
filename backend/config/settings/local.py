@@ -3,7 +3,6 @@ import json
 import os
 
 import redis
-
 from apps.common.security.secrets import get_secret
 
 from .base import *  # noqa: F401, F403
@@ -50,7 +49,7 @@ RBAC_ENFORCEMENT_MODE = "LOG_ONLY"
 DB_PASSWORD = get_secret(
     "POSTGRES_PASSWORD",
     secret_file_env="DATABASE_PASSWORD_FILE",
-    default="dev_root_secure_postgres_pass_2026",
+    default=None if os.getenv("DATABASE_PASSWORD_FILE") else "dev_root_secure_postgres_pass_2026",
 )
 
 DB_NAME = os.getenv("POSTGRES_DB", "complect_db")
@@ -92,7 +91,11 @@ DATABASES = {
 POSTGRES_REPLICA_ENABLED = _env_bool("POSTGRES_REPLICA_ENABLED", default=True)
 POSTGRES_REPLICA_MAX_LAG = float(os.getenv("POSTGRES_REPLICA_MAX_LAG", "1.0"))
 
-SECRET_KEY = os.getenv("SECRET_KEY", "local-dev-insecure-key-change-me-32chars")
+SECRET_KEY = get_secret(
+    "SECRET_KEY",
+    secret_file_env="DJANGO_SECRET_KEY_FILE",
+    default=None if os.getenv("DJANGO_SECRET_KEY_FILE") else "local-dev-insecure-key-change-me-32chars",
+)
 ALLOWED_HOSTS = ["*"]
 
 REDIS_DEFAULT_URL = os.getenv("REDIS_DEFAULT_URL", "redis://redis:6379/0")
@@ -123,7 +126,11 @@ ENABLE_OTEL = _env_bool("ENABLE_OTEL", default=False)
 
 REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
-EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "dev-local-insecure-gateway-token")
+EXPECTED_GATEWAY_TOKEN = get_secret(
+    "EXPECTED_GATEWAY_TOKEN",
+    secret_file_env="EXPECTED_GATEWAY_TOKEN_FILE",
+    default=None if os.getenv("EXPECTED_GATEWAY_TOKEN_FILE") else "dev-local-insecure-gateway-token",
+)
 
 # Public site / CMS (ADR-0023). Dev defaults — override via env in production.
 # Use the first real tenant UUID from the DB, or keep this placeholder for fresh installs.
@@ -137,8 +144,9 @@ CF_TURNSTILE_SECRET_KEY = os.getenv(
     "1x0000000000000000000000000000000AA",
 )
 
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080").split(",")
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:8080").split(",")
 
 # Map / GIS integration
 DADATA_API_KEY = os.getenv("DADATA_API_KEY", "")

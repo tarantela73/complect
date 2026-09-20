@@ -1,0 +1,34 @@
+name: Workstation reproducibility
+
+on:
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  clean-checkout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.3
+      - name: Install the explicitly required analysis CLI on this disposable runner
+        run: npm install --global @colbymchenry/codegraph@1.6.0
+      - name: Verify reviewed lock and toolchain
+        run: make check-toolchain check-backend-lock
+      - name: Prove clean bootstrap, repeated bootstrap, sync and read-only diagnostics
+        run: python3 -B infra/scripts/workstation_rehearsal.py --output "$RUNNER_TEMP/workstation-evidence"
+      - name: Run container browser smoke and unit-suite isolation
+        run: |
+          make test-e2e
+          python3 -B infra/scripts/dev_environment.py compose exec -T frontend npm test -- --passWithNoTests
+      - name: Verify checkout remains clean
+        run: |
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

@@ -1,0 +1,440 @@
+# Development workstations: native Linux/Fedora and Windows/WSL2
+
+Use an independent clone on each workstation's Linux filesystem. Keep developer
+checkouts and review evidence on persistent storage, not a directory erased at
+reboot. Docker data and local credentials belong to that workstation only.
+
+This workflow is development-only. Production deployment/networking, IAM
+business logic and PostgreSQL production roles are not changed. The supported
+application target remains Linux amd64. Fedora with SELinux Enforcing requires
+the separate Phase 3 verification on the real laptop; Ubuntu/WSL tests do not
+establish that proof.
+
+## Prerequisites
+
+Install prerequisites yourself before bootstrap. The scripts never run sudo,
+dnf, apt or a global Codex installer.
+
+- Git, Bash, Make, jq, Python 3.10+ and curl. On Fedora the ordinary packages are
+  `git bash make jq python3 curl`.
+- A local Docker Linux daemon and the Compose plugin. Use the official
+  [Docker Engine Fedora instructions](https://docs.docker.com/engine/install/fedora/)
+  for `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`.
+  Docker Desktop with WSL integration remains supported for Windows/WSL.
+- Permission to use the local Docker socket. The helper rejects remote Docker
+  deployment contexts. Do not fix socket access with world-writable permissions.
+- CodeGraph 1.6.0 on PATH. Install the pinned tool using its
+  [upstream instructions](https://colbymchenry.github.io/codegraph/getting-started/installation/).
+  Preserve existing agent configuration; the repository does not install or
+  reconfigure global Codex/MCP servers.
+
+`toolchain.json` distinguishes exact container/build pins from tested host
+versions. Docker 29.7.2 / Compose 5.5.0 are tested baselines, not exact host pins.
+Compose must support the declared features, including optional/raw env files,
+health dependencies and `up --wait`. An unsupported feature fails configuration
+validation; no guessed minimum/range is imposed.
+
+Host Node/npm and host Chromium are not needed for application or E2E commands.
+Use the container versions and dependency locks described in [dependencies.md](dependencies.md).
+
+### Explicit Docker network layout
+
+Complect development and disposable test networks always receive an explicit
+`/24` subnet. They never use Docker's automatic bridge allocator. The reviewed
+address layout is:
+
+| Use | Range | Allocation |
+|---|---|---|
+| Docker default bridge | `198.18.0.0/24` | Host `bip`, when configured by the host owner |
+| Complect checkouts | `198.18.16.0/20` | Sixteen `/24` slots, `198.18.16.0/24` through `198.18.31.0/24` |
+| Generic Docker pool | `198.18.128.0/17` | Informational host-admin layout only |
+| Complect disposable tests | `198.19.0.0/16` | Two hundred fifty-six `/24` slots |
+
+The ranges do not overlap. The generic pool is organizational guidance for
+host administration; it is not evidence that Moby's automatic allocator is
+safe with VPN routes. Complect's project and test guarantees come from their
+explicit subnets.
+
+For a new checkout, the helper hashes the checkout identity, tries the
+corresponding slot, and then searches the remaining checkout slots in a
+deterministic cycle using the Docker network inventory. It fails before
+Compose when all sixteen slots are occupied. A disposable test run uses the
+same approach over the `198.19.0.0/16` pool and fails explicitly after
+exhaustion.
+
+For a disposable Kong runtime, `KONG_TEST_SUBNET` is an optional diagnostic
+override. It must be an IPv4 canonical `/24`, must not overlap the documented
+reserved ranges or Docker network inventory, and is never rewritten when it is
+explicitly supplied. Without it, the run selects and creates its own candidate
+from `198.19.0.0/16`.
+
+`COMPLECT_DOCKER_SUBNET` is an ephemeral auto candidate until inspection of
+the exact owned `<COMPOSE_PROJECT_NAME>_erp_network` confirms that Compose
+created it with that subnet. Only then is the value and an equal
+`# COMPLECT_AUTO_SUBNET=<subnet>` provenance comment appended atomically to
+the same `.env.dev` file. A persisted auto value and its matching marker stay
+fixed across restarts. If a value is edited and no equal marker remains, it is
+treated as an explicit user override and is never rewritten automatically.
+Explicit overrides must be IPv4 canonical `/24` networks, avoid the documented
+bridge, generic and disposable ranges and existing Docker networks, and are
+the host owner's responsibility for route/VPN compatibility.
+
+The public [.env.dev.example](../../.env.dev.example) deliberately contains no
+active subnet assignment shared by every checkout; its comments document this
+per-checkout contract.
+
+### AmneziaVPN and Docker network allocation
+
+On the tested Fedora workstation, AmneziaVPN installs TUN routes
+`0.0.0.0/1` and `128.0.0.0/1`. While these routes are active, Docker/Moby
+IPAM cannot allocate a new bridge subnet and returns
+`all predefined address pools have been fully subnetted`.
+
+With AmneziaVPN disconnected, new Docker network creation succeeded. After
+reconnecting the VPN, the existing network remained usable: container DNS
+resolution and outbound HTTPS with HTTP 200 were verified. This is an observed
+host/workstation limitation; it does not establish a general defect in Complect,
+Fedora, or Docker runtime on existing networks, or universal incompatibility
+between AmneziaVPN and Docker.
+
+The earlier workaround of disconnecting AmneziaVPN before the first
+`make bootstrap` applied before the explicit-subnet layout and host bridge
+initialization were in place. With the host `bip` initialized and Complect
+project/test subnets explicit, a new project or disposable test network can be
+created while the VPN routes are active. This guarantee applies to these
+explicit Complect networks; it does not make arbitrary third-party Docker
+networks safe under the VPN route issue.
+
+The repository never changes `/etc/docker/daemon.json`. A host owner may use
+this example after a separate host-network review:
+
+```json
+{
+  "bip": "198.18.0.1/24",
+  "default-address-pools": [
+    {"base": "198.18.128.0/17", "size": 24}
+  ]
+}
+```
+
+`bip` gives the affected Fedora/VPN host an explicit default bridge. The
+`default-address-pools` entry is only a generic administrative pool and does
+not provide a VPN-safety guarantee for automatically allocated networks.
+Repository scripts and doctor/preflight checks are read-only with respect to
+host Docker configuration. When `0.0.0.0/1` and `128.0.0.0/1` routes are
+present, diagnostics should identify the route condition and provide this
+actionable host guidance; they must not edit host configuration.
+
+Do not add a machine-specific subnet to `docker-compose.dev.yml`.
+
+When both sources are present, an environment `COMPLECT_DOCKER_SUBNET` takes
+precedence over the value in `.env.dev`; it is an explicit invocation override
+and is not persisted or silently rewritten. With no environment override, the
+helper uses the `.env.dev` value and its provenance marker rules described
+above.
+
+### Existing checkout network migration
+
+Before lifecycle changes, the helper identifies only the exact project network
+owned by the current `COMPOSE_PROJECT_NAME` and inspects its subnet. An old
+auto-allocated network outside the Complect checkout pool is never deleted
+automatically. If it conflicts with the configured or persisted subnet,
+startup fails before any destructive action and reports the exact project
+network plus the remediation.
+
+After reviewing that message, run the lifecycle from this checkout:
+
+```bash
+make down
+make up
+```
+
+The `down` target uses Compose `down` without `-v`, so named volumes are
+preserved; `make destroy` is the separate volume-deleting operation and is not
+part of this migration. Do not run the migration automatically or use a global
+network/volume cleanup. The remediation removes only this checkout's
+container/network topology and then recreates its explicit network.
+
+## New checkout
+
+```bash
+git clone <your-authorized-GitHub-remote> Complect
+cd Complect
+python3 -B infra/scripts/dev_environment.py configure
+# Optionally edit public .env.dev and provide external keys in .dev/external.env.
+make bootstrap
+make doctor
+```
+
+`configure` is also performed by bootstrap if needed. Do not copy the example
+verbatim over an existing local file: configuration tokens are expanded by the
+helper, and existing values are never overwritten. `.env.example` remains the
+separate production-oriented template; `.env.dev.example` is the development
+contract. The public config parser accepts only its documented keys and never
+executes shell text.
+
+Each checkout gets its own Compose project identity and its own `/24` project
+network. Existing containers,
+networks or volumes with another checkout identity are rejected before lifecycle
+operations. Fixed global container names are not used. Canonical ports mean that
+only one stack can publish these ports on one host at a time. Stop the previous
+stack explicitly from its own checkout; bootstrap never stops another project or
+selects a random fallback port.
+
+## Port and origin contract
+
+| Endpoint | Host/browser | Inside Compose |
+|---|---|---|
+| Frontend | `http://localhost:8080` (bind `127.0.0.1`) | `frontend:3000` |
+| Gateway | `http://localhost:8000` (bind `127.0.0.1`) | `api_gateway:8000` |
+| Backend | No host publication | `backend:8010` |
+| PostgreSQL primary | `127.0.0.1:15432` | `postgres_primary:5432` |
+| PostgreSQL replica | `127.0.0.1:5433` | `postgres_replica:5432` |
+| Redis | No host publication | `redis:6379` |
+| MinIO API/console | `127.0.0.1:9000` / `127.0.0.1:9001` | `minio:9000` |
+
+Use the literal browser origin `http://localhost:8080`. Django CORS/CSRF and
+Kong agree on it; an arbitrary alternate origin is not silently accepted.
+Container connections never use the host database ports. Optional observability
+ports retain their existing values but bind to loopback.
+
+## Configuration and credential sources
+
+| Setting | Source and consumer |
+|---|---|
+| `COMPOSE_PROJECT_NAME` | Generated public `.env.dev`; used for checkout-local resources |
+| `DEV_UID`, `DEV_GID` | Actual developer IDs in `.env.dev`; app/frontend/generators only |
+| `DEV_FRONTEND_ORIGIN`, `DEV_API_ORIGIN` | Public dev template; validated against the canonical contract |
+| `DEV_CHECKOUT_ID` | Derived from this checkout root for resource ownership labels |
+| `DEV_SOURCE_DIGEST` | Derived from backend source/lock inputs; labels the built image |
+| Django `SECRET_KEY` | Generated `.dev/secrets/django_secret_key`; read via `DJANGO_SECRET_KEY_FILE` |
+| PostgreSQL password | Generated `.dev/secrets/postgres_password`; primary and app-specific runtime copies |
+| Replication password | Generated `.dev/secrets/replication_password`; primary initializer and replica |
+| MinIO password | Generated `.dev/secrets/minio_password`; MinIO and bucket initializer |
+| Gateway trust token | Generated `.dev/secrets/gateway_token`; Kong and app-specific runtime copies |
+| `DADATA_API_KEY` | Optional user-provided `.dev/external.env`; only this key is accepted |
+| LiveKit values | Current dev settings are empty scaffolding; no LiveKit service/credential is required or faked |
+| `E2E_USERNAME`, `E2E_PASSWORD` | Optional existing test account in private `.dev/e2e.env` |
+| IAM merge execution | Forced `false`; not an external override |
+| Redis URLs / DB hosts | Literal internal service endpoints in the shared app environment |
+
+External env files use raw values: `KEY=value`, without shell interpolation or
+`export`. Bootstrap creates empty private files for optional external credentials;
+it does not invent API keys. Existing development file storage/scanning remain
+`STUB`; the ClamAV service is optional infrastructure. MinIO runs locally with
+the existing bucket names. Optional observability is in its own Compose profile.
+
+## Secret and filesystem permissions
+
+Generated host secret files are mode 0600 in a mode-0700 directory. Generation
+uses secure randomness and exclusive, no-follow file creation. Existing values
+are preserved; malformed/symlinked private state is rejected.
+
+A one-shot filesystem stage materializes credentials into a private named Docker
+volume. Reader UIDs/GIDs are discovered from the pinned PostgreSQL, Kong and
+MinIO images. Runtime files are mode 0400; app-specific copies are owned by the
+host developer UID. System service UIDs are not changed. A value or owner
+mismatch on an existing runtime secret fails for manual review rather than
+silently rotating it. Do not delete local secrets while retaining their volumes.
+
+Shared bind mounts use SELinux `z`, with `ro` where writes are unnecessary.
+Named volume roots for application caches are initialized only when empty.
+There is no blanket checkout chown, chmod 777 or SELinux disabling. Doctor checks
+contexts separately from Unix permissions on Fedora. Actual Fedora behavior is
+validated in Phase 3.
+
+App/frontend processes and SDK/E2E generators run as the developer UID/GID.
+SDK files and test artifacts written into the checkout retain that ownership.
+Backend caches/coverage and frontend modules/build cache use project volumes.
+
+## Lifecycle and migration safety
+
+`make bootstrap` prepares missing local state, verifies ownership/config/locks,
+builds the locked backend only when its inputs differ, initializes runtime
+permissions, starts infrastructure, applies an explicit safe forward plan,
+generates the SDK, then starts app/worker/beat/frontend and runs doctor.
+
+`make sync` is used after a successful Git update. It never pulls Git, changes
+history, generates locks, runs dependency resolution, seeds business data or
+resets a database. Changed npm inputs use `npm ci`; unchanged install receipts
+are reused. Backend installation validates roots and the installed transitive
+closure offline; full resolver regeneration remains an explicit CI/lock check.
+
+Normal backend startup does not call migrate. A readonly readiness check prevents
+backend/worker/beat from starting against a pending/incompatible schema. The
+migration service is a tools-profile one-shot, invoked explicitly. The plan is
+shown before application. No fake/reverse/drop/create recovery is attempted.
+
+The dev migration receipt records applied source hashes. Unknown history,
+changed applied files, an unreceipted existing schema, an incomplete batch or an
+unreviewed future migration fails. Existing IAM foundation/fence updates require
+their accepted release preflight; the pinned baseline is allowed automatically
+only for a genuinely fresh development schema. New migration approval entries
+must be reviewed with their ADR/release constraints; the allowlist is not an ADR
+replacement. The development migration mutex does not replace IAM's own barriers.
+
+A failed batch keeps an `in_progress` receipt for diagnosis. Do not delete that
+receipt, fake migrations, erase volumes or rotate secrets to make a check green.
+
+The default Granian process uses explicit restarts/sync after backend edits;
+unbounded automatic reload is not the portable default. Health probes have their
+own time limits and exec form, and app containers use an init process. These
+changes avoid indefinite probe children when a worker stops replying.
+
+## SDK, frontend checks and E2E
+
+```bash
+make generate-sdk
+make tsc
+make test-e2e
+```
+
+The optional host shortcut `npm --prefix frontend run generate:api` delegates to
+`make generate-sdk`, as do the E2E npm shortcuts. These host shortcuts require
+host npm; the canonical Make commands do not. Inside containers, use the SDK
+one-shot service through the host helper rather than fetching a protected schema
+without gateway authentication.
+
+SDK generation uses the selected checkout's services and private scratch path,
+not a fixed container name or shared `/tmp/openapi.json`. E2E requires the current
+SDK and healthy services. The Playwright package and official browser image are
+both pinned to 1.49.1.
+
+The E2E runner is on the Compose network. Two transparent local TCP relays map
+its browser's `localhost:8080` to frontend and `localhost:8000` to Kong. They
+preserve browser Host/Origin and headers; API requests do not bypass the gateway.
+Doctor independently checks the actual published host ports. This design does
+not require host networking support, host Node/npm or a user's browser cache.
+
+Clean-clone smoke tests exercise the login page and browser/gateway CORS path.
+The existing authenticated upload tests require an explicitly supplied existing
+test account and are reported as skipped when it is absent. Bootstrap never
+creates a superuser. Traces are disabled by default to avoid recording credentials;
+results go to ignored `.dev/test-artifacts`. The optional headed command runs in
+container Xvfb, not a host browser window.
+
+Vitest excludes Playwright specs. If no unit tests exist, run it with the explicit
+`--passWithNoTests` option and report zero tests rather than claiming unit coverage.
+
+## Test isolation and authorization
+
+In a verified local Docker environment with disposable test data and no production
+access, run task-relevant tests and repair regressions caused by your changes
+without asking again at every step. This authorization does not cover unrelated
+failures, production access or destructive changes to persistent development data.
+Before relying on it, verify the selected Docker endpoint, database/service targets,
+credential sources, external integrations and the test's cleanup boundary without
+printing secret values. Recheck when those inputs or the test scope change.
+
+Ordinary `make test*` commands execute in the existing backend container using
+`config.settings.local`; they are not a blanket disposable environment. Backend
+fixtures can open a database before normal pytest database setup, and Redis,
+external credentials and service connectivity may be shared with development.
+`infra/scripts/run_iam_fence_tests.sh` redirects all database aliases to a unique
+temporary database and isolates six Redis URLs, but does not override the channel
+layer/result-backend URLs, inherited credentials or network egress. Use it only for
+tests whose remaining dependencies have been verified; its cleanup is not proof
+that production is unreachable. If isolation cannot be established, report the
+specific limitation and continue independent checks rather than claiming safety.
+
+## Doctor is read-only
+
+Doctor performs version/config/ownership checks, Docker inspections, bounded HTTP
+probes, Redis PING and readonly PostgreSQL migration/catalog queries. It does not
+start/restart/build containers, generate secrets/SDK/locks/indexes, repair modes,
+apply migrations or change Git. Read probes may produce normal service access
+logs/metrics; they are not corrective operations or business-data writes.
+
+Statuses are PASS/WARN/FAIL/SKIP. A mandatory failure returns nonzero. Missing
+agent skill availability is reported separately from the tracked skill manifest.
+A missing local CodeGraph index is reported; run `codegraph init` explicitly
+before agent code analysis. The development database's current superuser/BYPASSRLS
+role is reported as a limitation, never as production RLS enforcement evidence.
+
+## Daily machine switch
+
+On machine A, inspect Git status, run relevant tests, commit only intended paths,
+then push. On machine B:
+
+```bash
+git status --short
+git pull --ff-only
+make sync
+make doctor
+```
+
+Never synchronize `.venv`, `node_modules`, Docker volumes, PostgreSQL/Redis/MinIO
+data, CodeGraph or Graphify indexes, Codex cache, credentials/tokens or generated
+browser caches. Recreate dependencies locally; keep each workstation's development
+data independent. Any data export/import is a separate reviewed operation.
+
+## Codex and PostgreSQL MCP
+
+Use [codex-mcp.example.toml](codex-mcp.example.toml) as a portable, credential-free
+reference. It does not modify global configuration. PostgreSQL MCP profiles point
+to `127.0.0.1:15432` / `complect_db` using a separately provisioned read-only role
+and local credential storage. A failed MCP login must be fixed through the proper
+credential flow, never by weakening database authentication. Bootstrap does not
+reconfigure global Codex, create MCP credentials or alter production roles.
+
+MCP configuration changes require explicit task scope or user authorization.
+Within that authorized scope, apply the add-only policy by default: inspect
+global and project config and run `codex mcp list`, then add a new server under
+a unique ID. Deletion, disabling, renaming, replacement or overriding an
+existing server's transport/auth/tool policy needs an explicit user request
+that names the exact server ID. Reusable configuration belongs in
+`~/.codex/config.toml`; Complect-only configuration belongs in
+`.codex/config.toml`; never duplicate one ID across both. Reference credentials
+through environment variables, functionally verify the intended read-only
+capability when safe, and run `codex mcp list` again after a change.
+
+## Disposable acceptance verification
+
+The `Workstation reproducibility` CI job starts from a clean committed checkout.
+It runs the explicit lock check, `workstation_rehearsal.py`, containerized E2E
+and Vitest isolation. CI execution is evidence only after the workflow actually
+runs successfully; an added workflow alone is not a green hosted result.
+
+For a separately authorized disposable checkout and local daemon, run:
+
+```bash
+python3 -B infra/scripts/workstation_rehearsal.py --output /path/outside-checkout/evidence
+```
+
+The harness refuses existing local configuration, secrets, SDK or module state.
+It creates a uniquely named acceptance-only SQL schema/table and synthetic ledger
+entry to test preservation and unsafe-history rejection. It deletes only its own
+SQL fixtures; the checkout's containers/networks/volumes remain for inspection.
+It never imports developer volumes or runs a global cleanup. The evidence covers
+two bootstraps, sync, secret/data preservation, doctor file/index/ownership
+immutability, Docker command tracing and negative cases. The explicit
+`--allow-candidate-patch` flag is only for reviewing an uncommitted patch applied
+to a clean baseline clone; this must be reported separately from committed-checkout
+CI evidence. Native Fedora with SELinux Enforcing still requires Phase 3.
+
+## Frozen MinIO image sourcing
+
+The dev server and bucket initializer use the official `quay.io/minio/minio`
+`RELEASE.2025-09-07T16-13-09Z` and `quay.io/minio/mc`
+`RELEASE.2025-08-13T08-35-41Z` images. Each exact release tag is paired with its
+multiarch manifest-list digest in Compose; both digests are unchanged from the
+previous Docker Hub pins. Linux amd64 resolves to the corresponding child
+manifest. Do not substitute a floating tag, community rebuild or newer release.
+
+On 2026-09-14, anonymous Docker Hub tag and digest requests were denied while
+Quay served the same manifest lists. Quay publication is confirmed by the
+upstream release scripts for
+[server](https://github.com/minio/minio/blob/RELEASE.2025-09-07T16-13-09Z/docker-buildx.sh)
+and [client](https://github.com/minio/mc/blob/RELEASE.2025-08-13T08-35-41Z/docker-buildx.sh).
+The Compose infrastructure tests check both exact references and the unchanged
+MinIO ports, command, healthcheck and bucket initialization commands.
+
+Supply-chain follow-up, outside this portability fix: Docker Hub marks both
+repositories Archived; the GitHub [server](https://github.com/minio/minio) and
+[client](https://github.com/minio/mc) repositories are also archived. The server
+community distribution is source-only. The frozen server predates
+[Security/CVE RELEASE.2025-10-15T17-29-55Z](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z).
+Preserving this version is not a security-update certification. After Fedora
+portability, separately decide whether to retain frozen community MinIO only
+for local dev, adopt a maintained S3-compatible dev backend, or choose another
+approved option. This patch does not make that decision or upgrade MinIO.
