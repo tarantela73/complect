@@ -172,13 +172,44 @@ jobs:
             "app_gateway_token:$DEV_UID:$DEV_GID" \
             "gateway_token:$DEV_KONG_UID:$DEV_KONG_GID"
 
-      - name: Build and boot the minimal stack
+      - name: Build backend and boot infrastructure
+        timeout-minutes: 15
         run: |
           set -euo pipefail
-          # These are backend's four healthy dependencies. Files tests use the
-          # configured STUB backend, so s3_bootstrap and a replica are unnecessary.
-          docker compose -f docker-compose.dev.yml up -d --build --wait --wait-timeout 600 \
-            postgres_primary redis minio clamav backend
+          docker compose -f docker-compose.dev.yml build backend
+          docker compose -f docker-compose.dev.yml up -d --wait --wait-timeout 600 \
+            postgres_primary postgres_replica redis minio clamav
+
+      - name: Prepare schema volume ownership
+        run: |
+          set -euo pipefail
+          # Fresh dev_state is root-owned; migrate writes its receipt as DEV_UID.
+          # Reuse the canonical initializer before the first migration write.
+          docker compose -f docker-compose.dev.yml run --rm --no-deps volume_init
+
+      - name: Apply reviewed schema migrations
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.dev.yml run --rm --no-deps migrate
+
+      - name: Wait for schema and replica readiness
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          # ready validates the receipt/ledger and replica migration history.
+          # Retry only the read-only gate, never migration application.
+          timeout --signal=TERM --kill-after=10s 180s bash -c '
+            until docker compose -f docker-compose.dev.yml run --rm --no-deps migrate \
+              python -B -m config.dev_database ready; do
+              sleep 3
+            done
+          '
+
+      - name: Boot backend after schema readiness
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.dev.yml up -d --no-build --wait --wait-timeout 600 backend
           docker compose -f docker-compose.dev.yml ps
           docker compose -f docker-compose.dev.yml exec -T backend \
             curl --fail --silent --show-error http://localhost:8010/health/

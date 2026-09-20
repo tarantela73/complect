@@ -5,6 +5,8 @@ import ipaddress
 import os
 import shlex
 import subprocess
+import tempfile
+import shutil
 import unittest
 from pathlib import Path
 
@@ -37,6 +39,98 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_iam_ci_prepares_schema_before_backend_boot(self):
+        workflow = yaml.safe_load(
+            (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
+        )
+        steps = workflow["jobs"]["gate"]["steps"]
+        commands = []
+        for index, step in enumerate(steps):
+            for line in step.get("run", "").replace("\\\n", " ").splitlines():
+                tokens = shlex.split(line, comments=True) if line.strip().startswith("docker compose ") and "--entrypoint" not in line else []
+                if tokens[:4] == ["docker", "compose", "-f", "docker-compose.dev.yml"]:
+                    commands.append((index, tokens[4:]))
+        applies = [(i, args) for i, args in commands
+                   if args == ["run", "--rm", "--no-deps", "migrate"]]
+        self.assertEqual(len(applies), 1, "Exactly one canonical migration apply is required before backend")
+        apply_index = applies[0][0]
+        ups = [(i, args) for i, args in commands if args[0] == "up"]
+        self.assertEqual(len(ups), 2)
+        infra_index, infra = ups[0]
+        backend_index, backend = ups[1]
+        self.assertNotIn("backend", infra)
+        for service in ("postgres_primary", "postgres_replica", "redis", "minio", "clamav"):
+            self.assertIn(service, infra)
+        self.assertIn("--wait", infra)
+        self.assertIn("backend", backend)
+        ownership = [(i, args) for i, args in commands
+                     if args == ["run", "--rm", "--no-deps", "volume_init"]]
+        self.assertEqual(len(ownership), 1,
+                         "Fresh root-owned dev_state prevents migrate from writing its receipt")
+        self.assertLess(infra_index, ownership[0][0])
+        self.assertLess(ownership[0][0], apply_index)
+        self.assertLess(infra_index, apply_index)
+        self.assertLess(apply_index, backend_index)
+        metadata_index = next(i for i, step in enumerate(steps)
+                              if step["name"] == "Validate runtime secret metadata")
+        self.assertLess(metadata_index, infra_index)
+        ready_index = next(i for i, step in enumerate(steps)
+                           if step["name"] == "Wait for schema and replica readiness")
+        self.assertLess(apply_index, ready_index)
+        self.assertLess(ready_index, backend_index)
+        ready = steps[ready_index]["run"]
+        self.assertIn("config.dev_database ready", ready)
+        self.assertIn("--no-deps migrate", ready)
+        self.assertIn("timeout", shlex.split(ready))
+        self.assertIn("180s", shlex.split(ready))
+        self.assertIn("set -euo pipefail", ready)
+        self.assertGreater(steps[apply_index]["timeout-minutes"], 0)
+        for step in steps:
+            self.assertNotIn("manage.py migrate", step.get("run", ""))
+            self.assertNotIn("--fake", step.get("run", ""))
+
+    def test_iam_ci_ready_retries_and_fails_closed_on_timeout(self):
+        workflow = yaml.safe_load(
+            (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
+        )
+        step = next(step for step in workflow["jobs"]["gate"]["steps"]
+                    if step["name"] == "Wait for schema and replica readiness")
+        # Exercise the actual workflow shell with a controlled readiness command.
+        # Shorten only the wall-clock deadline; retain real timeout exit semantics.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            docker = root / "docker"
+            docker.write_text("""#!/bin/sh
+printf '%s\\n' "$*" >> "$PROBE_LOG"
+count=$(wc -l < "$PROBE_LOG")
+[ "$count" -ge "$READY_AFTER" ]
+""")
+            docker.chmod(0o755)
+            (root / "timeout").write_text(
+                "#!/bin/sh\nshift 3\nexec " + shutil.which("timeout") + " 0.3s \"$@\"\n"
+            )
+            (root / "timeout").chmod(0o755)
+            (root / "sleep").write_text("#!/bin/sh\nexec /bin/sleep 0.01\n")
+            (root / "sleep").chmod(0o755)
+            for ready_after, expected in ((3, 0), (10000, 124)):
+                with self.subTest(ready_after=ready_after):
+                    log = root / "probes"
+                    log.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", "-c", step["run"]], capture_output=True, text=True,
+                        timeout=5, env=dict(os.environ, PATH=f"{root}:{os.environ['PATH']}",
+                                            PROBE_LOG=str(log), READY_AFTER=str(ready_after)),
+                    )
+                    self.assertEqual(result.returncode, expected, result.stderr)
+                    probes = log.read_text().splitlines()
+                    self.assertGreaterEqual(len(probes), 2)
+                    for probe in probes:
+                        self.assertEqual(shlex.split(probe), [
+                            "compose", "-f", "docker-compose.dev.yml", "run", "--rm",
+                            "--no-deps", "migrate", "python", "-B", "-m",
+                            "config.dev_database", "ready",
+                        ])
+
     def test_iam_ci_materializes_canonical_runtime_secrets_before_boot(self):
         workflow = yaml.safe_load(
             (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
@@ -48,7 +142,7 @@ class AgentInfrastructureTests(unittest.TestCase):
         owners_index = names.index("Resolve runtime secret owners")
         materialize_index = names.index("Materialize runtime secrets")
         metadata_index = names.index("Validate runtime secret metadata")
-        boot_index = names.index("Build and boot the minimal stack")
+        boot_index = names.index("Build backend and boot infrastructure")
         self.assertLess(generate_index, owners_index)
         self.assertLess(owners_index, materialize_index)
         self.assertLess(materialize_index, metadata_index)
