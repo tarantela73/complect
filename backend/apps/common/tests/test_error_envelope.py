@@ -18,14 +18,18 @@ from apps.common.api.errors import (
     make_error_response,
 )
 from apps.common.middleware.asgi_error import AsgiErrorBoundaryMiddleware
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token
 
-VALID_HEADERS = {
-    "HTTP_X_TENANT_ID": str(uuid.uuid4()),
-    "HTTP_X_USER_ID": str(uuid.uuid4()),
-    "HTTP_X_REQUEST_ID": str(uuid.uuid4()),
-    "HTTP_X_CORRELATION_ID": str(uuid.uuid4()),
-    "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
-}
+
+def _valid_headers() -> dict:
+    tenant_id = uuid.uuid4()
+    email = f"error_envelope_{uuid.uuid4().hex[:8]}@test.com"
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=tenant_id)
+    return {
+        "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
+        "HTTP_AUTHORIZATION": f"Bearer {_make_access_token(user)}",
+    }
 
 
 def _assert_envelope(data: dict, expected_code: str) -> None:
@@ -138,7 +142,7 @@ class TestMiddlewareEnvelope:
         assert response.status_code == 401
         _assert_envelope(response.json(), "AUTH_GATE_DENIED")
 
-    def test_malformed_tenant_id_returns_envelope(self):
+    def test_malformed_non_authoritative_tenant_id_cannot_bypass_auth_gate(self):
         client = Client()
         response = client.get(
             "/api/v1/contracts/",
@@ -146,8 +150,8 @@ class TestMiddlewareEnvelope:
             HTTP_X_USER_ID="also-not-a-uuid",
             HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
         )
-        assert response.status_code == 400
-        _assert_envelope(response.json(), "MALFORMED_CONTEXT_HEADERS")
+        assert response.status_code == 401
+        _assert_envelope(response.json(), "AUTH_GATE_DENIED")
 
     def test_missing_idempotency_key_returns_envelope(self):
         client = Client()
@@ -155,7 +159,7 @@ class TestMiddlewareEnvelope:
             "/api/v1/contracts/",
             content_type="application/json",
             data="{}",
-            **VALID_HEADERS,
+            **_valid_headers(),
         )
         assert response.status_code == 400
         _assert_envelope(response.json(), "MISSING_IDEMPOTENCY_KEY")
@@ -166,7 +170,7 @@ class TestMiddlewareEnvelope:
             "/api/v1/contracts/",
             content_type="application/json",
             data="{}",
-            **VALID_HEADERS,
+            **_valid_headers(),
             HTTP_IDEMPOTENCY_KEY="not-a-uuid",
         )
         assert response.status_code == 400
@@ -264,7 +268,7 @@ class TestNinjaValidationEnvelope:
         client = Client()
         response = client.get(
             "/api/v1/contracts/not-a-valid-uuid/",
-            **VALID_HEADERS,
+            **_valid_headers(),
         )
         # ninja_validation_error_handler maps ValidationError → 400 VALIDATION_ERROR
         assert response.status_code == 400
