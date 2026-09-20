@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import ipaddress
 import os
-import re
 import shlex
 import subprocess
 import unittest
@@ -38,6 +37,89 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_iam_ci_materializes_canonical_runtime_secrets_before_boot(self):
+        workflow = yaml.safe_load(
+            (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
+        )
+        steps = workflow["jobs"]["gate"]["steps"]
+        names = [step["name"] for step in steps]
+
+        generate_index = names.index("Generate disposable canonical secrets")
+        owners_index = names.index("Resolve runtime secret owners")
+        materialize_index = names.index("Materialize runtime secrets")
+        metadata_index = names.index("Validate runtime secret metadata")
+        boot_index = names.index("Build and boot the minimal stack")
+        self.assertLess(generate_index, owners_index)
+        self.assertLess(owners_index, materialize_index)
+        self.assertLess(materialize_index, metadata_index)
+        self.assertLess(metadata_index, boot_index)
+
+        generate = steps[generate_index]["run"]
+        canonical_names = (
+            "django_secret_key",
+            "postgres_password",
+            "replication_password",
+            "minio_password",
+            "gateway_token",
+        )
+        self.assertIn('install -d -m 700 ".dev/secrets"', generate)
+        for name in canonical_names:
+            self.assertIn(name, generate)
+        self.assertNotIn("infra/secrets", generate)
+        self.assertNotIn("dev_db_password.txt", generate)
+        self.assertNotIn("dev_s3_password.txt", generate)
+        self.assertNotIn("dev_replication_password.txt", generate)
+        self.assertNotIn("GITHUB_ENV", generate)
+        self.assertNotIn("add-mask", generate)
+
+        owners = steps[owners_index]["run"]
+        for service in ("postgres_primary", "api_gateway", "minio"):
+            self.assertIn(service, owners)
+        self.assertNotIn("postgis/postgis:16-3.4", owners)
+        self.assertNotIn("quay.io/minio/minio", owners)
+        for name in (
+            "DEV_POSTGRES_UID",
+            "DEV_POSTGRES_GID",
+            "DEV_MINIO_UID",
+            "DEV_MINIO_GID",
+            "DEV_KONG_UID",
+            "DEV_KONG_GID",
+            "DEV_UID",
+            "DEV_GID",
+        ):
+            self.assertIn(name, owners)
+        self.assertIn("docker run --rm --network none --entrypoint id", owners)
+
+        materialize = steps[materialize_index]["run"]
+        self.assertIn(
+            "docker compose -f docker-compose.dev.yml run --rm --no-deps secrets_init",
+            materialize,
+        )
+        self.assertNotIn("runtime_secrets.py", materialize)
+        self.assertNotIn("sudo chown", materialize)
+
+        metadata = steps[metadata_index]["run"]
+        self.assertIn("docker compose -f docker-compose.dev.yml run --rm --no-deps", metadata)
+        self.assertIn("secrets_init", metadata)
+        self.assertIn("stat -c", metadata)
+        self.assertIn("0400", metadata)
+        self.assertNotIn("cat /run/complect-secrets", metadata)
+        self.assertNotIn("runtime_secrets.py", metadata)
+        for name in (
+            "postgres_password",
+            "replication_password",
+            "minio_password",
+            "django_secret_key",
+            "app_postgres_password",
+            "app_gateway_token",
+            "gateway_token",
+        ):
+            self.assertIn(name, metadata)
+
+        cleanup = next(step["run"] for step in steps if step["name"] == "Remove disposable resources")
+        self.assertIn("rm -rf -- .dev/secrets", cleanup)
+        self.assertNotIn("infra/secrets", cleanup)
+
     def test_iam_ci_minio_probe_uses_rendered_compose_image(self):
         workflow = yaml.safe_load(
             (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
@@ -45,24 +127,19 @@ class AgentInfrastructureTests(unittest.TestCase):
         step = next(
             step
             for step in workflow["jobs"]["gate"]["steps"]
-            if step["name"] == "Validate configuration and pull dependencies"
+            if step["name"] == "Resolve runtime secret owners"
         )
         command = step["run"]
 
         self.assertNotIn("minio/minio:latest", command)
         self.assertNotIn("quay.io/minio/minio", command)
-        self.assertRegex(
-            command,
-            re.compile(
-                r'minio_image="\$\(\s*docker compose -f docker-compose\.dev\.yml '
-                r'config --format json\s*\|\s*python3 -c',
-                re.DOTALL,
-            ),
+        self.assertIn(
+            '("MINIO_IMAGE", "minio")', command,
         )
-        self.assertIn('["services"]["minio"]["image"]', command)
-        self.assertIn('if not isinstance(image, str) or not image:', command)
-        self.assertIn('docker run --rm --entrypoint id "$minio_image" -u', command)
-        self.assertIn('docker run --rm --entrypoint id "$minio_image" -g', command)
+        self.assertIn('services = json.load(sys.stdin)["services"]', command)
+        self.assertIn('image = services[service].get("image")', command)
+        self.assertIn('docker run --rm --network none --entrypoint id "$MINIO_IMAGE" -u', command)
+        self.assertIn('docker run --rm --network none --entrypoint id "$MINIO_IMAGE" -g', command)
 
     def test_iam_ci_compose_steps_inherit_explicit_disposable_subnet(self):
         workflow = yaml.safe_load(
