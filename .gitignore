@@ -67,6 +67,7 @@ local_settings.py
 .env
 .env.*
 !.env.example
+!.env.dev.example
 .env.local
 .env.prod
 
@@ -203,3 +204,10 @@ clinerules
 
 # Isolated development worktrees
 .worktrees/
+
+# Machine-local code intelligence (never synchronize indexes).
+.codegraph/
+
+# Checkout-local development state and generated type shim.
+.dev/
+/frontend/next-env.d.ts

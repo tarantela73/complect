@@ -1,415 +1,394 @@
+# Development only. Use make bootstrap/sync/doctor; production networking is unchanged.
+x-app-environment: &app-environment
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  DJANGO_SETTINGS_MODULE: config.settings.local
+  ENVIRONMENT: local
+  DEBUG: "true"
+  HOME: /tmp
+  POSTGRES_DB: complect_db
+  POSTGRES_USER: complect_admin
+  DATABASE_HOST: postgres_primary
+  DATABASE_REPLICA_HOST: postgres_replica
+  DATABASE_PASSWORD_FILE: /run/complect-secrets/app_postgres_password
+  DJANGO_SECRET_KEY_FILE: /run/complect-secrets/django_secret_key
+  EXPECTED_GATEWAY_TOKEN_FILE: /run/complect-secrets/app_gateway_token
+  POSTGRES_REPLICA_ENABLED: "true"
+  POSTGRES_REPLICA_MAX_LAG: "1.0"
+  IAM_DEFERRED_MERGE_EXECUTION_ENABLED: "false"
+  CORS_ALLOWED_ORIGINS: http://localhost:8080
+  CSRF_TRUSTED_ORIGINS: http://localhost:8080
+  REDIS_DEFAULT_URL: redis://redis:6379/0
+  REDIS_CACHE_URL: redis://redis:6379/1
+  REDIS_CELERY_URL: redis://redis:6379/2
+  REDIS_STREAMS_URL: redis://redis:6379/3
+  REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
+  CHANNEL_LAYER_URL: redis://redis:6379/5
+  CELERY_RESULT_BACKEND: redis://redis:6379/6
+  REDIS_AUDIT_URL: redis://redis:6379/7
+  DEV_STATE_DIR: /var/lib/complect-dev
+  PYTEST_ADDOPTS: -o cache_dir=/var/cache/complect/pytest
+  COVERAGE_FILE: /var/cache/complect/.coverage
+  MYPY_CACHE_DIR: /var/cache/complect/mypy
+  RUFF_CACHE_DIR: /var/cache/complect/ruff
+
+x-owned-labels: &owned-labels
+  complect.checkout_id: "${DEV_CHECKOUT_ID:-unconfigured}"
+
+x-app: &app
+  image: "${COMPOSE_PROJECT_NAME:-complect}_backend:dev"
+  init: true
+  user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+  working_dir: /app
+  environment: *app-environment
+  env_file:
+    - path: ./.dev/external.env
+      required: false
+      format: raw
+  volumes:
+    - ./backend:/app:z
+    - runtime_secrets:/run/complect-secrets:ro
+    - dev_state:/var/lib/complect-dev:ro
+    - backend_cache:/var/cache/complect
+  networks: [erp_network]
+  labels: *owned-labels
+
 networks:
   erp_network:
-    name: erp_network
     driver: bridge
+    ipam:
+      config:
+        - subnet: "${COMPLECT_DOCKER_SUBNET:?Use the dev_environment.py helper or configure an explicit subnet}"
+    labels: *owned-labels
 
 volumes:
   pg_primary_data:
+    labels: *owned-labels
   pg_replica_data:
+    labels: *owned-labels
   redisdata:
+    labels: *owned-labels
   s3data:
-  grafana_data:
+    labels: *owned-labels
+  runtime_secrets:
+    labels: *owned-labels
+  dev_state:
+    labels: *owned-labels
+  backend_cache:
+    labels: *owned-labels
   frontend_nm:
+    labels: *owned-labels
   frontend_next:
-
-secrets:
-  db_root_password:
-    file: ./infra/secrets/dev_db_password.txt
-  s3_root_password:
-    file: ./infra/secrets/dev_s3_password.txt
-  replication_password:
-    file: ./infra/secrets/dev_replication_password.txt
+    labels: *owned-labels
+  e2e_nm:
+    labels: *owned-labels
+  grafana_data:
+    labels: *owned-labels
 
 services:
-  # --- DATABASE CONTEXT (PostgreSQL 16 + PostGIS кластер репликации) ---
+  secrets_init:
+    profiles: [tools]
+    network_mode: none
+    image: python:3.12.13-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+    volumes:
+      - ./.dev/secrets:/source-secrets:ro,z
+      - ./infra/scripts:/opt/complect:ro,z
+      - runtime_secrets:/run/complect-secrets
+    command: [python, -B, /opt/complect/runtime_secrets.py, --postgres-uid, "${DEV_POSTGRES_UID:-999}", --postgres-gid, "${DEV_POSTGRES_GID:-999}", --kong-uid, "${DEV_KONG_UID:-1000}", --kong-gid, "${DEV_KONG_GID:-1000}", --minio-uid, "${DEV_MINIO_UID:-0}", --minio-gid, "${DEV_MINIO_GID:-0}", --app-uid, "${DEV_UID:-1000}", --app-gid, "${DEV_GID:-1000}"]
+    labels: *owned-labels
+
+  volume_init:
+    profiles: [tools]
+    network_mode: none
+    image: python:3.12.13-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+    volumes:
+      - ./infra/scripts:/opt/complect:ro,z
+      - dev_state:/owned/state
+      - backend_cache:/owned/backend
+      - frontend_nm:/owned/frontend-modules
+      - frontend_next:/owned/frontend-next
+      - e2e_nm:/owned/e2e-modules
+    command: [python, -B, /opt/complect/volume_permissions.py, "${DEV_UID:-1000}", "${DEV_GID:-1000}"]
+    labels: *owned-labels
+
   postgres_primary:
-    image: postgis/postgis:16-3.4
-    container_name: complect_postgres_primary
-    restart: unless-stopped
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
     environment:
       POSTGRES_DB: complect_db
       POSTGRES_USER: complect_admin
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_root_password
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
-    command: >
-      postgres
-      -c wal_level=replica
-      -c max_wal_senders=10
-      -c max_replication_slots=10
-      -c hot_standby=on
-      -c hba_file=/var/lib/postgresql/data/pg_hba.conf
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD_FILE: /run/complect-secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: [postgres, -c, wal_level=replica, -c, max_wal_senders=10, -c, max_replication_slots=10, -c, hot_standby=on]
+    ports: ["127.0.0.1:15432:5432"]
     volumes:
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro,z
       - pg_primary_data:/var/lib/postgresql/data
-    secrets:
-      - db_root_password
-      - replication_password
-    networks:
-      - erp_network
+      - runtime_secrets:/run/complect-secrets:ro
+    networks: [erp_network]
+    labels: *owned-labels
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U complect_admin -d complect_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  postgres_replication_auth:
-    image: postgis/postgis:16-3.4
-    container_name: complect_postgres_replication_auth
-    restart: "no"
-    entrypoint: ["/bin/bash", "/opt/complect/reconcile_replication.sh"]
-    volumes:
-      - ./infra/postgres/reconcile_replication.sh:/opt/complect/reconcile_replication.sh:ro
-    secrets:
-      - db_root_password
-      - replication_password
-    networks:
-      - erp_network
-    depends_on:
-      postgres_primary:
-        condition: service_healthy
+      test: [CMD, pg_isready, -t, "2", -h, localhost, -U, complect_admin, -d, complect_db]
+      interval: 3s
+      timeout: 3s
+      retries: 30
 
   postgres_replica:
-    image: postgis/postgis:16-3.4
-    container_name: complect_postgres_replica
-    restart: unless-stopped
-    ports:
-      - "5433:5432"
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    ports: ["127.0.0.1:5433:5432"]
     volumes:
       - pg_replica_data:/var/lib/postgresql/data
-    networks:
-      - erp_network
-    secrets:
-      - replication_password
-    entrypoint: >
-      bash -c "
-      if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-        echo 'Инициализация реплики: копирование базы мастера...';
-        until pg_isready -h postgres_primary -p 5432 -U complect_admin -d complect_db; do
-          echo 'Ожидание primary мастера...';
-          sleep 1;
-        done;
-        rm -rf /var/lib/postgresql/data/*;
-        replication_password=$$(cat /run/secrets/replication_password);
-        PGPASSWORD=\"$$replication_password\" pg_basebackup -h postgres_primary -p 5432 -D /var/lib/postgresql/data -U replicator -v -P -R -X stream;
-        unset replication_password;
-        echo 'Базовый бэкап завершен, запускаю реплику';
-      fi;
-      exec docker-entrypoint.sh postgres -c hot_standby=on
-      "
+      - runtime_secrets:/run/complect-secrets:ro
+      - ./infra/postgres/start_replica.sh:/opt/complect/start_replica.sh:ro,z
+    entrypoint: [/bin/bash, /opt/complect/start_replica.sh]
+    networks: [erp_network]
+    labels: *owned-labels
     depends_on:
-      postgres_primary:
-        condition: service_healthy
-      postgres_replication_auth:
-        condition: service_completed_successfully
-
-  # --- REALTIME & CACHE LAYER (Redis Alpine) ---
-  redis:
-    image: redis:7.2-alpine
-    container_name: complect_redis_dev
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-    networks:
-      - erp_network
+      postgres_primary: {condition: service_healthy}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      test: [CMD-SHELL, "test \"$$(psql -X -U complect_admin -d complect_db -Atc 'SELECT pg_is_in_recovery()')\" = t"]
+      interval: 3s
       timeout: 3s
-      retries: 5
+      retries: 30
 
-  # --- STORAGE LAYER CONTEXT (MinIO S3 API) ---
+  redis:
+    image: redis:7.2-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
+    command: [redis-server, --appendonly, "yes"]
+    volumes: [redisdata:/data]
+    networks: [erp_network]
+    labels: *owned-labels
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   minio:
-    image: minio/minio:latest
-    container_name: complect_minio_dev
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     environment:
       MINIO_ROOT_USER: complect_root_user
-      MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_root_password
-    command: server /data --console-address ":9001"
-    volumes:
-      - s3data:/data
-    secrets:
-      - s3_root_password
-    networks:
-      - erp_network
+      MINIO_ROOT_PASSWORD_FILE: /run/complect-secrets/minio_password
+    command: [server, /data, --console-address, ":9001"]
+    volumes: [s3data:/data, runtime_secrets:/run/complect-secrets:ro]
+    networks: [erp_network]
+    labels: *owned-labels
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      test: [CMD, curl, -fsS, --connect-timeout, "1", --max-time, "2", http://localhost:9000/minio/health/live]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  s3_bootstrap:
+    profiles: [tools]
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    volumes: [runtime_secrets:/run/complect-secrets:ro]
+    networks: [erp_network]
+    labels: *owned-labels
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - 'mc alias set local http://minio:9000 complect_root_user "$$(cat /run/complect-secrets/minio_password)" >/dev/null; mc mb --ignore-existing local/complect-quarantine; mc mb --ignore-existing local/complect-production'
+
+  migrate:
+    <<: *app
+    profiles: [tools]
+    environment:
+      <<: *app-environment
+      DEV_SCHEMA_MANAGEMENT: "1"
+    volumes:
+      - ./backend:/app:ro,z
+      - runtime_secrets:/run/complect-secrets:ro
+      - dev_state:/var/lib/complect-dev
+      - backend_cache:/var/cache/complect
+    command: [python, -B, -m, config.dev_database, apply]
+
+  backend:
+    <<: *app
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      args:
+        DEV_SOURCE_DIGEST: "${DEV_SOURCE_DIGEST:-unmanaged}"
+    command: [sh, -ec, 'python -B -m config.dev_database ready && exec granian --interface asginl --host 0.0.0.0 --port 8010 --workers 1 config.asgi:application']
+    depends_on:
+      postgres_primary: {condition: service_healthy}
+      postgres_replica: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, --silent, --show-error, --fail, --connect-timeout, "1", --max-time, "2", http://localhost:8010/health/]
       interval: 5s
       timeout: 3s
-      retries: 5
+      start_period: 20s
+      retries: 24
 
-  # --- S3 AUTO-BOOTSTRAP (Init Container) ---
-  s3_bootstrap:
-    image: minio/mc:latest
-    container_name: complect_s3_bootstrap
-    secrets:
-      - s3_root_password
-    networks:
-      - erp_network
-    entrypoint: >
-      bash -c "
-        until mc alias set myminio http://minio:9000 complect_root_user \$(cat /run/secrets/s3_root_password); do
-          echo 'Ожидание доступности MinIO S3 API...';
-          sleep 1;
-        done &&
-        mc mb --ignore-existing myminio/complect-quarantine &&
-        mc mb --ignore-existing myminio/complect-production &&
-        echo 'S3 BUCKETS CONTOURS INITIALIZED SUCCESSFUL'
-      "
+  celery_worker:
+    <<: *app
+    command: [sh, -ec, 'python -B -m config.dev_database ready && exec celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention,integration -c 4']
     depends_on:
-      minio:
-        condition: service_healthy
-
-  # --- ANTIVIRUS CONTEXT (ClamAV Daemon TCP) ---
-  clamav:
-    image: clamav/clamav:latest
-    container_name: complect_clamav_dev
-    ports:
-      - "3310:3310"
-    networks:
-      - erp_network
+      backend: {condition: service_healthy}
     healthcheck:
-      test: ["CMD-SHELL", "echo PING | nc -w 2 localhost 3310 | grep PONG || exit 1"]
+      test: [CMD, python, -B, config/dev_process_health.py, worker]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 3s
+      retries: 12
 
-  # --- API GATEWAY LAYER (Kong Proxy) ---
+  celery_beat:
+    <<: *app
+    command: [sh, -ec, 'python -B -m config.dev_database ready && exec celery -A config beat --loglevel=info']
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -B, config/dev_process_health.py, beat]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
   api_gateway:
-    image: kong:latest
-    container_name: complect_gateway_dev
-    restart: unless-stopped
+    image: kong@sha256:a2b2ec9964bba34065943e8be1d56791a4a06b7b0c10222f05564b372ca87840
+    init: true
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
-      KONG_PROXY_LISTEN: "0.0.0.0:8000"
-      EXPECTED_GATEWAY_TOKEN: "${EXPECTED_GATEWAY_TOKEN:?EXPECTED_GATEWAY_TOKEN is required}"
-    ports:
-      - "8000:8000"
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
+    ports: ["127.0.0.1:8000:8000"]
     volumes:
-      - ./infra/api_gateway/kong.yml:/etc/kong/kong.yml:ro
-    networks:
-      - erp_network
+      - ./infra/api_gateway/kong.yml:/etc/kong/kong.yml:ro,z
+      - ./infra/api_gateway/start_gateway.sh:/opt/complect/start_gateway.sh:ro,z
+      - runtime_secrets:/run/complect-secrets:ro
+    entrypoint: [/bin/sh, /opt/complect/start_gateway.sh]
+    networks: [erp_network]
+    labels: *owned-labels
     depends_on:
-      postgres_primary:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-    # --- BACKEND MONOLITH (Django ASGI Engine) ---
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: complect_backend_dev
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./backend:/app
-    secrets:
-      - db_root_password
-    environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      ENVIRONMENT: local
-      DJANGO_SETTINGS_MODULE: config.settings.local
-      DEBUG: "true"
-      TIME_ZONE: UTC
-      LANGUAGE_CODE: ru-ru
-      POSTGRES_DB: complect_db
-      POSTGRES_USER: complect_admin
-      DATABASE_HOST: postgres_primary
-      DATABASE_REPLICA_HOST: postgres_replica
-      DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
-      POSTGRES_REPLICA_ENABLED: "true"
-      POSTGRES_REPLICA_MAX_LAG: "1.0"
-      REDIS_DEFAULT_URL: redis://redis:6379/0
-      REDIS_CACHE_URL: redis://redis:6379/1
-      REDIS_CELERY_URL: redis://redis:6379/2
-      REDIS_STREAMS_URL: redis://redis:6379/3
-      REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
-      CHANNEL_LAYER_URL: redis://redis:6379/5
-      CELERY_RESULT_BACKEND: redis://redis:6379/6
-      REDIS_AUDIT_URL: redis://redis:6379/7
-      CLAMAV_HOST: clamav
-      CLAMAV_PORT: 3310
-      CLAMAV_TIMEOUT: 120
-      MAX_UPLOAD_SIZE_MB: 50
-      DATA_UPLOAD_MAX_MEMORY_SIZE: 52428800
-      FILE_UPLOAD_MAX_MEMORY_SIZE: 52428800
-      EXPECTED_GATEWAY_TOKEN: "${EXPECTED_GATEWAY_TOKEN:?EXPECTED_GATEWAY_TOKEN is required}"
-      DADATA_API_KEY: ${DADATA_API_KEY}
-    ports:
-      - "8010:8010"
-    networks:
-      - erp_network
-    command: >
-      bash -c "
-        python manage.py migrate --noinput &&
-        granian --interface asginl --host 0.0.0.0 --port 8010 --workers 1 --reload --reload-ignore-dirs .ruff_cache config.asgi:application
-      "
-
-
-    depends_on:
-      postgres_primary:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      clamav:
-        condition: service_healthy
+      backend: {condition: service_healthy}
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8010/health/ || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      test: [CMD, kong, health]
+      interval: 5s
+      timeout: 4s
+      retries: 20
 
-    # --- ASYNC CELERY WORKER CONTOUR ---
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: complect_celery_worker
-    restart: unless-stopped
+  frontend_deps:
+    profiles: [tools]
+    networks: [erp_network]
+    image: node:22.22.3-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
     working_dir: /app
+    environment: {HOME: /tmp, EXPECTED_NODE: "22.22.3", EXPECTED_NPM: "10.9.8"}
     volumes:
-      - ./backend:/app
-    secrets:
-      - db_root_password
-    environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      ENVIRONMENT: local
-      DJANGO_SETTINGS_MODULE: config.settings.local
-      DEBUG: "true"
-      TIME_ZONE: UTC
-      LANGUAGE_CODE: ru-ru
-      POSTGRES_DB: complect_db
-      POSTGRES_USER: complect_admin
-      DATABASE_HOST: postgres_primary
-      DATABASE_REPLICA_HOST: postgres_replica
-      DATABASE_PASSWORD_FILE: /run/secrets/db_root_password
-      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
-      POSTGRES_REPLICA_ENABLED: "true"
-      POSTGRES_REPLICA_MAX_LAG: "1.0"
-      REDIS_DEFAULT_URL: redis://redis:6379/0
-      REDIS_CACHE_URL: redis://redis:6379/1
-      REDIS_CELERY_URL: redis://redis:6379/2
-      REDIS_STREAMS_URL: redis://redis:6379/3
-      REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
-      CHANNEL_LAYER_URL: redis://redis:6379/5
-      CELERY_RESULT_BACKEND: redis://redis:6379/6
-      REDIS_AUDIT_URL: redis://redis:6379/7
-      CLAMAV_HOST: clamav
-      CLAMAV_PORT: 3310
-    networks:
-      - erp_network
-    command: celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention,integration -c 4
+      - ./frontend:/app:ro,z
+      - ./infra/scripts:/opt/complect:ro,z
+      - frontend_nm:/app/node_modules
+    command: [node, /opt/complect/npm_install.mjs]
+    labels: *owned-labels
 
-    depends_on:
-      postgres_primary:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  # --- ASYNC CELERY BEAT CONTOUR ---
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: complect_celery_beat
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./backend:/app
-    environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      ENVIRONMENT: local
-      DJANGO_SETTINGS_MODULE: config.settings.local
-      DEBUG: "true"
-      TIME_ZONE: UTC
-      LANGUAGE_CODE: ru-ru
-      REDIS_DEFAULT_URL: redis://redis:6379/0
-      REDIS_CELERY_URL: redis://redis:6379/2
-      CELERY_RESULT_BACKEND: redis://redis:6379/6
-    networks:
-      - erp_network
-    command: celery -A config beat --loglevel=info
-    depends_on:
-      redis:
-        condition: service_healthy
-
-
-  # --- OBSERVABILITY BOOTSTRAP SYSTEM ---
-  otel_collector:
-    image: otel/opentelemetry-collector-contrib:0.95.0
-    container_name: complect_otel_collector
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    volumes:
-      - ./infra/opentelemetry/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    ports:
-      - "4317:4317"
-    networks:
-      - erp_network
-
-  jaeger:
-    image: jaegertracing/all-in-one:1.55
-    container_name: complect_jaeger
-    ports:
-      - "16686:16686"
-    networks:
-      - erp_network
-
-  prometheus:
-    image: prom/prometheus:v2.50.1
-    container_name: complect_prometheus
-    volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    ports:
-      - "9090:9090"
-    networks:
-      - erp_network
-
-    # --- OBSERVABILITY BOOTSTRAP SYSTEM ---
-  grafana:
-    image: grafana/grafana:10.4.0
-    container_name: complect_grafana
-    ports:
-      - "3001:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    networks:
-      - erp_network
-
-  # --- FRONTEND CLIENT COMPONENTS ---
   frontend:
-    image: node:22-alpine
-    container_name: complect_frontend_dev
-    restart: unless-stopped
+    image: node:22.22.3-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+    init: true
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
     working_dir: /app
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app:z
       - frontend_nm:/app/node_modules
       - frontend_next:/app/.next
-    ports:
-      - "8080:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
-      - NODE_ENV=development
-      - TURBOPACK=1
-      - WATCHPACK_POLLING=true
-    networks:
-      - erp_network
-    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+      HOME: /tmp
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000/ws
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+    ports: ["127.0.0.1:8080:3000"]
+    command: [npm, run, dev]
+    networks: [erp_network]
+    labels: *owned-labels
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://localhost:3000/login", {signal: AbortSignal.timeout(4000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))']
+      start_period: 60s
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  sdk:
+    profiles: [tools]
+    network_mode: none
+    image: node:22.22.3-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+    working_dir: /app
+    volumes:
+      - ./frontend:/app:z
+      - frontend_nm:/app/node_modules:ro
+      - ./.dev/sdk:/schema:ro,z
+    command: [node, node_modules/openapi-typescript/bin/cli.js, /schema/openapi.json, -o, src/shared/api/generated/schema.d.ts]
+    labels: *owned-labels
+
+  e2e_deps:
+    profiles: [tools]
+    networks: [erp_network]
+    image: mcr.microsoft.com/playwright:v1.49.1-noble@sha256:70e367e0cbf60340a5b5fd562f6247a34eb3196efab9f88a3dd56482d9fe09d2
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+    working_dir: /tests
+    environment: {HOME: /tmp}
+    volumes:
+      - ./frontend/e2e:/tests:ro,z
+      - ./infra/scripts:/opt/complect:ro,z
+      - e2e_nm:/tests/node_modules
+    command: [node, /opt/complect/npm_install.mjs]
+    labels: *owned-labels
+
+  e2e:
+    profiles: [tools]
+    image: mcr.microsoft.com/playwright:v1.49.1-noble@sha256:70e367e0cbf60340a5b5fd562f6247a34eb3196efab9f88a3dd56482d9fe09d2
+    init: true
+    shm_size: 1gb
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+    working_dir: /tests
+    environment:
+      HOME: /tmp
+      E2E_BASE_URL: http://localhost:8080
+      E2E_API_URL: http://localhost:8000
+      E2E_HEADED: "${E2E_HEADED:-0}"
+    env_file:
+      - path: ./.dev/e2e.env
+        required: false
+        format: raw
+    volumes:
+      - ./frontend/e2e:/tests:ro,z
+      - ./infra/scripts:/opt/complect:ro,z
+      - e2e_nm:/tests/node_modules:ro
+      - ./.dev/test-artifacts:/artifacts:z
+    command: [node, /opt/complect/run_e2e.mjs]
+    networks: [erp_network]
+    labels: *owned-labels
+
+  clamav:
+    profiles: [real-files]
+    image: clamav/clamav@sha256:f7954ca7ca13f0ebc301bb8a8b492a88db793192c48763a0b9a2ffb64dcf4bee
+    networks: [erp_network]
+    labels: *owned-labels
+
+  otel_collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    command: [--config=/etc/otel-collector-config.yaml]
+    volumes: ["./infra/opentelemetry/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro,z"]
+    networks: [erp_network]
+    labels: *owned-labels
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.55
+    ports: ["127.0.0.1:16686:16686"]
+    networks: [erp_network]
+    labels: *owned-labels
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.50.1
+    volumes: ["./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z"]
+    ports: ["127.0.0.1:9090:9090"]
+    networks: [erp_network]
+    labels: *owned-labels
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:10.4.0
+    ports: ["127.0.0.1:3001:3000"]
+    volumes: [grafana_data:/var/lib/grafana]
+    networks: [erp_network]
+    labels: *owned-labels

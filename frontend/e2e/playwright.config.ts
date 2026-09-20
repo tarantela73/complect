@@ -2,23 +2,17 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './specs',
+  outputDir: '/artifacts/e2e',
   timeout: 30_000,
+  workers: 1,
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
-    launchOptions: {
-      executablePath: '/home/sever/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    },
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:8080',
     headless: true,
+    trace: 'off',
     locale: 'ru-RU',
     timezoneId: 'Europe/Moscow',
   },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 })

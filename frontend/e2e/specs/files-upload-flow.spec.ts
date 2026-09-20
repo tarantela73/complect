@@ -3,9 +3,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { test, expect } from '@playwright/test'
 
-const BASE = 'http://localhost:3000'
-const USERNAME = 'testadmin'
-const PASSWORD = 'Admin1234!'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:8080'
+const USERNAME = process.env.E2E_USERNAME || ''
+const PASSWORD = process.env.E2E_PASSWORD || ''
 
 async function login(page: import('@playwright/test').Page) {
   await page.goto(`${BASE}/login`)
@@ -22,6 +22,7 @@ async function navigateToFiles(page: import('@playwright/test').Page) {
 }
 
 test.describe('Files upload flow', () => {
+  test.skip(!USERNAME || !PASSWORD, 'Provide an existing test account in ignored .dev/e2e.env; bootstrap never creates users')
   let tmpFile: string
 
   test.beforeAll(() => {

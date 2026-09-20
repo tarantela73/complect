@@ -16,6 +16,17 @@ execution therefore stays disabled by default. The hard release boundary is
 unchanged: no Task 3 backfill, Task 4 contract migration or Tasks 5–17 auth
 foundation/retirement work is included in Release N.
 
+**Release N auth-boundary repair (2026-09-17):**
+`VERIFIED_AUTH_TENANT_CONTEXT_BOUNDARY` follows the narrow
+[ADR-0007 clarification](../../adr/0007-api-gateway-trust-boundary.md#уточнение-release-n-verified_auth_tenant_context_boundary-2026-09-17).
+Protected HTTP context is published only after backend access-JWT verification
+and the existing users validator, before tenant-consuming middleware or RBAC.
+The users adapter is registered in `UsersConfig.ready()` before URL resolution;
+this supersedes the earlier `config.api` registration location only. Internal
+propagation remains separate from HTTP input. This repair introduces no migration
+or Tasks 3–17 model/issuer/session/grant changes and closes no other P0 or
+production acceptance gate.
+
 **P0 audit Legal Hold fence rollout (2026-09-10):** the normative protocol is
 in [ADR-0024, Audit Legal Hold identity fence](../../adr/0024-global-identity-tenant-membership.md#audit-legal-hold-identity-fence-p0-2026-09-10).
 This checkpoint supersedes older rollback examples wherever they would permit
@@ -276,7 +287,7 @@ because this execution did not create commits.
   holds and recorded backup/retention evidence.
 - `apps.common.api.auth` depends only on
   `apps.common.contracts.auth_context.AuthContextValidationProtocol` and its
-  frozen DTO. The users implementation is registered once in `config.api`;
+  frozen DTO. The users implementation is registered once in `UsersConfig.ready()`;
   common code never imports `apps.users` and rejects requests while
   unconfigured.
 - Preserve unrelated dirty `requests/*` worktree files.

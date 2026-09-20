@@ -2,35 +2,24 @@
 
 How the engineering skills should consume this repository's domain documentation when exploring the codebase.
 
-## Before exploring, read these
+## Canonical sources
 
-- **`CONTEXT.md`** at the repository root when it exists.
-- **`docs/adr/`**: read ADRs that touch the area you are about to work in.
-- **`CONCEPTS.md`**: use the existing project glossary until `CONTEXT.md` is created or when it contains additional project vocabulary.
+Use [CONCEPTS.md](../../CONCEPTS.md) when the task depends on domain terminology or changes/adds domain concepts.
+Select the applicable [ADRs](../adr/) by the contract affected; preserve the required CodeGraph-first impact analysis.
+`CONCEPTS.md` is Complect's canonical domain glossary. Do not create `CONTEXT.md`,
+`CONTEXT-MAP.md` or per-context glossary files unless the user explicitly requests
+that documentation change. A shared glossary does not imply one bounded context:
+the apps retain the ownership boundaries defined by the architecture and ADRs.
 
-If `CONTEXT.md` does not exist, proceed silently. Do not create it merely because it is absent. The `domain-modeling` skill, reached through `grill-with-docs` and `improve-codebase-architecture`, creates it lazily when terms or decisions are resolved.
+## Updating terminology
 
-## File structure
-
-This repository uses a single shared domain-documentation layout. Its business
-architecture still has multiple bounded contexts as defined by the ADRs:
-
-```text
-/
-├── CONTEXT.md
-├── CONCEPTS.md
-└── docs/adr/
-    ├── 0001-database-partitioning-strategy.md
-    └── ...
-```
-
-Do not introduce `CONTEXT-MAP.md` or per-context `CONTEXT.md` files unless the repository is deliberately migrated to a multi-context documentation layout.
-
-## Use the glossary's vocabulary
-
-When output names a domain concept in an issue title, refactor proposal, hypothesis, or test name, use the term as defined in `CONTEXT.md` or, while it is absent, `CONCEPTS.md`. Do not drift to synonyms the glossary explicitly avoids.
-
-If a needed concept is missing, reconsider whether it belongs to project vocabulary or note the gap for `domain-modeling`.
+Use `domain-modeling` when changing the model: challenge overloaded terms,
+exercise concrete edge cases and compare statements with verified code.
+Record an accepted domain term in `CONCEPTS.md`; do not turn the glossary into
+an implementation specification. Use canonical terms in issues, proposals,
+hypotheses and tests. If a concept is missing, first establish whether it belongs
+to the domain. Architectural decisions remain in `docs/adr/` and require a real
+trade-off; a vocabulary clarification alone does not require an ADR.
 
 ## Flag ADR conflicts
 
