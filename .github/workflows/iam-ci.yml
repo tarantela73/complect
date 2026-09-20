@@ -29,6 +29,11 @@ jobs:
         shell: bash
     env:
       COMPOSE_PROJECT_NAME: iam-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      # Fresh GitHub-hosted runner only: one /24 from the disposable test pool
+      # in docs/development/workstations.md, separate from checkout/host ranges.
+      # All Compose steps, including diagnostics/cleanup, inherit explicit IPAM
+      # without Docker automatic allocation or generated .env.dev/provenance state.
+      COMPLECT_DOCKER_SUBNET: "198.19.0.0/24"
       DADATA_API_KEY: ""
     steps:
       - name: Checkout
