@@ -3,8 +3,40 @@
 set -euo pipefail
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$project_root"
-compose=(python3 -B infra/scripts/dev_environment.py compose)
-backend_id=$("${compose[@]}" ps -q backend)
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${CI:-}" == "true" ]]; then
+  project=${COMPOSE_PROJECT_NAME:-}
+  subnet=${COMPLECT_DOCKER_SUBNET:-}
+  if [[ ! "$project" =~ ^iam-ci-[0-9]+-[0-9]+$ ]]; then
+    echo "Invalid IAM CI Compose project; refusing arbitrary Compose targeting" >&2
+    exit 1
+  fi
+  if [[ "$subnet" != "198.19.0.0/24" ]]; then
+    echo "Invalid IAM CI disposable subnet; refusing arbitrary network targeting" >&2
+    exit 1
+  fi
+  compose=(docker compose -f docker-compose.dev.yml)
+  backend_id=$("${compose[@]}" ps -q backend)
+  test -n "$backend_id" || { echo "IAM CI backend is not running" >&2; exit 1; }
+  ownership=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}:{{ index .Config.Labels "com.docker.compose.service" }}' "$backend_id")
+  if [[ "$ownership" != "$project:backend" ]]; then
+    echo "Backend does not belong to the IAM CI Compose project" >&2
+    exit 1
+  fi
+  expected_network="${project}_erp_network"
+  backend_network=$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$backend_id")
+  if [[ "$backend_network" != "$expected_network" ]]; then
+    echo "Backend is not attached only to the expected IAM CI project network" >&2
+    exit 1
+  fi
+  network_ownership=$(docker network inspect --format '{{ index .Labels "com.docker.compose.project" }}:{{ index .Labels "com.docker.compose.network" }}' "$expected_network")
+  if [[ "$network_ownership" != "$project:erp_network" ]]; then
+    echo "Expected IAM CI project network has invalid Compose ownership" >&2
+    exit 1
+  fi
+else
+  compose=(python3 -B infra/scripts/dev_environment.py compose)
+  backend_id=$("${compose[@]}" ps -q backend)
+fi
 test -n "$backend_id" || { echo 'Run make bootstrap first' >&2; exit 1; }
 project_network=$(docker inspect --format '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}' "$backend_id")
 test -n "$project_network"
