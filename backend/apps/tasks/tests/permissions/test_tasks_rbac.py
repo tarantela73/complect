@@ -3,28 +3,52 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 import pytest
 from django.test import Client
 
 from apps.common.models.rbac import Permission, Role, RoleBinding, RolePermission
 from apps.tasks.services.task_service import TaskService
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token, _pk_to_uuid4
 
 GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 BASE_URL = "/api/v1/tasks/"
 
 
-def _headers(tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+@dataclass(frozen=True)
+class _Actor:
+    tenant_id: uuid.UUID
+    actor_id: uuid.UUID
+    token: str
+
+
+def _make_actor(tenant_id: uuid.UUID) -> _Actor:
+    suffix = uuid.uuid4().hex[:8]
+    user = User.objects.create_user(
+        username=f"task_rbac_user_{suffix}",
+        email=f"task_rbac_user_{suffix}@example.com",
+        password="Test123!",
+        tenant_id=tenant_id,
+    )
+    return _Actor(
+        tenant_id=tenant_id,
+        actor_id=uuid.UUID(_pk_to_uuid4(user.pk)),
+        token=_make_access_token(user),
+    )
+
+
+def _headers(actor: _Actor) -> dict:
     return {
         "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
-        "HTTP_X_TENANT_ID": str(tenant_id),
-        "HTTP_X_USER_ID": str(user_id),
+        "HTTP_AUTHORIZATION": f"Bearer {actor.token}",
     }
 
 
-def _mut_headers(tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+def _mut_headers(actor: _Actor) -> dict:
     return {
-        **_headers(tenant_id, user_id),
+        **_headers(actor),
         "HTTP_IDEMPOTENCY_KEY": str(uuid.uuid4()),
     }
 
@@ -59,52 +83,52 @@ class TestTasksRBACEnforce:
 
     def test_list_without_permission_returns_403(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-        resp = Client().get(BASE_URL, **_headers(tenant_id, user_id))
+        actor = _make_actor(tenant_id)
+        resp = Client().get(BASE_URL, **_headers(actor))
         assert resp.status_code == 403
 
     def test_list_with_read_permission_returns_200(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-        _grant(user_id, tenant_id, "read", "tasks")
-        resp = Client().get(BASE_URL, **_headers(tenant_id, user_id))
+        actor = _make_actor(tenant_id)
+        _grant(actor.actor_id, tenant_id, "read", "tasks")
+        resp = Client().get(BASE_URL, **_headers(actor))
         assert resp.status_code == 200
 
     def test_create_without_write_permission_returns_403(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-        _grant(user_id, tenant_id, "read", "tasks")
+        actor = _make_actor(tenant_id)
+        _grant(actor.actor_id, tenant_id, "read", "tasks")
         resp = Client().post(
             BASE_URL,
             data={"title": "New task"},
             content_type="application/json",
-            **_mut_headers(tenant_id, user_id),
+            **_mut_headers(actor),
         )
         assert resp.status_code == 403
 
     def test_create_with_write_permission_returns_201(self):
         tenant_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-        _grant(user_id, tenant_id, "write", "tasks")
+        actor = _make_actor(tenant_id)
+        _grant(actor.actor_id, tenant_id, "write", "tasks")
         resp = Client().post(
             BASE_URL,
             data={"title": "New task"},
             content_type="application/json",
-            **_mut_headers(tenant_id, user_id),
+            **_mut_headers(actor),
         )
         assert resp.status_code == 201
 
     def test_delete_attachment_without_delete_permission_returns_403(self):
         tenant_id = uuid.uuid4()
-        creator_id = uuid.uuid4()
-        _grant(creator_id, tenant_id, "write", "tasks")
-        task = _make_task(tenant_id, creator_id)
+        creator = _make_actor(tenant_id)
+        _grant(creator.actor_id, tenant_id, "write", "tasks")
+        task = _make_task(tenant_id, creator.actor_id)
         file_id = uuid.uuid4()
 
-        other_user = uuid.uuid4()
-        _grant(other_user, tenant_id, "read", "tasks")
+        other_actor = _make_actor(tenant_id)
+        _grant(other_actor.actor_id, tenant_id, "read", "tasks")
         resp = Client().delete(
             f"{BASE_URL}{task.id}/files/{file_id}/",
-            **_mut_headers(tenant_id, other_user),
+            **_mut_headers(other_actor),
         )
         assert resp.status_code == 403
