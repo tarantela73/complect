@@ -82,8 +82,20 @@ jobs:
           # sources its replication init script after dropping to the postgres UID.
           pg_uid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -u postgres)
           pg_gid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -g postgres)
-          s3_uid=$(docker run --rm --entrypoint id minio/minio:latest -u)
-          s3_gid=$(docker run --rm --entrypoint id minio/minio:latest -g)
+          minio_image="$(
+            docker compose -f docker-compose.dev.yml config --format json |
+              python3 -c '
+          import json
+          import sys
+
+          image = json.load(sys.stdin)["services"]["minio"]["image"]
+          if not isinstance(image, str) or not image:
+              raise SystemExit("Rendered Compose minio service image must be a non-empty string")
+          print(image)
+          '
+          )"
+          s3_uid=$(docker run --rm --entrypoint id "$minio_image" -u)
+          s3_gid=$(docker run --rm --entrypoint id "$minio_image" -g)
           sudo chown "$pg_uid:$pg_gid" infra/secrets/dev_db_password.txt infra/secrets/dev_replication_password.txt
           sudo chown "$s3_uid:$s3_gid" infra/secrets/dev_s3_password.txt
 
