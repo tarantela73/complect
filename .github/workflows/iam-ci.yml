@@ -41,27 +41,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate disposable credentials
+      - name: Generate disposable canonical secrets
         run: |
           set -euo pipefail
           umask 077
-          for file in dev_db_password.txt dev_s3_password.txt dev_replication_password.txt; do
-            if [[ -e "infra/secrets/$file" || -L "infra/secrets/$file" ]]; then
-              echo "Refusing to overwrite an existing secret file: $file" >&2
-              exit 1
-            fi
-          done
-          install -d -m 700 infra/secrets
+          if [[ -e ".dev/secrets" || -L ".dev/secrets" ]]; then
+            echo "Refusing to overwrite CI secret state" >&2
+            exit 1
+          fi
+          install -d -m 700 ".dev/secrets"
           touch "$RUNNER_TEMP/iam-ci-owned-secrets"
-          for file in dev_db_password.txt dev_s3_password.txt dev_replication_password.txt; do
+          for file in django_secret_key postgres_password replication_password minio_password gateway_token; do
             value=$(openssl rand -hex 32)
-            printf '::add-mask::%s\n' "$value"
-            printf '%s\n' "$value" > "infra/secrets/$file"
-          done
-          for key in SECRET_KEY EXPECTED_GATEWAY_TOKEN; do
-            value=$(openssl rand -hex 32)
-            printf '::add-mask::%s\n' "$value"
-            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+            printf '%s\n' "$value" > ".dev/secrets/$file"
           done
           unset value
 
@@ -77,27 +69,108 @@ jobs:
           fi
           docker compose -f docker-compose.dev.yml config --quiet
           touch "$RUNNER_TEMP/iam-ci-owned-stack"
-          docker compose -f docker-compose.dev.yml pull postgres_primary redis minio clamav
-          # File-backed Compose secrets retain host ownership/mode. PostgreSQL
-          # sources its replication init script after dropping to the postgres UID.
-          pg_uid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -u postgres)
-          pg_gid=$(docker run --rm --entrypoint id postgis/postgis:16-3.4 -g postgres)
-          minio_image="$(
+          docker compose -f docker-compose.dev.yml pull postgres_primary redis minio clamav api_gateway
+
+      - name: Resolve runtime secret owners
+        run: |
+          set -euo pipefail
+          runtime_contract="$(
             docker compose -f docker-compose.dev.yml config --format json |
               python3 -c '
           import json
           import sys
 
-          image = json.load(sys.stdin)["services"]["minio"]["image"]
-          if not isinstance(image, str) or not image:
-              raise SystemExit("Rendered Compose minio service image must be a non-empty string")
-          print(image)
+          services = json.load(sys.stdin)["services"]
+          for variable, service in (
+              ("POSTGRES_IMAGE", "postgres_primary"),
+              ("KONG_IMAGE", "api_gateway"),
+              ("MINIO_IMAGE", "minio"),
+          ):
+              image = services[service].get("image")
+              if not isinstance(image, str) or not image:
+                  raise SystemExit(
+                      f"Rendered Compose {service} image must be a non-empty string"
+                  )
+              print(f"{variable}={image}")
+
+          user = services["backend"].get("user")
+          if not isinstance(user, str):
+              raise SystemExit("Rendered Compose backend user must be UID:GID")
+          uid, separator, gid = user.partition(":")
+          if separator != ":" or not uid.isdigit() or not gid.isdigit():
+              raise SystemExit("Rendered Compose backend user must be numeric UID:GID")
+          print(f"DEV_UID={uid}")
+          print(f"DEV_GID={gid}")
           '
           )"
-          s3_uid=$(docker run --rm --entrypoint id "$minio_image" -u)
-          s3_gid=$(docker run --rm --entrypoint id "$minio_image" -g)
-          sudo chown "$pg_uid:$pg_gid" infra/secrets/dev_db_password.txt infra/secrets/dev_replication_password.txt
-          sudo chown "$s3_uid:$s3_gid" infra/secrets/dev_s3_password.txt
+          while IFS='=' read -r variable value; do
+            case "$variable" in
+              POSTGRES_IMAGE|KONG_IMAGE|MINIO_IMAGE|DEV_UID|DEV_GID)
+                printf -v "$variable" '%s' "$value"
+                ;;
+              *)
+                echo "Unexpected runtime contract variable: $variable" >&2
+                exit 1
+                ;;
+            esac
+          done <<< "$runtime_contract"
+          for variable in POSTGRES_IMAGE KONG_IMAGE MINIO_IMAGE DEV_UID DEV_GID; do
+            [[ -n "${!variable:-}" ]] || {
+              echo "Missing runtime contract variable: $variable" >&2
+              exit 1
+            }
+          done
+          DEV_POSTGRES_UID=$(docker run --rm --network none --entrypoint id "$POSTGRES_IMAGE" -u postgres)
+          DEV_POSTGRES_GID=$(docker run --rm --network none --entrypoint id "$POSTGRES_IMAGE" -g postgres)
+          DEV_KONG_UID=$(docker run --rm --network none --entrypoint id "$KONG_IMAGE" -u)
+          DEV_KONG_GID=$(docker run --rm --network none --entrypoint id "$KONG_IMAGE" -g)
+          DEV_MINIO_UID=$(docker run --rm --network none --entrypoint id "$MINIO_IMAGE" -u)
+          DEV_MINIO_GID=$(docker run --rm --network none --entrypoint id "$MINIO_IMAGE" -g)
+          for variable in \
+            DEV_POSTGRES_UID DEV_POSTGRES_GID DEV_KONG_UID DEV_KONG_GID \
+            DEV_MINIO_UID DEV_MINIO_GID DEV_UID DEV_GID; do
+            [[ "${!variable}" =~ ^[0-9]+$ ]] || {
+              echo "Non-numeric runtime owner: $variable" >&2
+              exit 1
+            }
+            printf '%s=%s\n' "$variable" "${!variable}" >> "$GITHUB_ENV"
+          done
+
+      - name: Materialize runtime secrets
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.dev.yml run --rm --no-deps secrets_init
+
+      - name: Validate runtime secret metadata
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.dev.yml run --rm --no-deps --entrypoint sh secrets_init -ec '
+            expected_mode=0400
+            for specification in "$@"; do
+              name=${specification%%:*}
+              expected_owner=${specification#*:}
+              path="/run/complect-secrets/$name"
+              if [ ! -f "$path" ] || [ -L "$path" ]; then
+                echo "Missing regular runtime secret: $name" >&2
+                exit 1
+              fi
+              actual_owner="$(stat -c "%u:%g" "$path")"
+              actual_mode="$(stat -c "%a" "$path")"
+              size="$(stat -c "%s" "$path")"
+              if [ "$actual_owner" != "$expected_owner" ] || [ "$actual_mode" != "${expected_mode#0}" ] || [ "$size" -le 0 ]; then
+                echo "Runtime secret metadata differs: $name" >&2
+                exit 1
+              fi
+            done
+            printf "PASS: runtime secret metadata verified\n"
+          ' -- \
+            "postgres_password:$DEV_POSTGRES_UID:$DEV_POSTGRES_GID" \
+            "replication_password:$DEV_POSTGRES_UID:$DEV_POSTGRES_GID" \
+            "minio_password:$DEV_MINIO_UID:$DEV_MINIO_GID" \
+            "django_secret_key:$DEV_UID:$DEV_GID" \
+            "app_postgres_password:$DEV_UID:$DEV_GID" \
+            "app_gateway_token:$DEV_UID:$DEV_GID" \
+            "gateway_token:$DEV_KONG_UID:$DEV_KONG_GID"
 
       - name: Build and boot the minimal stack
         run: |
@@ -154,8 +227,7 @@ jobs:
             if (( result != 0 )); then cleanup_status=$result; fi
           fi
           if [[ -f "$RUNNER_TEMP/iam-ci-owned-secrets" ]]; then
-            rm -f infra/secrets/dev_db_password.txt infra/secrets/dev_s3_password.txt \
-              infra/secrets/dev_replication_password.txt
+            rm -rf -- .dev/secrets
             result=$?
             if (( result != 0 )); then cleanup_status=$result; fi
           fi
