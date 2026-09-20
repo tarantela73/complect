@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
+import shlex
 import subprocess
 import unittest
 from pathlib import Path
+
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -33,6 +37,52 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_iam_ci_compose_steps_inherit_explicit_disposable_subnet(self):
+        workflow = yaml.safe_load(
+            (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
+        )
+        checked_steps = []
+        for job_name, job in workflow["jobs"].items():
+            for step in job["steps"]:
+                tokens = shlex.split(step.get("run", ""), comments=True)
+                if not any(tokens[i:i + 2] == ["docker", "compose"]
+                           for i in range(len(tokens) - 1)):
+                    continue
+                if "docker-compose.dev.yml" not in tokens:
+                    continue
+                checked_steps.append(step["name"])
+                with self.subTest(job=job_name, step=step["name"]):
+                    # A fixed disposable subnet is safe only on a fresh hosted runner.
+                    self.assertEqual(job["runs-on"], "ubuntu-24.04")
+                    effective_env = {
+                        **workflow.get("env", {}),
+                        **job.get("env", {}),
+                        **step.get("env", {}),
+                    }
+                    subnet = effective_env.get("COMPLECT_DOCKER_SUBNET")
+                    self.assertTrue(subnet, "Compose requires an explicit CI subnet")
+                    network = ipaddress.ip_network(subnet, strict=True)
+                    self.assertEqual(network.version, 4)
+                    self.assertEqual(network.prefixlen, 24)
+                    self.assertTrue(network.subnet_of(ipaddress.ip_network("198.19.0.0/16")))
+                    # Ignore developer Compose settings; substitute only the Actions project ID.
+                    environment = {key: value for key, value in os.environ.items()
+                                   if not key.startswith("COMPOSE_")
+                                   and key != "COMPLECT_DOCKER_SUBNET"}
+                    environment.update(effective_env)
+                    environment["COMPOSE_PROJECT_NAME"] = "iam-ci-subnet-regression"
+                    result = subprocess.run(
+                        ["docker", "compose", "-f", "docker-compose.dev.yml",
+                         "config", "--format", "json"],
+                        cwd=PROJECT_ROOT, env=environment, capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(
+                        json.loads(result.stdout)["networks"]["erp_network"]["ipam"]["config"],
+                        [{"subnet": subnet}],
+                    )
+        self.assertTrue(checked_steps, "No IAM CI Compose steps were checked")
+
     def test_rendered_network_has_explicit_subnet(self):
         self.assertEqual(
             compose_config()["networks"]["erp_network"]["ipam"]["config"][0]["subnet"],
