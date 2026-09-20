@@ -369,3 +369,264 @@ class OneShotTimeoutTests(unittest.TestCase):
                     any(c[:2] in (["docker", "stop"], ["docker", "rm"]) for c in called)
                 )
                 labels[key] = original
+
+
+class ExplicitNetworkContractTests(unittest.TestCase):
+    def test_canonical_ipv4_subnet_and_reserved_zones(self):
+        from infra.scripts.docker_network import NetworkError, validate_subnet
+
+        self.assertEqual(validate_subnet("198.18.16.0/24"), "198.18.16.0/24")
+        self.assertEqual(validate_subnet("192.0.2.0/24"), "192.0.2.0/24")
+        for value in ("", "bad", "2001:db8::/24", "198.18.16.0/25",
+                      "198.18.16.1/24", "198.18.0.0/24", "198.18.128.0/24",
+                      "198.19.42.0/24"):
+            with self.subTest(value=value), self.assertRaises(NetworkError):
+                validate_subnet(value)
+
+    def test_deterministic_cyclic_pool_and_inventory_overlap(self):
+        from infra.scripts.docker_network import candidates, overlapping
+
+        sequence = candidates("abc", kind="dev")
+        self.assertEqual(sequence[0], "198.18.29.0/24")
+        self.assertEqual(sequence[3], "198.18.16.0/24")
+        self.assertEqual(len(set(sequence)), 16)
+        networks = [{"Name": "other", "IPAM": {"Config": [{"Subnet": "198.18.28.0/23"}]}}]
+        self.assertTrue(overlapping(sequence[0], networks))
+        self.assertFalse(overlapping(sequence[1], networks))
+
+
+class CheckoutNetworkTests(unittest.TestCase):
+    def setUp(self):
+        import json
+        from unittest.mock import patch
+        from infra.scripts import dev_environment as dev
+
+        self.dev = dev
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        (self.root / ".env.dev.example").write_bytes((ROOT / ".env.dev.example").read_bytes())
+        dev.configure(self.root)
+        self.commands = dev.Commands(self.root)
+        self.networks = []
+        self.calls = []
+        self.environments = []
+        self.race = False
+        self.failure = False
+
+        def execute(argv, **kwargs):
+            self.calls.append(argv)
+            env = dict(kwargs.get("env", {}))
+            self.environments.append(env)
+            body, code = "", 0
+            if argv[:4] == ["docker", "network", "ls", "-q"]:
+                body = " ".join(n["Name"] for n in self.networks)
+            elif argv[:3] == ["docker", "network", "inspect"]:
+                body = json.dumps([n for n in self.networks if n["Name"] in argv[3:]])
+            elif "compose" in argv:
+                subnet = env.get("COMPLECT_DOCKER_SUBNET")
+                if "config" in argv:
+                    body = json.dumps({"networks": {"erp_network": {"ipam": {"config": [{"subnet": subnet}]}}}})
+                elif any(command in argv for command in ("up", "run", "create", "scale")):
+                    if self.race:
+                        self.race = False
+                        self.networks.append(self.network("racer", subnet))
+                        return subprocess.CompletedProcess(argv, 1, "", "Pool overlaps with other one on this address space")
+                    if self.failure:
+                        return subprocess.CompletedProcess(argv, 1, "", "permission denied")
+                    if not any(n["Name"] == self.commands.project + "_erp_network" for n in self.networks):
+                        self.networks.append(self.network(self.commands.project + "_erp_network", subnet, own=True))
+            return subprocess.CompletedProcess(argv, code, body, "")
+
+        self.mock = patch.object(dev.subprocess, "run", side_effect=execute)
+        self.mock.start()
+        self.addCleanup(self.mock.stop)
+
+    def network(self, name, subnet, own=False):
+        return {"Name": name, "IPAM": {"Config": [{"Subnet": subnet}]}, "Labels": {
+            "com.docker.compose.project": self.commands.project if own else "other",
+            "com.docker.compose.network": "erp_network",
+            "complect.checkout_id": self.commands.values["DEV_CHECKOUT_ID"] if own else "other",
+        }}
+
+    def test_config_is_explicit_ephemeral_and_skips_occupied_candidate(self):
+        from infra.scripts.docker_network import candidates
+        sequence = candidates(str(self.root), kind="dev")
+        self.networks.append(self.network("occupied", sequence[0]))
+        before = (self.root / ".env.dev").read_bytes()
+        config = self.commands.configuration()
+        self.assertEqual(config["networks"]["erp_network"]["ipam"]["config"][0]["subnet"], sequence[1])
+        self.assertEqual((self.root / ".env.dev").read_bytes(), before)
+
+    def test_success_persists_auto_provenance_and_restart_is_stable(self):
+        path = self.root / ".env.dev"
+        before = path.read_bytes()
+        self.commands.compose("up", "-d", write=True)
+        subnet = self.environments[-1]["COMPLECT_DOCKER_SUBNET"]
+        self.assertIn(f"COMPLECT_DOCKER_SUBNET={subnet}\n", path.read_text())
+        self.assertIn(f"# COMPLECT_AUTO_SUBNET={subnet}\n", path.read_text())
+        self.assertTrue(path.read_bytes().startswith(before))
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        restarted = self.dev.Commands(self.root)
+        config = restarted.configuration()
+        self.assertEqual(config["networks"]["erp_network"]["ipam"]["config"][0]["subnet"], subnet)
+
+    def test_exhaustion_fails_before_compose(self):
+        from infra.scripts.docker_network import candidates
+        self.networks.extend(self.network(f"other-{i}", subnet)
+                             for i, subnet in enumerate(candidates(str(self.root))))
+        with self.assertRaisesRegex(self.dev.DevError, "exhausted"):
+            self.commands.compose("up", write=True)
+        self.assertFalse(any("compose" in call for call in self.calls))
+
+    def test_old_own_network_requires_nondestructive_migration(self):
+        self.networks.append(self.network(self.commands.project + "_erp_network", "172.30.0.0/24", own=True))
+        before = (self.root / ".env.dev").read_bytes()
+        with self.assertRaisesRegex(self.dev.DevError, "make down.*make up"):
+            self.commands.compose("up", write=True)
+        self.assertEqual((self.root / ".env.dev").read_bytes(), before)
+        self.assertFalse(any("compose" in call or "rm" in call for call in self.calls))
+        self.commands.compose("down", write=True)
+        calls = [c for c in self.calls if "compose" in c]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][-1], "down")
+        self.assertNotIn("-v", calls[0])
+
+    def test_user_override_is_not_rewritten_and_collision_fails(self):
+        path = self.root / ".env.dev"
+        with path.open("a") as out:
+            out.write("COMPLECT_DOCKER_SUBNET=192.0.2.0/24\n")
+        before = path.read_bytes()
+        self.commands = self.dev.Commands(self.root)
+        self.commands.compose("up", write=True)
+        self.assertEqual(path.read_bytes(), before)
+        self.networks.append(self.network("other", "192.0.2.0/24"))
+        with self.assertRaisesRegex(self.dev.DevError, "overlaps"):
+            self.commands.compose("up", write=True)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_initial_race_retries_only_uncommitted_auto_candidate(self):
+        from infra.scripts.docker_network import candidates
+        self.race = True
+        self.commands.compose("up", write=True)
+        created = [env["COMPLECT_DOCKER_SUBNET"] for call, env in zip(self.calls, self.environments)
+                   if "compose" in call and "up" in call]
+        self.assertEqual(created, candidates(str(self.root))[:2])
+        self.assertIn(f"COMPLECT_DOCKER_SUBNET={created[1]}\n", (self.root / ".env.dev").read_text())
+
+    def test_unrelated_failure_does_not_retry_or_persist(self):
+        self.failure = True
+        before = (self.root / ".env.dev").read_bytes()
+        with self.assertRaises(self.dev.DevError):
+            self.commands.compose("up", write=True)
+        self.assertEqual((self.root / ".env.dev").read_bytes(), before)
+        self.assertEqual(sum("compose" in c for c in self.calls), 1)
+
+    def test_cli_creation_routes_through_network_helper(self):
+        from unittest.mock import patch
+        with patch.object(self.dev, "prerequisites"), patch.object(self.dev, "source_digest", return_value="test"), \
+             patch.object(self.dev.Commands, "own_resources"), \
+             patch.object(sys, "argv", [str(CLI), "compose", "--root", str(self.root), "up", "-d"]), \
+             patch.object(self.dev.subprocess, "call", return_value=95):
+            self.assertEqual(self.dev.main(), 0)
+        self.assertIn("COMPLECT_DOCKER_SUBNET=", (self.root / ".env.dev").read_text().replace("# COMPLECT_DOCKER_SUBNET=", "# example="))
+
+    def test_two_checkouts_same_initial_slot_have_distinct_stable_networks(self):
+        from infra.scripts.docker_network import candidates
+        first = candidates(str(self.root))[0]
+        second = next(self.root / str(i) for i in range(200)
+                      if candidates(str(self.root / str(i)))[0] == first)
+        self.commands.compose("up", write=True)
+        second.mkdir()
+        (second / ".env.dev.example").write_bytes((ROOT / ".env.dev.example").read_bytes())
+        self.dev.configure(second)
+        first_commands = self.commands
+        self.commands = self.dev.Commands(second)
+        self.assertNotEqual(self.commands.project, first_commands.project)
+        self.commands.compose("up", write=True)
+        self.assertNotEqual(self.commands.environment["COMPLECT_DOCKER_SUBNET"], first)
+        for root, subnet in ((self.root, first), (second, self.commands.environment["COMPLECT_DOCKER_SUBNET"])):
+            self.assertEqual(self.dev.Commands(root).configuration()["networks"]["erp_network"]["ipam"]["config"][0]["subnet"], subnet)
+
+    def test_persisted_auto_conflict_is_not_reselected(self):
+        self.commands.compose("up", write=True)
+        subnet = self.commands.environment["COMPLECT_DOCKER_SUBNET"]
+        before = (self.root / ".env.dev").read_bytes()
+        self.networks.clear()
+        self.networks.append(self.network("new-owner", subnet))
+        with self.assertRaisesRegex(self.dev.DevError, "overlaps"):
+            self.dev.Commands(self.root).compose("up", write=True)
+        self.assertEqual((self.root / ".env.dev").read_bytes(), before)
+
+    def test_explicit_initial_race_never_retries(self):
+        with (self.root / ".env.dev").open("a") as out:
+            out.write("COMPLECT_DOCKER_SUBNET=192.0.2.0/24\n")
+        self.race = True
+        with self.assertRaises(self.dev.DevError):
+            self.commands.compose("up", write=True)
+        self.assertEqual(sum("compose" in c for c in self.calls), 1)
+
+    def test_unsafe_environment_persistence_is_rejected(self):
+        (self.root / ".env.dev").chmod(0o644)
+        with self.assertRaisesRegex(self.dev.DevError, "permissions"):
+            self.commands.compose("up", write=True)
+
+    def test_unknown_network_owner_is_never_reused(self):
+        self.networks.append(self.network(self.commands.project + "_erp_network", "198.18.16.0/24"))
+        with self.assertRaisesRegex(self.dev.DevError, "another or unmanaged"):
+            self.commands.compose("up", write=True)
+        self.assertFalse(any("compose" in c for c in self.calls))
+
+    def test_raw_compose_requires_nonempty_subnet(self):
+        compose = (ROOT / "docker-compose.dev.yml").read_text()
+        self.assertIn('${COMPLECT_DOCKER_SUBNET:?', compose)
+
+    def test_user_edit_during_create_is_not_overwritten(self):
+        original = self.commands._compose_command
+        def editing(*args, **kwargs):
+            result = original(*args, **kwargs)
+            with (self.root / ".env.dev").open("a") as stream:
+                stream.write("# user setting changed concurrently\n")
+            return result
+        from unittest.mock import patch
+        with patch.object(self.commands, "_compose_command", side_effect=editing):
+            with self.assertRaisesRegex(self.dev.DevError, "changed during"):
+                self.commands.compose("up", write=True)
+        self.assertTrue((self.root / ".env.dev").read_text().endswith("# user setting changed concurrently\n"))
+
+    def test_readonly_config_does_not_persist_crash_recovered_network(self):
+        from infra.scripts.docker_network import candidates
+        subnet = candidates(str(self.root))[0]
+        self.networks.append(self.network(self.commands.project + "_erp_network", subnet, own=True))
+        before = (self.root / ".env.dev").read_bytes()
+        self.dev.Commands(self.root, read_only=True).configuration()
+        self.assertEqual((self.root / ".env.dev").read_bytes(), before)
+        self.assertFalse((self.root / ".dev/network.lock").exists())
+        self.commands.compose("up", write=True)
+        self.assertIn(f"# COMPLECT_AUTO_SUBNET={subnet}", (self.root / ".env.dev").read_text())
+
+    def test_scale_creation_is_persisted_through_cli(self):
+        from unittest.mock import patch
+        with patch.object(self.dev, "prerequisites"), patch.object(self.dev, "source_digest", return_value="test"), \
+             patch.object(self.dev.Commands, "own_resources"), \
+             patch.object(sys, "argv", [str(CLI), "compose", "--root", str(self.root), "scale", "probe=1"]), \
+             patch.object(self.dev.subprocess, "call", return_value=95):
+            self.assertEqual(self.dev.main(), 0)
+        configured = self.dev.parse_env(self.root / ".env.dev", self.dev.PUBLIC_KEYS)
+        self.assertIn("COMPLECT_DOCKER_SUBNET", configured)
+
+
+class VpnDiagnosticTests(unittest.TestCase):
+    def test_split_default_routes_produce_readonly_actionable_warning(self):
+        import io
+        from contextlib import redirect_stderr
+        from unittest.mock import patch
+        from infra.scripts import dev_environment as dev
+        output = io.StringIO()
+        result = subprocess.CompletedProcess([], 0, "0.0.0.0/1 dev tun0\n128.0.0.0/1 dev tun0\n", "")
+        with patch.object(dev.shutil, "which", return_value="/usr/bin/ip"), \
+             patch.object(dev.subprocess, "run", return_value=result) as run, redirect_stderr(output):
+            dev.vpn_route_diagnostic()
+        self.assertIn("bip", output.getvalue())
+        self.assertIn("workstations.md", output.getvalue())
+        self.assertEqual(run.call_args.args[0], ["ip", "-4", "route", "show"])

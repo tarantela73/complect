@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -22,6 +23,8 @@ def compose_config() -> dict:
             "json",
         ],
         cwd=PROJECT_ROOT,
+        # Rendering only: no Docker socket/network creation or shared checkout allocation.
+        env=dict(os.environ, COMPLECT_DOCKER_SUBNET="198.18.16.0/24"),
         capture_output=True,
         text=True,
         check=True,
@@ -30,6 +33,12 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_rendered_network_has_explicit_subnet(self):
+        self.assertEqual(
+            compose_config()["networks"]["erp_network"]["ipam"]["config"][0]["subnet"],
+            "198.18.16.0/24",
+        )
+
     def test_minio_server_uses_reviewed_upstream_release_and_index(self):
         self.assertEqual(
             compose_config()["services"]["minio"]["image"],

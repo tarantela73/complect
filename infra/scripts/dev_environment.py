@@ -16,8 +16,15 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.request
 from pathlib import Path
+
+if __package__:
+    from . import docker_network
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import docker_network
 
 ROOT = Path(__file__).resolve().parents[2]
 SECRET_NAMES = (
@@ -87,8 +94,11 @@ def configure(root: Path) -> None:
     print("PASS: local development configuration ready; existing secrets preserved")
 
 
+NETWORK_CREATING_COMMANDS = {"up", "run", "create", "start", "watch", "scale"}
+
 PUBLIC_KEYS = {
     "COMPOSE_PROJECT_NAME",
+    "COMPLECT_DOCKER_SUBNET",
     "DEV_UID",
     "DEV_GID",
     "DEV_FRONTEND_ORIGIN",
@@ -189,6 +199,21 @@ def local_configuration(root: Path) -> dict[str, str]:
     return values
 
 
+def vpn_route_diagnostic() -> None:
+    if shutil.which("ip") is None:
+        return
+    result = subprocess.run(["ip", "-4", "route", "show"], capture_output=True, text=True, timeout=10)
+    routes = {line.split()[0] for line in result.stdout.splitlines() if line.split()}
+    if {"0.0.0.0/1", "128.0.0.0/1"} <= routes:
+        print(
+            "WARN: VPN split-default routes detected (0.0.0.0/1, 128.0.0.0/1). "
+            "If dockerd cannot create docker0, the host administrator must review explicit bip "
+            "in docs/development/workstations.md. Complect uses explicit subnets; generic Docker "
+            "auto-allocation remains unverified. No host configuration is changed.",
+            file=sys.stderr,
+        )
+
+
 def prerequisites() -> None:
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise DevError(
@@ -212,6 +237,7 @@ def prerequisites() -> None:
     )
     if version.returncode or version.stdout.strip() != "1.6.0":
         raise DevError("CodeGraph must match the reviewed 1.6.0 toolchain")
+    vpn_route_diagnostic()
     selected_context = os.getenv("DOCKER_CONTEXT")
     endpoint = os.getenv("DOCKER_HOST")
     if selected_context or not endpoint:
@@ -358,7 +384,136 @@ class Commands:
             )
         return result
 
-    def compose(self, *arguments: str, **kwargs):
+    def own_network(self, networks):
+        name = f"{self.project}_erp_network"
+        matches = [network for network in networks if network.get("Name") == name]
+        if len(matches) > 1:
+            raise DevError(f"Ambiguous Docker network name: {name}; inspect duplicate networks manually")
+        if not matches:
+            return None
+        network = matches[0]
+        labels = network.get("Labels") or {}
+        expected = {
+            "com.docker.compose.project": self.project,
+            "com.docker.compose.network": "erp_network",
+            "complect.checkout_id": self.values["DEV_CHECKOUT_ID"],
+        }
+        if any(labels.get(key) != value for key, value in expected.items()):
+            raise DevError(f"Existing network belongs to another or unmanaged checkout: {name}")
+        return network
+
+    def prepare_network(self, *, for_down=False, attempted=()):
+        path = self.root / ".env.dev"
+        self.network_config_before = path.read_bytes()
+        public = parse_env(path, PUBLIC_KEYS)
+        configured = os.environ.get("COMPLECT_DOCKER_SUBNET", public.get("COMPLECT_DOCKER_SUBNET"))
+        self.subnet_fixed = configured is not None
+        self.subnet_provenance = "explicit" if self.subnet_fixed else "ephemeral-auto"
+        if configured is not None and os.environ.get("COMPLECT_DOCKER_SUBNET") is None:
+            marker = f"# COMPLECT_AUTO_SUBNET={configured}"
+            if marker in self.network_config_before.decode().splitlines():
+                self.subnet_provenance = "persisted-auto"
+        networks = docker_network.inventory(self.run)
+        own = self.own_network(networks)
+        own_subnets = [entry.get("Subnet") for entry in (own or {}).get("IPAM", {}).get("Config") or []]
+        if for_down and own_subnets:
+            # Render the existing topology solely for explicit removal. Never persist this value.
+            self.environment["COMPLECT_DOCKER_SUBNET"] = own_subnets[0]
+            return
+        if configured is not None:
+            subnet = docker_network.validate_subnet(configured)
+            if self.subnet_provenance == "persisted-auto" and subnet not in docker_network.candidates(str(self.root)):
+                raise DevError("Persisted auto subnet is outside the checkout pool; review .env.dev provenance")
+        elif own and len(own_subnets) == 1 and own_subnets[0] in docker_network.candidates(str(self.root)):
+            # Recover a crash after Docker created our exact network but before atomic persistence.
+            subnet = own_subnets[0]
+        else:
+            subnet = next((candidate for candidate in docker_network.candidates(str(self.root))
+                           if candidate not in attempted and not docker_network.overlapping(candidate, networks)), None)
+        if own and (subnet is None or own_subnets != [subnet]):
+            raise DevError(
+                f"Existing checkout network {self.project}_erp_network has incompatible subnet {own_subnets}; "
+                f"from checkout {self.root} run make down then make up (named volumes are preserved; do not use destroy or -v)"
+            )
+        if subnet is None:
+            raise DevError("Checkout subnet pool exhausted (16 /24 networks); release an unused checkout network or configure a valid explicit override")
+        if docker_network.overlapping(subnet, networks, exclude_name=(own or {}).get("Name")):
+            raise DevError("COMPLECT_DOCKER_SUBNET overlaps an existing Docker network; pinned and explicit values are never changed")
+        self.environment["COMPLECT_DOCKER_SUBNET"] = subnet
+
+    def persist_network(self):
+        if self.subnet_fixed:
+            return
+        subnet = self.environment["COMPLECT_DOCKER_SUBNET"]
+        path = self.root / ".env.dev"
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise DevError("Unsafe .env.dev permissions; refusing to persist subnet")
+        content = self.network_config_before
+        if not content.endswith(b"\n"):
+            content += b"\n"
+        content += f"COMPLECT_DOCKER_SUBNET={subnet}\n# COMPLECT_AUTO_SUBNET={subnet}\n".encode()
+        descriptor, temporary = tempfile.mkstemp(prefix=".env.dev-", dir=self.root)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                os.fchmod(stream.fileno(), stat.S_IMODE(info.st_mode))
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if path.is_symlink() or path.read_bytes() != self.network_config_before:
+                raise DevError(".env.dev changed during network creation; refusing to overwrite user settings")
+            os.replace(temporary, path)
+            directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        self.values["COMPLECT_DOCKER_SUBNET"] = subnet
+        self.subnet_fixed = True
+        self.subnet_provenance = "persisted-auto"
+
+    def compose(self, *arguments: str, _for_down=False, **kwargs):
+        if not arguments or arguments[0].startswith("-"):
+            raise DevError("Specify the Compose command first; project/file overrides are not supported")
+        creates_network = arguments[0] in NETWORK_CREATING_COMMANDS
+        if self.read_only and creates_network:
+            raise DevError("Doctor refused a corrective operation")
+        if not creates_network:
+            self.prepare_network(for_down=_for_down or arguments[0] == "down")
+            return self._compose_command(*arguments, **kwargs)
+        with os.fdopen(os.open(self.root / ".dev/network.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600), "w") as mutex:
+            try:
+                fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise DevError("Another network operation is running for this checkout") from error
+            attempted = []
+            while len(attempted) < 16:
+                self.prepare_network(attempted=attempted)
+                subnet = self.environment["COMPLECT_DOCKER_SUBNET"]
+                attempted.append(subnet)
+                failure = None
+                try:
+                    result = self._compose_command(*arguments, **kwargs)
+                except DevError as error:
+                    failure = error
+                networks = docker_network.inventory(self.run)
+                own = self.own_network(networks)
+                if own:
+                    subnets = [entry.get("Subnet") for entry in own.get("IPAM", {}).get("Config") or []]
+                    if subnets != [subnet]:
+                        raise DevError("Created project network subnet differs from requested subnet; refusing persistence")
+                    self.persist_network()
+                if failure is None:
+                    return result
+                if (self.subnet_fixed or own or "overlap" not in str(failure).lower()
+                        or not docker_network.overlapping(subnet, networks)):
+                    raise failure
+            raise DevError("Checkout subnet pool exhausted after 16 collision attempts; no automatic allocation attempted")
+
+    def _compose_command(self, *arguments: str, **kwargs):
         if not arguments or arguments[0] != "run" or self.read_only:
             return self.run([*self.prefix, *arguments], **kwargs)
         name = f"{self.project}-oneshot-{secrets.token_hex(8)}"
@@ -393,8 +548,8 @@ class Commands:
                     )
             raise
 
-    def configuration(self):
-        return json.loads(self.compose("config", "--format", "json").stdout)
+    def configuration(self, *, for_down=False):
+        return json.loads(self.compose("config", "--format", "json", _for_down=for_down).stdout)
 
     def own_resources(self, config):
         ids = self.run(
@@ -1025,7 +1180,8 @@ def main() -> int:
         else:
             prerequisites()
             commands = Commands(root)
-            commands.own_resources(commands.configuration())
+            for_down = arguments.command == "compose" and remaining and remaining[0] == "down"
+            commands.own_resources(commands.configuration(for_down=bool(for_down)))
             if arguments.command == "sdk":
                 ensure_mount_directories(root)
                 generate_sdk(commands)
@@ -1042,6 +1198,13 @@ def main() -> int:
                 if not remaining:
                     raise DevError("A Compose command is required")
                 commands.environment["DEV_SOURCE_DIGEST"] = source_digest(commands)
+                if remaining[0].startswith("-"):
+                    raise DevError("Specify the Compose command first; project/file overrides are not supported")
+                if remaining[0] in NETWORK_CREATING_COMMANDS:
+                    result = commands.compose(*remaining, write=True, timeout=3600)
+                    print(commands.redact(result.stdout or ""), end="")
+                    print(commands.redact(result.stderr or ""), end="", file=sys.stderr)
+                    return result.returncode
                 return subprocess.call(
                     [*commands.prefix, *remaining], cwd=root, env=commands.environment
                 )

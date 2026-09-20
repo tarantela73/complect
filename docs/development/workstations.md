@@ -37,6 +37,52 @@ validation; no guessed minimum/range is imposed.
 Host Node/npm and host Chromium are not needed for application or E2E commands.
 Use the container versions and dependency locks described in [dependencies.md](dependencies.md).
 
+### Explicit Docker network layout
+
+Complect development and disposable test networks always receive an explicit
+`/24` subnet. They never use Docker's automatic bridge allocator. The reviewed
+address layout is:
+
+| Use | Range | Allocation |
+|---|---|---|
+| Docker default bridge | `198.18.0.0/24` | Host `bip`, when configured by the host owner |
+| Complect checkouts | `198.18.16.0/20` | Sixteen `/24` slots, `198.18.16.0/24` through `198.18.31.0/24` |
+| Generic Docker pool | `198.18.128.0/17` | Informational host-admin layout only |
+| Complect disposable tests | `198.19.0.0/16` | Two hundred fifty-six `/24` slots |
+
+The ranges do not overlap. The generic pool is organizational guidance for
+host administration; it is not evidence that Moby's automatic allocator is
+safe with VPN routes. Complect's project and test guarantees come from their
+explicit subnets.
+
+For a new checkout, the helper hashes the checkout identity, tries the
+corresponding slot, and then searches the remaining checkout slots in a
+deterministic cycle using the Docker network inventory. It fails before
+Compose when all sixteen slots are occupied. A disposable test run uses the
+same approach over the `198.19.0.0/16` pool and fails explicitly after
+exhaustion.
+
+For a disposable Kong runtime, `KONG_TEST_SUBNET` is an optional diagnostic
+override. It must be an IPv4 canonical `/24`, must not overlap the documented
+reserved ranges or Docker network inventory, and is never rewritten when it is
+explicitly supplied. Without it, the run selects and creates its own candidate
+from `198.19.0.0/16`.
+
+`COMPLECT_DOCKER_SUBNET` is an ephemeral auto candidate until inspection of
+the exact owned `<COMPOSE_PROJECT_NAME>_erp_network` confirms that Compose
+created it with that subnet. Only then is the value and an equal
+`# COMPLECT_AUTO_SUBNET=<subnet>` provenance comment appended atomically to
+the same `.env.dev` file. A persisted auto value and its matching marker stay
+fixed across restarts. If a value is edited and no equal marker remains, it is
+treated as an explicit user override and is never rewritten automatically.
+Explicit overrides must be IPv4 canonical `/24` networks, avoid the documented
+bridge, generic and disposable ranges and existing Docker networks, and are
+the host owner's responsibility for route/VPN compatibility.
+
+The public [.env.dev.example](../../.env.dev.example) deliberately contains no
+active subnet assignment shared by every checkout; its comments document this
+per-checkout contract.
+
 ### AmneziaVPN and Docker network allocation
 
 On the tested Fedora workstation, AmneziaVPN installs TUN routes
@@ -51,12 +97,63 @@ host/workstation limitation; it does not establish a general defect in Complect,
 Fedora, or Docker runtime on existing networks, or universal incompatibility
 between AmneziaVPN and Docker.
 
-If the Complect project network does not yet exist, temporarily disconnect
-AmneziaVPN before the first `make bootstrap` or another operation that creates
-a new bridge network. Reconnect it after network creation; existing networks
-do not require the VPN to remain disconnected. Do not add a machine-specific
-subnet to `docker-compose.dev.yml`. Do not change Docker `default-address-pools`
-without a separate host-network analysis.
+The earlier workaround of disconnecting AmneziaVPN before the first
+`make bootstrap` applied before the explicit-subnet layout and host bridge
+initialization were in place. With the host `bip` initialized and Complect
+project/test subnets explicit, a new project or disposable test network can be
+created while the VPN routes are active. This guarantee applies to these
+explicit Complect networks; it does not make arbitrary third-party Docker
+networks safe under the VPN route issue.
+
+The repository never changes `/etc/docker/daemon.json`. A host owner may use
+this example after a separate host-network review:
+
+```json
+{
+  "bip": "198.18.0.1/24",
+  "default-address-pools": [
+    {"base": "198.18.128.0/17", "size": 24}
+  ]
+}
+```
+
+`bip` gives the affected Fedora/VPN host an explicit default bridge. The
+`default-address-pools` entry is only a generic administrative pool and does
+not provide a VPN-safety guarantee for automatically allocated networks.
+Repository scripts and doctor/preflight checks are read-only with respect to
+host Docker configuration. When `0.0.0.0/1` and `128.0.0.0/1` routes are
+present, diagnostics should identify the route condition and provide this
+actionable host guidance; they must not edit host configuration.
+
+Do not add a machine-specific subnet to `docker-compose.dev.yml`.
+
+When both sources are present, an environment `COMPLECT_DOCKER_SUBNET` takes
+precedence over the value in `.env.dev`; it is an explicit invocation override
+and is not persisted or silently rewritten. With no environment override, the
+helper uses the `.env.dev` value and its provenance marker rules described
+above.
+
+### Existing checkout network migration
+
+Before lifecycle changes, the helper identifies only the exact project network
+owned by the current `COMPOSE_PROJECT_NAME` and inspects its subnet. An old
+auto-allocated network outside the Complect checkout pool is never deleted
+automatically. If it conflicts with the configured or persisted subnet,
+startup fails before any destructive action and reports the exact project
+network plus the remediation.
+
+After reviewing that message, run the lifecycle from this checkout:
+
+```bash
+make down
+make up
+```
+
+The `down` target uses Compose `down` without `-v`, so named volumes are
+preserved; `make destroy` is the separate volume-deleting operation and is not
+part of this migration. Do not run the migration automatically or use a global
+network/volume cleanup. The remediation removes only this checkout's
+container/network topology and then recreates its explicit network.
 
 ## New checkout
 
@@ -76,7 +173,8 @@ separate production-oriented template; `.env.dev.example` is the development
 contract. The public config parser accepts only its documented keys and never
 executes shell text.
 
-Each checkout gets its own Compose project identity. Existing containers,
+Each checkout gets its own Compose project identity and its own `/24` project
+network. Existing containers,
 networks or volumes with another checkout identity are rejected before lifecycle
 operations. Fixed global container names are not used. Canonical ports mean that
 only one stack can publish these ports on one host at a time. Stop the previous
