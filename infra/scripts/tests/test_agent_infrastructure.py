@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import ipaddress
 import os
+import re
 import shlex
 import subprocess
 import unittest
@@ -37,6 +38,32 @@ def compose_config() -> dict:
 
 
 class AgentInfrastructureTests(unittest.TestCase):
+    def test_iam_ci_minio_probe_uses_rendered_compose_image(self):
+        workflow = yaml.safe_load(
+            (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
+        )
+        step = next(
+            step
+            for step in workflow["jobs"]["gate"]["steps"]
+            if step["name"] == "Validate configuration and pull dependencies"
+        )
+        command = step["run"]
+
+        self.assertNotIn("minio/minio:latest", command)
+        self.assertNotIn("quay.io/minio/minio", command)
+        self.assertRegex(
+            command,
+            re.compile(
+                r'minio_image="\$\(\s*docker compose -f docker-compose\.dev\.yml '
+                r'config --format json\s*\|\s*python3 -c',
+                re.DOTALL,
+            ),
+        )
+        self.assertIn('["services"]["minio"]["image"]', command)
+        self.assertIn('if not isinstance(image, str) or not image:', command)
+        self.assertIn('docker run --rm --entrypoint id "$minio_image" -u', command)
+        self.assertIn('docker run --rm --entrypoint id "$minio_image" -g', command)
+
     def test_iam_ci_compose_steps_inherit_explicit_disposable_subnet(self):
         workflow = yaml.safe_load(
             (PROJECT_ROOT / ".github/workflows/iam-ci.yml").read_text()
