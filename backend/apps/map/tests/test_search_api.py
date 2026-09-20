@@ -8,7 +8,7 @@ from apps.common.tenancy.context import set_tenant_context
 from apps.objects.models.supply_object import ResourceType, SupplyObjectType
 from apps.objects.schemas.object_dto import SupplyObjectCreateRequest
 from apps.objects.services.object_service import ObjectCreateService
-from apps.users.services.auth_service import _pk_to_uuid4
+from apps.users.services.auth_service import _make_access_token
 
 GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 
@@ -37,12 +37,12 @@ class TestMapSearchAPI:
             password="TestPass123!",
             tenant_id=self.tenant_id,
         )
+        self.access_token = _make_access_token(self.user)
 
     def _auth_headers(self):
         return {
             "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
-            "HTTP_X_TENANT_ID": str(self.tenant_id),
-            "HTTP_X_USER_ID": _pk_to_uuid4(self.user.pk),
+            "HTTP_AUTHORIZATION": f"Bearer {self.access_token}",
         }
 
     @override_settings(RBAC_ENFORCEMENT_MODE="OFF")
