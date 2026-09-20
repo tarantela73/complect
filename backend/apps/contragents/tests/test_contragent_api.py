@@ -9,7 +9,7 @@ from django.test import override_settings
 
 from apps.common.tenancy.context import set_tenant_context
 from apps.contragents.models.contragent import Contragent, ContragentType
-from apps.users.services.auth_service import _pk_to_uuid4
+from apps.users.services.auth_service import _make_access_token
 
 GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 
@@ -38,12 +38,12 @@ class TestUpdateContragent:
             password="TestPass123!",
             tenant_id=self.tenant_id,
         )
+        self.access_token = _make_access_token(self.user)
 
     def _auth(self):
         return {
             "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
-            "HTTP_X_TENANT_ID": str(self.tenant_id),
-            "HTTP_X_USER_ID": _pk_to_uuid4(self.user.pk),
+            "HTTP_AUTHORIZATION": f"Bearer {self.access_token}",
             "HTTP_IDEMPOTENCY_KEY": str(uuid.uuid4()),
         }
 
