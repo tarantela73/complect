@@ -17,6 +17,7 @@ from apps.files.queries.file_queries import get_files_page
 from apps.files.repositories.file_repo import FileRepository
 from apps.files.schemas.file_dto import UploadInitRequest
 from apps.files.services.upload_init_service import UploadInitService
+from apps.users.services.auth_service import _make_access_token
 
 _SHA = hashlib.sha256(b"qa").hexdigest()
 
@@ -140,8 +141,6 @@ class TestGetFilesPage:
 # DELETE /api/v1/files/{id}/ endpoint
 # ---------------------------------------------------------------------------
 
-from apps.users.services.auth_service import _pk_to_uuid4  # noqa: E402
-
 GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 
 
@@ -158,12 +157,12 @@ class TestDeleteFileEndpoint:
             password="TestPass123!",
             tenant_id=self.tenant_id,
         )
+        self.access_token = _make_access_token(self.user)
 
     def _auth(self):
         return {
             "HTTP_X_GATEWAY_TOKEN": GW_TOKEN,
-            "HTTP_X_TENANT_ID": str(self.tenant_id),
-            "HTTP_X_USER_ID": _pk_to_uuid4(self.user.pk),
+            "HTTP_AUTHORIZATION": f"Bearer {self.access_token}",
             "HTTP_IDEMPOTENCY_KEY": str(uuid.uuid4()),
         }
 
