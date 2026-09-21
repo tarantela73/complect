@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 import uuid
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
+from django.test import override_settings
 
 from apps.users.models import IdentityMergeOperation, IdentitySecurityAuditRecord, User
 from apps.users.repositories.identity_collision_repository import IdentityCollisionRepository
@@ -28,9 +30,17 @@ def _audit_args():
 
 
 @pytest.fixture
-def protected_report_dir(tmp_path):
+def protected_report_dir(tmp_path, settings):
+    checkout_root = tmp_path / "checkout"
+    backend_root = checkout_root / "backend"
     path = tmp_path / "protected-reconciliation"
+    checkout_root.mkdir(mode=0o700)
+    backend_root.mkdir(mode=0o700)
     path.mkdir(mode=0o700)
+    os.chmod(checkout_root, 0o700)
+    os.chmod(backend_root, 0o700)
+    os.chmod(path, 0o700)
+    settings.BASE_DIR = backend_root
     return path
 
 
@@ -80,6 +90,37 @@ def test_report_refuses_repository_output():
             str(settings.BASE_DIR / "identity-email-collisions.json"),
             *_audit_args(),
         )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    "relative_output",
+    ("identity-email-collisions.json", "docs/identity-email-collisions.json"),
+)
+def test_report_refuses_checkout_root_and_subtree_output(tmp_path, relative_output):
+    checkout_root = tmp_path / "checkout"
+    backend_root = checkout_root / "backend"
+    output_path = checkout_root / relative_output
+
+    checkout_root.mkdir(mode=0o700)
+    backend_root.mkdir(mode=0o700)
+    output_path.parent.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(checkout_root, 0o700)
+    os.chmod(backend_root, 0o700)
+    os.chmod(output_path.parent, 0o700)
+
+    try:
+        with override_settings(BASE_DIR=backend_root):
+            with pytest.raises(CommandError, match="outside the repository"):
+                call_command(
+                    "report_identity_email_duplicates",
+                    "--output",
+                    str(output_path),
+                    *_audit_args(),
+                )
+        assert not output_path.exists()
+    finally:
+        output_path.unlink(missing_ok=True)
 
 
 @pytest.mark.django_db(transaction=True)

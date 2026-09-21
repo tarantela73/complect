@@ -30,7 +30,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         output_path = Path(options["output"])
-        repository = Path(settings.BASE_DIR).resolve()
+        base_dir = Path(settings.BASE_DIR).resolve()
+        repository_root = base_dir.parent if base_dir.parent / "backend" == base_dir else base_dir
         requested_parent = output_path.parent.absolute()
         try:
             protected_parent = output_path.parent.resolve(strict=True)
@@ -38,7 +39,7 @@ class Command(BaseCommand):
             raise CommandError("Protected report directory must already exist") from exc
         if protected_parent != requested_parent:
             raise CommandError("Protected report directory must not contain symlinks")
-        if protected_parent.is_relative_to(repository):
+        if protected_parent.is_relative_to(repository_root):
             raise CommandError("Reconciliation output must be outside the repository")
 
         dir_fd = os.open(protected_parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
