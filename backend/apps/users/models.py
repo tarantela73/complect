@@ -42,6 +42,14 @@ class User(AbstractUser):
 
 # Keep the long-standing `apps.users.models` import surface stable while the
 # implementation is split into global and tenant-scoped IAM modules.
+from apps.users.models_cleanup_protocol import (  # noqa: E402, F401
+    IdentityCleanupAdmission,
+    IdentityCleanupAdmissionSubject,
+    IdentityCleanupLifecycleEvent,
+    IdentityHoldLifecycleEvent,
+    IdentityHoldRequest,
+    IdentityHoldRequestSubject,
+)
 from apps.users.models_identity import (  # noqa: E402, F401
     BackupCode,
     IamTenantRegistryEntry,
