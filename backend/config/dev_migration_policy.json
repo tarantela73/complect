@@ -71,11 +71,15 @@
     "users.0001_initial": "f350fa24d37143c8b6cd8fb909aab40bef7f0c1bd96d79b093e42b3a13f25906",
     "users.0002_user_device_fingerprint_user_mfa_enabled_and_more": "1ee76806274fee81342291653725e02c98fd560e96fd8b0f13bbaca095d17b79",
     "users.0003_identity_expand": "b67ab86082dff98c35238d872c2a85134764932e942c16fef2e38e3b9e7644ff",
-    "users.0003a_identity_audit_fence": "c3ef581d7e6cf8486e19d0fb1657beef2f30e1ec42d441958e98103b812c3eeb"
+    "users.0003a_identity_audit_fence": "c3ef581d7e6cf8486e19d0fb1657beef2f30e1ec42d441958e98103b812c3eeb",
+    "users.0003b_cleanup_admission_expand": "b2cdcb849cab7259ac3e7bd39e25520d716d7702dac8ebddc7f2a7d345438931",
+    "users.0003b1_cleanup_admission_indexes": "45946cef3f3d26896320cc132d52cb42b962b8ec4171a86d8aa4b4d1c889c991"
   },
   "bootstrap_only": [
     "users.0003_identity_expand",
-    "users.0003a_identity_audit_fence"
+    "users.0003a_identity_audit_fence",
+    "users.0003b_cleanup_admission_expand",
+    "users.0003b1_cleanup_admission_indexes"
   ],
   "note": "Existing IAM foundation/fence upgrades require their accepted release preflight. Unknown or changed project migrations fail closed; this allowlist does not override ADR gates.",
   "schema_version": 1
