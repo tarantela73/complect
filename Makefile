@@ -1,4 +1,5 @@
-COMPOSE=python3 -B infra/scripts/dev_environment.py compose
+DEV_ROOT ?= $(CURDIR)
+COMPOSE=python3 -B infra/scripts/dev_environment.py compose --root "$(DEV_ROOT)"
 
 # ============================================
 # CORE LIFECYCLE
@@ -110,10 +111,10 @@ tsc: generate-sdk
 	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit --incremental false"
 
 generate-sdk:
-	python3 -B infra/scripts/dev_environment.py sdk
+	python3 -B infra/scripts/dev_environment.py sdk --root "$(DEV_ROOT)"
 
 test-e2e: generate-sdk
-	python3 -B infra/scripts/dev_environment.py e2e
+	python3 -B infra/scripts/dev_environment.py e2e --root "$(DEV_ROOT)"
 
 # ============================================
 # QUALITY
@@ -178,13 +179,13 @@ check-toolchain:
 
 .PHONY: bootstrap sync doctor
 bootstrap:
-	bash infra/scripts/bootstrap.sh
+	bash infra/scripts/bootstrap.sh --root "$(DEV_ROOT)"
 
 sync:
-	bash infra/scripts/sync.sh
+	bash infra/scripts/sync.sh --root "$(DEV_ROOT)"
 
 doctor:
-	bash infra/scripts/doctor.sh
+	bash infra/scripts/doctor.sh --root "$(DEV_ROOT)"
 
 .PHONY: harness-check
 harness-check:

@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SECRET_NAMES = (
     "django_secret_key",
     "postgres_password",
+    "app_postgres_password",
+    "bootstrap_app_postgres_password",
     "replication_password",
     "minio_password",
     "gateway_token",
@@ -72,15 +74,25 @@ def create_private_file(path: Path, content: bytes) -> None:
         stream.write(content)
 
 
-def configure(root: Path) -> None:
+def configure(root: Path, *, isolated_e2e: bool = False) -> None:
+    if isolated_e2e and not (root / ".env.dev").exists() and (root / ".dev").exists():
+        raise DevError("Isolated E2E requires a fresh disposable checkout; refusing reuse of orphaned dev state")
+    if isolated_e2e and (root / ".env.dev").exists():
+        existing = parse_env(root / ".env.dev", PUBLIC_KEYS)
+        if existing.get("DEV_ISOLATED_E2E") != "true":
+            raise DevError("Isolated E2E requires a fresh disposable checkout; refusing reuse of dev state")
     private_directory(root / ".dev")
     private_directory(root / ".dev/secrets")
     project = "complect_" + hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    if isolated_e2e:
+        project += "_e2e_" + secrets.token_hex(6)
     template = (root / ".env.dev.example").read_text()
     configuration = template.replace("__PROJECT__", project).replace(
         "__UID__", str(os.getuid())
     )
     configuration = configuration.replace("__GID__", str(os.getgid()))
+    if isolated_e2e:
+        configuration += "\nDEV_ISOLATED_E2E=true\n"
     create_private_file(root / ".env.dev", configuration.encode())
     for name in SECRET_NAMES:
         path = root / ".dev/secrets" / name
@@ -95,8 +107,10 @@ def configure(root: Path) -> None:
 
 
 NETWORK_CREATING_COMMANDS = {"up", "run", "create", "start", "watch", "scale"}
+LOCAL_COMPOSE_PROFILES = ("tools", "real-files", "observability")
 
 PUBLIC_KEYS = {
+    "DEV_ISOLATED_E2E",
     "COMPOSE_PROJECT_NAME",
     "COMPLECT_DOCKER_SUBNET",
     "DEV_UID",
@@ -156,6 +170,8 @@ def local_configuration(root: Path) -> dict[str, str]:
                 f"Unsafe private directory: {relative}; refusing cross-checkout state access"
             )
     values = parse_env(root / ".env.dev", PUBLIC_KEYS)
+    if values.get("DEV_ISOLATED_E2E", "false") not in {"true", "false"}:
+        raise DevError("DEV_ISOLATED_E2E must be true or false")
     project = values.get("COMPOSE_PROJECT_NAME", "")
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{2,50}", project):
         raise DevError("Invalid COMPOSE_PROJECT_NAME; run configure for a new checkout")
@@ -188,7 +204,7 @@ def local_configuration(root: Path) -> dict[str, str]:
             raise DevError(f"Missing or unsafe local secret file: {name}")
     for name, keys in (
         ("external.env", {"DADATA_API_KEY"}),
-        ("e2e.env", {"E2E_USERNAME", "E2E_PASSWORD"}),
+        ("e2e.env", {"E2E_USERNAME", "E2E_PASSWORD", "E2E_TOTP_SECRET", "E2E_TOTP_URI", "E2E_TENANT_ID"}),
     ):
         path = root / ".dev" / name
         if path.exists():
@@ -308,6 +324,9 @@ class Commands:
             "-f",
             str(root / "docker-compose.dev.yml"),
         ]
+        self.isolated_e2e = self.values.get("DEV_ISOLATED_E2E") == "true"
+        if self.isolated_e2e:
+            self.prefix.extend(["-f", str(root / "docker-compose.e2e.yml")])
 
     def redact(self, text: str) -> str:
         for path in (self.root / ".dev/secrets").glob("*"):
@@ -317,7 +336,7 @@ class Commands:
                     text = text.replace(value, "<REDACTED>")
         for name, keys in (
             ("external.env", {"DADATA_API_KEY"}),
-            ("e2e.env", {"E2E_USERNAME", "E2E_PASSWORD"}),
+            ("e2e.env", {"E2E_USERNAME", "E2E_PASSWORD", "E2E_TOTP_SECRET", "E2E_TOTP_URI", "E2E_TENANT_ID"}),
         ):
             path = self.root / ".dev" / name
             if path.exists():
@@ -478,6 +497,9 @@ class Commands:
     def compose(self, *arguments: str, _for_down=False, **kwargs):
         if not arguments or arguments[0].startswith("-"):
             raise DevError("Specify the Compose command first; project/file overrides are not supported")
+        if arguments[0] == "down" and "--remove-orphans" not in arguments:
+            # Remove exited services from an older project configuration.
+            arguments = (*arguments, "--remove-orphans")
         creates_network = arguments[0] in NETWORK_CREATING_COMMANDS
         if self.read_only and creates_network:
             raise DevError("Doctor refused a corrective operation")
@@ -515,7 +537,15 @@ class Commands:
 
     def _compose_command(self, *arguments: str, **kwargs):
         if not arguments or arguments[0] != "run" or self.read_only:
-            return self.run([*self.prefix, *arguments], **kwargs)
+            compose_arguments = list(arguments)
+            if arguments and arguments[0] == "down":
+                profile_arguments = [
+                    flag
+                    for profile in LOCAL_COMPOSE_PROFILES
+                    for flag in ("--profile", profile)
+                ]
+                compose_arguments = [*profile_arguments, *compose_arguments]
+            return self.run([*self.prefix, *compose_arguments], **kwargs)
         name = f"{self.project}-oneshot-{secrets.token_hex(8)}"
         try:
             return self.run(
@@ -617,6 +647,83 @@ def source_digest(commands: Commands) -> str:
     return digest.hexdigest()
 
 
+def verify_image_identity(commands: Commands, reference: str, container, image):
+    """Compare runnable manifests on containerd, config IDs on classic stores."""
+    def digest(value):
+        return isinstance(value, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", value)
+
+    descriptor = image.get("Descriptor")
+    if descriptor is None:
+        # Classic image stores expose config IDs and no OCI descriptors.
+        graph_driver = image.get("GraphDriver")
+        if not isinstance(graph_driver, dict) or graph_driver.get("Name") not in {
+            "overlay2", "aufs", "btrfs", "devicemapper", "vfs", "zfs",
+        }:
+            raise DevError("Image store identity is unresolved; descriptor is missing")
+        if container.get("ImageManifestDescriptor") is not None:
+            raise DevError("Image descriptor missing for a manifest-based container")
+        if not digest(image.get("Id")) or container.get("Image") != image["Id"]:
+            raise DevError("Container image config identity differs or is unresolved")
+        return
+
+    manifest_types = {
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    }
+    index_types = {
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+    }
+    if (
+        not isinstance(descriptor, dict)
+        or descriptor.get("mediaType") not in manifest_types | index_types
+        or not digest(descriptor.get("digest"))
+        or image.get("Id") != descriptor["digest"]
+    ):
+        raise DevError("Expected image descriptor is incomplete or unsupported")
+
+    actual = container.get("ImageManifestDescriptor")
+    if (
+        not isinstance(actual, dict)
+        or actual.get("mediaType") not in manifest_types
+        or not digest(actual.get("digest"))
+    ):
+        raise DevError("Running container manifest identity is unresolved")
+    platform_data = actual.get("platform")
+    if not isinstance(platform_data, dict):
+        raise DevError("Running container platform is unresolved")
+    parts = [platform_data.get("os"), platform_data.get("architecture")]
+    if platform_data.get("variant"):
+        parts.append(platform_data["variant"])
+    if any(not isinstance(part, str) or not re.fullmatch(r"[a-z0-9_-]+", part) for part in parts):
+        raise DevError("Running container platform is incomplete")
+    if container.get("Platform") != parts[0]:
+        raise DevError("Running container platform metadata disagrees")
+    selected_data = json.loads(commands.run([
+        "docker", "image", "inspect", "--platform", "/".join(parts), image["Id"],
+    ]).stdout)
+    if not isinstance(selected_data, list) or len(selected_data) != 1:
+        raise DevError("Expected platform image could not be resolved uniquely")
+    selected = selected_data[0]
+    if not isinstance(selected, dict):
+        raise DevError("Expected platform image metadata is incomplete")
+    selected_descriptor = selected.get("Descriptor")
+    if (
+        not isinstance(selected_descriptor, dict)
+        or selected_descriptor.get("mediaType") not in manifest_types
+        or not digest(selected_descriptor.get("digest"))
+        or selected.get("Id") != selected_descriptor["digest"]
+        or selected.get("Os") != parts[0]
+        or selected.get("Architecture") != parts[1]
+        or (selected.get("Variant") or "") != (platform_data.get("variant") or "")
+    ):
+        raise DevError("Expected platform manifest metadata is incomplete")
+    if actual["digest"] != selected_descriptor["digest"]:
+        raise DevError("Running container uses a different platform manifest")
+    if descriptor["mediaType"] in manifest_types and descriptor["digest"] != selected_descriptor["digest"]:
+        raise DevError("Expected image reference changed while resolving its platform")
+
+
 def lock_fingerprints(root: Path):
     directory = root / "backend/requirements"
     metadata = json.loads((directory / "lock-metadata.json").read_text())
@@ -635,7 +742,20 @@ def lock_fingerprints(root: Path):
             )
 
 
-def validate_ports(config, containers, *, require_published: bool):
+def validate_ports(config, containers, *, require_published: bool, isolated_e2e: bool = False):
+    if isolated_e2e:
+        for service, specification in config["services"].items():
+            if specification.get("ports"):
+                raise DevError(f"Isolated E2E must not publish host ports: {service}")
+        for service, container in containers.items():
+            published = container["NetworkSettings"].get("Ports") or {}
+            if any(published.values()):
+                raise DevError(f"Isolated E2E container publishes host ports: {service}")
+        if require_published:
+            for service in PORTS:
+                if not containers.get(service, {}).get("State", {}).get("Running"):
+                    raise DevError(f"Expected isolated service is not running: {service}")
+        return
     for service, expected in PORTS.items():
         configured = config["services"][service].get("ports", [])
         actual = {int(port["published"]) for port in configured}
@@ -672,6 +792,7 @@ def ensure_mount_directories(root: Path):
     for relative in (
         ".dev/sdk",
         ".dev/test-artifacts",
+        ".dev/test-artifacts/e2e",
         "frontend/node_modules",
         "frontend/.next",
         "frontend/e2e/node_modules",
@@ -681,6 +802,21 @@ def ensure_mount_directories(root: Path):
         if path.is_symlink():
             raise DevError(f"Generated mount path must not be a symlink: {relative}")
         path.mkdir(parents=True, exist_ok=True)
+
+
+def validate_e2e_artifact_ownership(root: Path, owner_lookup=None) -> None:
+    """Validate only the active Playwright output tree.
+
+    Historical rehearsal directories are evidence artifacts and may be owned by
+    the container UID that produced them. They must not block local doctor.
+    """
+    artifact_root = root / ".dev/test-artifacts/e2e"
+    if not artifact_root.exists():
+        return
+    lookup = owner_lookup or (lambda path: path.stat().st_uid)
+    for path in artifact_root.rglob("*"):
+        if lookup(path) != os.getuid():
+            raise DevError("Active E2E test artifact ownership differs from developer")
 
 
 def build_backend(commands: Commands):
@@ -842,6 +978,35 @@ def generate_sdk(commands: Commands):
     print("PASS: generated SDK is current and developer-owned")
 
 
+def prepare_database_startup(commands: Commands):
+    """Shared local schema stage used by bootstrap, sync and canonical make up."""
+    print(
+        "PREPARE: private runtime credentials and scoped volume ownership",
+        flush=True,
+    )
+    commands.compose(
+        "run", "--rm", "--no-deps", "secrets_init", write=True, timeout=120
+    )
+    commands.compose(
+        "run", "--rm", "--no-deps", "volume_init", write=True, timeout=120
+    )
+    print("START: isolated project infrastructure", flush=True)
+    commands.compose(
+        "up",
+        "-d",
+        "--wait",
+        "--wait-timeout",
+        "240",
+        *INFRA,
+        write=True,
+        timeout=900,
+    )
+    commands.compose(
+        "run", "--rm", "--no-deps", "s3_bootstrap", write=True, timeout=120
+    )
+    apply_migrations(commands)
+
+
 def _lifecycle(root: Path, *, initial: bool):
     prerequisites()
     if initial:
@@ -867,35 +1032,11 @@ def _lifecycle(root: Path, *, initial: bool):
         lock_fingerprints(root)
         config = commands.configuration()
         commands.own_resources(config)
-        validate_ports(config, commands.containers(), require_published=False)
+        validate_ports(config, commands.containers(), require_published=False, isolated_e2e=commands.isolated_e2e)
         ensure_mount_directories(root)
         build_backend(commands)
         runtime_owners(commands, config)
-        print(
-            "PREPARE: private runtime credentials and scoped volume ownership",
-            flush=True,
-        )
-        commands.compose(
-            "run", "--rm", "--no-deps", "secrets_init", write=True, timeout=120
-        )
-        commands.compose(
-            "run", "--rm", "--no-deps", "volume_init", write=True, timeout=120
-        )
-        print("START: isolated project infrastructure", flush=True)
-        commands.compose(
-            "up",
-            "-d",
-            "--wait",
-            "--wait-timeout",
-            "240",
-            *INFRA,
-            write=True,
-            timeout=900,
-        )
-        commands.compose(
-            "run", "--rm", "--no-deps", "s3_bootstrap", write=True, timeout=120
-        )
-        apply_migrations(commands)
+        prepare_database_startup(commands)
         # npm ci replaces modules atomically from the caller's perspective only
         # while no Next process is using the shared dependency volume.
         commands.compose("stop", "frontend", write=True, timeout=60)
@@ -942,6 +1083,25 @@ def _http(url: str, *, origin: bool = False):
             raise DevError("Gateway CORS does not allow the canonical developer origin")
 
 
+def validate_http(commands: Commands) -> None:
+    if not commands.isolated_e2e:
+        _http("http://localhost:8080/login")
+        _http("http://localhost:8000/public/ping/", origin=True)
+        return
+    commands.compose(
+        "exec", "-T", "frontend", "node", "--input-type=module", "-e",
+        "const origin = 'http://localhost:8080'; "
+        "for (const [url, cors] of [['http://frontend:3000/login', false], "
+        "['http://api_gateway:8000/public/ping/', true]]) { "
+        "const response = await fetch(url, {headers: cors ? {Origin: origin} : {}, "
+        "signal: AbortSignal.timeout(6000)}); "
+        "if (response.status !== 200 || (cors && "
+        "response.headers.get('access-control-allow-origin') !== origin)) "
+        "throw new Error('Isolated frontend/Kong health or CORS failed'); }",
+        timeout=30,
+    )
+
+
 def doctor(root: Path) -> None:
     if not (root / ".env.dev").is_file():
         raise DevError(
@@ -954,7 +1114,7 @@ def doctor(root: Path) -> None:
     config = commands.configuration()
     commands.own_resources(config)
     containers = commands.containers()
-    validate_ports(config, containers, require_published=True)
+    validate_ports(config, containers, require_published=True, isolated_e2e=commands.isolated_e2e)
     for service in CORE:
         state = containers.get(service, {}).get("State", {})
         if (
@@ -1024,13 +1184,13 @@ def doctor(root: Path) -> None:
     )
     expected_images = dict(zip(references, image_data, strict=True))
     for name in CORE:
-        if (
-            containers[name]["Image"]
-            != expected_images[config["services"][name]["image"]]["Id"]
-        ):
+        try:
+            reference = config["services"][name]["image"]
+            verify_image_identity(commands, reference, containers[name], expected_images[reference])
+        except (DevError, KeyError, TypeError, ValueError) as error:
             raise DevError(
-                f"Service is not using the current pinned/built image: {name}"
-            )
+                f"Service is not using the current pinned/built image: {name}: {error}"
+            ) from error
     expected_source = source_digest(commands)
     if (
         expected_images[config["services"]["backend"]["image"]]["Config"]
@@ -1071,8 +1231,7 @@ def doctor(root: Path) -> None:
         "2",
         "http://localhost:8010/health/",
     )
-    _http("http://localhost:8080/login")
-    _http("http://localhost:8000/public/ping/", origin=True)
+    validate_http(commands)
     receipt_path = root / ".dev/sdk/receipt.json"
     generated = root / "frontend/src/shared/api/generated/schema.d.ts"
     if not receipt_path.is_file() or not generated.is_file():
@@ -1085,9 +1244,7 @@ def doctor(root: Path) -> None:
         raise DevError("Generated SDK is stale; run make generate-sdk")
     if generated.stat().st_uid != os.getuid():
         raise DevError("Generated SDK ownership differs from developer")
-    for path in (root / ".dev/test-artifacts").rglob("*"):
-        if path.stat().st_uid != os.getuid():
-            raise DevError("Test artifact ownership differs from developer")
+    validate_e2e_artifact_ownership(root)
     tracked = commands.run(["git", "ls-files", "-z"]).stdout.split("\0")
     forbidden = (".dev/", ".codegraph/", ".venv/", "node_modules/")
     for name in filter(None, tracked):
@@ -1165,9 +1322,17 @@ def main() -> int:
         choices=["configure", "bootstrap", "sync", "doctor", "sdk", "e2e", "compose"],
     )
     parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--isolated-e2e", action="store_true")
     arguments, remaining = parser.parse_known_args()
     root = arguments.root.resolve()
     try:
+        if arguments.isolated_e2e and arguments.command != "configure":
+            raise DevError("--isolated-e2e is only allowed with configure on a fresh checkout")
+        if arguments.command == "configure" and arguments.isolated_e2e:
+            if remaining:
+                raise DevError("Unexpected lifecycle arguments")
+            configure(root, isolated_e2e=True)
+            return 0
         if arguments.command in {"configure", "bootstrap", "sync", "doctor"}:
             if remaining:
                 raise DevError("Unexpected lifecycle arguments")
@@ -1200,7 +1365,12 @@ def main() -> int:
                 commands.environment["DEV_SOURCE_DIGEST"] = source_digest(commands)
                 if remaining[0].startswith("-"):
                     raise DevError("Specify the Compose command first; project/file overrides are not supported")
-                if remaining[0] in NETWORK_CREATING_COMMANDS:
+                if remaining[0] == "up" and "--build" in remaining:
+                    ensure_mount_directories(root)
+                    build_backend(commands)
+                    runtime_owners(commands, commands.configuration())
+                    prepare_database_startup(commands)
+                if remaining[0] in NETWORK_CREATING_COMMANDS or remaining[0] == "down":
                     result = commands.compose(*remaining, write=True, timeout=3600)
                     print(commands.redact(result.stdout or ""), end="")
                     print(commands.redact(result.stderr or ""), end="", file=sys.stderr)

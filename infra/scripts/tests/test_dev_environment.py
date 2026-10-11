@@ -15,6 +15,52 @@ CLI = ROOT / "infra/scripts/dev_environment.py"
 
 
 class ConfigureTests(unittest.TestCase):
+    def test_isolated_e2e_configuration_is_explicit_and_cannot_reuse_dev_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env.dev.example").write_text(
+                "COMPOSE_PROJECT_NAME=__PROJECT__\nDEV_UID=__UID__\nDEV_GID=__GID__\n"
+            )
+            command = [sys.executable, "-B", str(CLI), "configure", "--root", str(root)]
+            isolated = subprocess.run(
+                [*command, "--isolated-e2e"], text=True, capture_output=True
+            )
+            self.assertEqual(isolated.returncode, 0, isolated.stderr)
+            self.assertIn("DEV_ISOLATED_E2E=true", (root / ".env.dev").read_text())
+            before = (root / ".env.dev").read_bytes()
+            repeated = subprocess.run(command, text=True, capture_output=True)
+            self.assertEqual(repeated.returncode, 0, repeated.stderr)
+            self.assertEqual((root / ".env.dev").read_bytes(), before)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env.dev.example").write_text(
+                "COMPOSE_PROJECT_NAME=__PROJECT__\nDEV_UID=__UID__\nDEV_GID=__GID__\n"
+            )
+            command = [sys.executable, "-B", str(CLI), "configure", "--root", str(root)]
+            subprocess.run(command, check=True, capture_output=True)
+            before = (root / ".env.dev").read_bytes()
+            refused = subprocess.run(
+                [*command, "--isolated-e2e"], text=True, capture_output=True
+            )
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertEqual((root / ".env.dev").read_bytes(), before)
+
+    def test_isolated_e2e_refuses_orphaned_credentials_without_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_secret = root / ".dev/secrets/postgres_password"
+            old_secret.parent.mkdir(parents=True)
+            old_secret.write_bytes(b"existing-private-state")
+            result = subprocess.run(
+                [sys.executable, "-B", str(CLI), "configure", "--isolated-e2e", "--root", str(root)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("refusing reuse", result.stderr)
+            self.assertEqual(old_secret.read_bytes(), b"existing-private-state")
+            self.assertFalse((root / ".env.dev").exists())
+
     def test_configure_preserves_secrets_and_never_prints_them(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -52,6 +98,49 @@ class ConfigureTests(unittest.TestCase):
 
 
 class DoctorTests(unittest.TestCase):
+    def test_isolated_ports_do_not_touch_occupied_canonical_listener(self):
+        import socket
+        from infra.scripts import dev_environment
+
+        config = {"services": {name: {"ports": []} for name in dev_environment.PORTS}}
+        with socket.socket() as foreign_listener:
+            foreign_listener.bind(("127.0.0.1", 15432))
+            foreign_listener.listen()
+            dev_environment.validate_ports(
+                config, {}, require_published=False, isolated_e2e=True
+            )
+            with socket.create_connection(("127.0.0.1", 15432)):
+                connection, _ = foreign_listener.accept()
+                connection.close()
+            config["services"]["postgres_primary"]["ports"] = [
+                {"published": "15432", "host_ip": "127.0.0.1"}
+            ]
+            with self.assertRaisesRegex(dev_environment.DevError, "must not publish"):
+                dev_environment.validate_ports(
+                    config, {}, require_published=False, isolated_e2e=True
+                )
+
+    def test_foreign_historical_artifacts_do_not_block_doctor_ownership_check(self):
+        from infra.scripts import dev_environment
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical = root / ".dev/test-artifacts/iam-rehearsal"
+            historical.mkdir(parents=True)
+            (historical / "evidence.json").write_text("{}")
+            dev_environment.validate_e2e_artifact_ownership(root, owner_lookup=lambda _: 65534)
+
+    def test_foreign_active_e2e_artifact_fails_ownership_check(self):
+        from infra.scripts import dev_environment
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            active = root / ".dev/test-artifacts/e2e"
+            active.mkdir(parents=True)
+            (active / "results.json").write_text("{}")
+            with self.assertRaisesRegex(dev_environment.DevError, "Active E2E test artifact"):
+                dev_environment.validate_e2e_artifact_ownership(root, owner_lookup=lambda _: 65534)
+
     def test_empty_checkout_fails_without_creating_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -396,6 +485,49 @@ class ExplicitNetworkContractTests(unittest.TestCase):
 
 
 class CheckoutNetworkTests(unittest.TestCase):
+    def test_down_removes_only_project_orphans(self):
+        self.commands.compose("down", write=True)
+        calls = [c for c in self.calls if "compose" in c]
+        self.assertEqual(len(calls), 1)
+        for profile in ("tools", "real-files", "observability"):
+            self.assertIn(profile, calls[0])
+        self.assertEqual(calls[0][-1], "--remove-orphans")
+
+    def test_main_routes_down_through_project_cleanup_wrapper(self):
+        from unittest.mock import patch
+
+        with patch.object(self.dev, "prerequisites"), \
+             patch.object(self.dev, "source_digest", return_value="test"), \
+             patch.object(self.dev.Commands, "own_resources"), \
+             patch.object(self.dev.Commands, "configuration", return_value={}), \
+             patch.object(self.dev.Commands, "compose", return_value=subprocess.CompletedProcess([], 0, "", "")) as compose, \
+             patch.object(sys, "argv", [str(CLI), "compose", "--root", str(self.root), "down"]):
+            self.assertEqual(self.dev.main(), 0)
+        compose.assert_called_once_with("down", write=True, timeout=3600)
+
+    def test_make_up_runs_shared_schema_stage_before_application(self):
+        from unittest.mock import patch
+
+        events = []
+        with patch.object(self.dev, "prerequisites"), \
+             patch.object(self.dev, "source_digest", return_value="test"), \
+             patch.object(self.dev.Commands, "own_resources"), \
+             patch.object(self.dev.Commands, "configuration", return_value={}), \
+             patch.object(self.dev, "ensure_mount_directories"), \
+             patch.object(self.dev, "build_backend"), \
+             patch.object(self.dev, "runtime_owners"), \
+             patch.object(self.dev, "prepare_database_startup", side_effect=lambda _: events.append("schema")), \
+             patch.object(self.dev.Commands, "compose", side_effect=lambda *a, **k: (events.append("application") or subprocess.CompletedProcess([], 0, "", ""))), \
+             patch.object(sys, "argv", [str(CLI), "compose", "--root", str(self.root), "up", "--build", "-d"]):
+            self.assertEqual(self.dev.main(), 0)
+        self.assertEqual(events, ["schema", "application"])
+
+    def test_dev_auth_origins_include_loopback_browser(self):
+        compose = (ROOT / "docker-compose.dev.yml").read_text()
+        self.assertIn("CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080", compose)
+        self.assertIn("CSRF_TRUSTED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080", compose)
+        self.assertIn("AUTH_TRUSTED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080", compose)
+
     def setUp(self):
         import json
         from unittest.mock import patch
