@@ -260,9 +260,21 @@ resets a database. Changed npm inputs use `npm ci`; unchanged install receipts
 are reused. Backend installation validates roots and the installed transitive
 closure offline; full resolver regeneration remains an explicit CI/lock check.
 
+`make up` uses the same local schema stage as bootstrap/sync before starting the
+application. The stage shows the approved forward plan, runs the Task 3 historical
+backfill and Task 4 preflight when `users.0004a_identity_contract_constraints` is
+pending, and applies the explicit supported targets. A fresh database first applies
+the approved expand prefix, including historical RBAC models, before backfill.
+Repeated startup is idempotent.
+The development policy pins `users.0005_retire_legacy_user_authority` as manual-only:
+it remains unapplied, is excluded from readiness and automatic migration targets,
+and keeps the legacy columns present. A changed manual migration hash or another
+app's dependency on that migration fails the stage. This local upgrade does not
+authorize a production contract or retirement release.
+
 Normal backend startup does not call migrate. A readonly readiness check prevents
 backend/worker/beat from starting against a pending/incompatible schema. The
-migration service is a tools-profile one-shot, invoked explicitly. The plan is
+migration service is a tools-profile one-shot, invoked by the schema stage or explicitly through `make migrate`. The plan is
 shown before application. No fake/reverse/drop/create recovery is attempted.
 
 The dev migration receipt records applied source hashes. Unknown history,
@@ -317,6 +329,20 @@ Vitest excludes Playwright specs. If no unit tests exist, run it with the explic
 `--passWithNoTests` option and report zero tests rather than claiming unit coverage.
 
 ## Test isolation and authorization
+
+For a disposable checkout, `make up DEV_ROOT=/absolute/path/to/checkout`,
+`make doctor DEV_ROOT=...` and `make test-e2e DEV_ROOT=...` select the same
+checkout-local configuration, credentials, image tag and volumes. The default
+is the current checkout. Use its own `.dev/e2e.env` and database/storage fixtures;
+do not copy developer runtime configuration or volumes. For a fresh disposable
+E2E checkout alongside a running development stack, first run
+`python3 -B infra/scripts/dev_environment.py configure --isolated-e2e --root /absolute/path/to/checkout`,
+then `make bootstrap DEV_ROOT=...`. This explicit mode uses
+`docker-compose.e2e.yml` to remove host port publications. Doctor checks frontend
+and Kong health/CORS inside the checkout's network; standard E2E browser relays
+retain canonical localhost origins inside the test container. Configure refuses
+to switch existing ordinary state to this mode. Ordinary development retains
+canonical host ports, which must be available before startup.
 
 In a verified local Docker environment with disposable test data and no production
 access, run task-relevant tests and repair regressions caused by your changes

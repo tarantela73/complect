@@ -1,8 +1,12 @@
 # backend/conftest.py
+import os
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
 from django.db import connection
+
+pytest_plugins = ["test_support.pytest_lifecycle"] if os.environ.get("PYTEST_LIFECYCLE_SOCKET") else []
 
 
 @pytest.fixture(autouse=True)
@@ -63,3 +67,33 @@ def pytest_collection_modifyitems(items):
                     ),
                     append=False,
                 )
+
+
+@pytest.fixture
+def ciphertext_table(request):
+    """Only table provisioning uses lifecycle authority; roundtrip stays runtime."""
+    @contextmanager
+    def provision(name):
+        if name not in {"old_person_ciphertext", "pii_legacy_text"}:
+            raise ValueError("unknown ciphertext fixture")
+        if os.environ.get("PYTEST_LIFECYCLE_SOCKET"):
+            client = request.getfixturevalue("pytest_lifecycle")
+            from test_support.pytest_lifecycle import _state
+            state = _state(request.config)
+            try:
+                client.request("fixture_prepare", fixture=name)
+            except Exception:
+                state.failed = True
+                raise
+            try:
+                yield
+            finally:
+                try:
+                    client.request("fixture_cleanup", fixture=name)
+                except Exception:
+                    state.failed = True
+                    raise
+        else:
+            from test_support.pytest_lifecycle import LifecycleError
+            raise LifecycleError("ciphertext fixtures require the external disposable lifecycle runner")
+    return provision

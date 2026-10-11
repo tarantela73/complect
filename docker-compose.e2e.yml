@@ -1,0 +1,18 @@
+# Explicit disposable E2E mode. Browser relays remain inside the E2E container.
+services:
+  postgres_primary:
+    ports: !reset []
+  postgres_replica:
+    ports: !reset []
+  minio:
+    ports: !reset []
+  api_gateway:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  jaeger:
+    ports: !reset []
+  prometheus:
+    ports: !reset []
+  grafana:
+    ports: !reset []
