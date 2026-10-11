@@ -23,6 +23,10 @@ Plugin, Skill or MCP server was used unless it was actually available and used
 in the current task; final reports list only Skills that were read/applied and
 tools that were invoked.
 
+## Agent harness
+
+For agent startup, cross-session task state, scope drift, verification evidence or handoff, use the complete local [harness-creator](../../.agents/skills/harness-creator/SKILL.md) and [Complect workflow](harness.md). Its generator templates are for disposable/new projects; use `./init.sh` and the project validator for this repository. [Provenance](harness-skill-provenance.json) separates upstream files from reviewed adaptations.
+
 ## Installed project-local skills
 
 Read [local skill policy](local-skills.md) for skill installation, provenance or

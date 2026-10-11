@@ -22,6 +22,10 @@ For conflicts, identify the exact sources/rules, inspect code and history, then 
 5. Verify in proportion to risk using Docker from the repository root: focused tests/lint/types for code; migration/RLS/concurrency evidence for data/security; SDK/browser checks for contracts/UI. PostgreSQL + PostGIS only; SQLite is prohibited. Avoid tests that merely mirror trivial reversible edits. Follow [test isolation and authorization](docs/development/workstations.md#test-isolation-and-authorization) before unattended test execution; commands are in [Makefile](Makefile).
 6. Finish when the agreed change and applicable checks are complete and regressions caused by your changes are fixed, not merely after the first passing test. Report pre-existing unrelated failures separately. Inspect the final diff for conflicts, stale links, secrets and scope expansion; run `git diff --check`. Report decisions, files, completed checks and what remains unverified; a blocked check is not a pass.
 
+## Session state
+
+For multi-session work, task state, verification evidence and session closure, follow [the harness workflow](docs/agents/harness.md). Read `feature_list.json`, `progress.md` and `session-handoff.md` at startup; keep one active feature and require current evidence before marking it done. `./init.sh` checks the harness only; task-specific Docker/API/browser gates still apply.
+
 ## Required routing and project map
 
 Read the linked instructions for every matching impact, including work in `docs/`, `infra/` or another domain. The root invariants below always apply.
