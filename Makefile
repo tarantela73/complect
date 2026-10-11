@@ -185,3 +185,7 @@ sync:
 
 doctor:
 	bash infra/scripts/doctor.sh
+
+.PHONY: harness-check
+harness-check:
+	bash "$(dir $(abspath $(lastword $(MAKEFILE_LIST))))infra/scripts/check_agent_harness.sh"

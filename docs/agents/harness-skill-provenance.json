@@ -1,0 +1,173 @@
+{
+  "source": "https://github.com/walkinglabs/learn-harness-engineering",
+  "archive_url": "https://github.com/walkinglabs/learn-harness-engineering/archive/refs/heads/main.tar.gz",
+  "archive_sha256": "029bfcb967dfeba2e60d7f66529e00ced525296a9f9daad8d007c256ab7a4955",
+  "upstream_commit": "NOT_VERIFIED; source pinned by downloaded archive SHA-256",
+  "retrieved_on": "2026-10-11",
+  "license": "MIT; upstream LICENSE included",
+  "adaptation": "Complect instructions and evidence take priority; generator/validator safety and executable self-check repaired",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_sha256": null,
+      "installed_sha256": "86036cb714ed31ba2f5ba18e8fa2715eefb79da193a0789c90b4588d0609967e",
+      "adapted": true
+    },
+    {
+      "path": "README-UK.md",
+      "upstream_sha256": "075c752ef5ae76d80304cf7c8f016ebab5027ff8aa3c40a98ea4960bf192c7c4",
+      "installed_sha256": "075c752ef5ae76d80304cf7c8f016ebab5027ff8aa3c40a98ea4960bf192c7c4",
+      "adapted": false
+    },
+    {
+      "path": "README.md",
+      "upstream_sha256": "f388d7869cf5e383c811726ee694a686b115dfe2b940df4edb048a9be8e3f498",
+      "installed_sha256": "f388d7869cf5e383c811726ee694a686b115dfe2b940df4edb048a9be8e3f498",
+      "adapted": false
+    },
+    {
+      "path": "SKILL.md",
+      "upstream_sha256": "6b152a8c5191fb3092f8371046e43846b8f42c60509c7c6eec282658beee81df",
+      "installed_sha256": "6ee969b9192c4e9d9bb0d05b8bc79adbca610e7446194207862bc9cf6188c72d",
+      "adapted": true
+    },
+    {
+      "path": "SKILL.md.en",
+      "upstream_sha256": "6b152a8c5191fb3092f8371046e43846b8f42c60509c7c6eec282658beee81df",
+      "installed_sha256": "6b152a8c5191fb3092f8371046e43846b8f42c60509c7c6eec282658beee81df",
+      "adapted": false
+    },
+    {
+      "path": "SKILL.md.uk",
+      "upstream_sha256": "1af39f5bac1087206a5635b42cec91512ebde518718834fa96b6701d9d737cf1",
+      "installed_sha256": "1af39f5bac1087206a5635b42cec91512ebde518718834fa96b6701d9d737cf1",
+      "adapted": false
+    },
+    {
+      "path": "agents/openai.yaml",
+      "upstream_sha256": "6fe21e26cbd10bebaab93f050c0b19fc75ce81a0c96641015bbe014070d300fb",
+      "installed_sha256": "6fe21e26cbd10bebaab93f050c0b19fc75ce81a0c96641015bbe014070d300fb",
+      "adapted": false
+    },
+    {
+      "path": "evals/evals.json",
+      "upstream_sha256": "bbccf589cf15bf9f8ab53b146ad61d80b05781d968d151572a29927437965b07",
+      "installed_sha256": "bbccf589cf15bf9f8ab53b146ad61d80b05781d968d151572a29927437965b07",
+      "adapted": false
+    },
+    {
+      "path": "metadata.json",
+      "upstream_sha256": "feb4ce4c9654a4d92d782b0484f2187e94ed3a0ee904efbfc721308856064029",
+      "installed_sha256": "feb4ce4c9654a4d92d782b0484f2187e94ed3a0ee904efbfc721308856064029",
+      "adapted": false
+    },
+    {
+      "path": "references/context-engineering-pattern.md",
+      "upstream_sha256": "13008d846e539f351c4708296780aca103267249f5e625db6c3594308ede3271",
+      "installed_sha256": "13008d846e539f351c4708296780aca103267249f5e625db6c3594308ede3271",
+      "adapted": false
+    },
+    {
+      "path": "references/gotchas.md",
+      "upstream_sha256": "6c90a161cd2f928df5109ad12bf5d849d838256de61e76fc1c8868d0d5d154e6",
+      "installed_sha256": "6c90a161cd2f928df5109ad12bf5d849d838256de61e76fc1c8868d0d5d154e6",
+      "adapted": false
+    },
+    {
+      "path": "references/lifecycle-bootstrap-pattern.md",
+      "upstream_sha256": "183bb9138a9a434d51a126c2dd72bb6ca580477af61bda3d46a60f3abc85329c",
+      "installed_sha256": "183bb9138a9a434d51a126c2dd72bb6ca580477af61bda3d46a60f3abc85329c",
+      "adapted": false
+    },
+    {
+      "path": "references/memory-persistence-pattern.md",
+      "upstream_sha256": "45b9e1950b4c9e0738214b3cc5329d9e1e17621a02d9d09e2a3fb0a6a2704d94",
+      "installed_sha256": "45b9e1950b4c9e0738214b3cc5329d9e1e17621a02d9d09e2a3fb0a6a2704d94",
+      "adapted": false
+    },
+    {
+      "path": "references/multi-agent-pattern.md",
+      "upstream_sha256": "b307660cd1043408e6dec50e4dd9a18e61b460a41bd66bd59c59d12adb5b0ed9",
+      "installed_sha256": "b307660cd1043408e6dec50e4dd9a18e61b460a41bd66bd59c59d12adb5b0ed9",
+      "adapted": false
+    },
+    {
+      "path": "references/skill-runtime-pattern.md",
+      "upstream_sha256": "642164a949e91c5e73ffbd5f4f049573a3aeacf1ef2c41af61e113198da8468d",
+      "installed_sha256": "642164a949e91c5e73ffbd5f4f049573a3aeacf1ef2c41af61e113198da8468d",
+      "adapted": false
+    },
+    {
+      "path": "references/tool-registry-pattern.md",
+      "upstream_sha256": "5b4ea1447dca0baf3745daa5e8fb1dc94ab6a7a81dbcdb2d40fd66e7615adf98",
+      "installed_sha256": "5b4ea1447dca0baf3745daa5e8fb1dc94ab6a7a81dbcdb2d40fd66e7615adf98",
+      "adapted": false
+    },
+    {
+      "path": "scripts/create-harness.mjs",
+      "upstream_sha256": "df82ef49c6ff1395bf3365d80f3df1e6a620eba6563b7599f85ca2fa2b27324b",
+      "installed_sha256": "cf4a38c51f8fff33b702cee040bb906044074f054c2e6509d591289d080ada09",
+      "adapted": true
+    },
+    {
+      "path": "scripts/lib/harness-utils.mjs",
+      "upstream_sha256": "5aeb3516ae055a23d8129b61a3997f3be91db1efc746f6d81c89cf4d837af3fa",
+      "installed_sha256": "b46a6e7d3caa7f1ec6a5a55def782297da2e0b0c34e41d51ad7c3704f725387e",
+      "adapted": true
+    },
+    {
+      "path": "scripts/render-assessment-html.mjs",
+      "upstream_sha256": "f656d7010a45e3a160e984c59666d57bc0816c47e438bd077faaa17b63b56095",
+      "installed_sha256": "f656d7010a45e3a160e984c59666d57bc0816c47e438bd077faaa17b63b56095",
+      "adapted": false
+    },
+    {
+      "path": "scripts/run-benchmark.mjs",
+      "upstream_sha256": "b7d71aa1b8bf3c3df1c4f9bb040202e07a6140f3c174d790f1678de5c939f379",
+      "installed_sha256": "52637ac5b028c56e47cf4abc02f096f40b5975ea0fbc5aeb7bd4786f97506d0b",
+      "adapted": true
+    },
+    {
+      "path": "scripts/validate-harness.mjs",
+      "upstream_sha256": "ac060dfd2fe7f49e7fb010ea013ab0b2b16f3da075244a90e5c1f8ce2bbe484d",
+      "installed_sha256": "fe019305aff0f55b321d8c699412b55ec1e415a54a300de53854eb123c0aa105",
+      "adapted": true
+    },
+    {
+      "path": "templates/agents.md",
+      "upstream_sha256": "6cf46f72a3d1fcc950e423703392d3cd73e8e2f809137b9e5fb638f6b5a77cb5",
+      "installed_sha256": "6cf46f72a3d1fcc950e423703392d3cd73e8e2f809137b9e5fb638f6b5a77cb5",
+      "adapted": false
+    },
+    {
+      "path": "templates/feature-list.json",
+      "upstream_sha256": "53864068deec1260751391fd107654442f6c937ee712ecde6669415e546d6c5e",
+      "installed_sha256": "53864068deec1260751391fd107654442f6c937ee712ecde6669415e546d6c5e",
+      "adapted": false
+    },
+    {
+      "path": "templates/feature-list.schema.json",
+      "upstream_sha256": "535150b9e613cd289ab9016f44a1e7cf0e14cbeabf1f85fb2533e8503710098e",
+      "installed_sha256": "535150b9e613cd289ab9016f44a1e7cf0e14cbeabf1f85fb2533e8503710098e",
+      "adapted": false
+    },
+    {
+      "path": "templates/init.sh",
+      "upstream_sha256": "39d914bd66183bcfe8baba53d2ea241068a59965ceebd8c2c4fd82b97517e5fd",
+      "installed_sha256": "39d914bd66183bcfe8baba53d2ea241068a59965ceebd8c2c4fd82b97517e5fd",
+      "adapted": false
+    },
+    {
+      "path": "templates/progress.md",
+      "upstream_sha256": "dc8ed5780eb7daa861597a59e0d0ae096e7e23e7dcd7ae4bde7eeed691ee4433",
+      "installed_sha256": "dc8ed5780eb7daa861597a59e0d0ae096e7e23e7dcd7ae4bde7eeed691ee4433",
+      "adapted": false
+    },
+    {
+      "path": "templates/session-handoff.md",
+      "upstream_sha256": "a71e92389c56f9a84e7afd2ee0578377f08e40afcb7a8efe15105553d234fc49",
+      "installed_sha256": "a71e92389c56f9a84e7afd2ee0578377f08e40afcb7a8efe15105553d234fc49",
+      "adapted": false
+    }
+  ]
+}
