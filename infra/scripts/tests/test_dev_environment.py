@@ -621,7 +621,8 @@ class CheckoutNetworkTests(unittest.TestCase):
         self.commands.compose("down", write=True)
         calls = [c for c in self.calls if "compose" in c]
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][-1], "down")
+        self.assertIn("down", calls[0])
+        self.assertIn("--remove-orphans", calls[0])
         self.assertNotIn("-v", calls[0])
 
     def test_user_override_is_not_rewritten_and_collision_fails(self):

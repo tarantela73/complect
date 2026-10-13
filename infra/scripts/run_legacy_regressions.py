@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from infra.scripts.dev_environment import Commands
+from infra.scripts.legacy_preflight import BLOCKED_STAND, run_preflight
 
 ROOT = Path(__file__).resolve().parents[2]
 ORIGINAL_NODE_IDS_SHA256 = (
@@ -63,10 +64,26 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
     os.environ["GIT_OPTIONAL_LOCKS"] = "0"
     checkout = args.root.resolve()
     output = args.output.resolve()
+    preflight = run_preflight(
+        root=(args.source_root or ROOT).resolve(),
+        source_root=checkout,
+        snapshot=args.snapshot,
+        ownership=args.ownership,
+        output=output,
+        run_id=args.run_id,
+        manifest=args.manifest,
+    )
+    if preflight.status == BLOCKED_STAND:
+        raise SystemExit(2)
+    if args.preflight_only:
+        raise SystemExit(0)
     registered = json.loads(args.ownership.read_text())
     commands = Commands(checkout)
     if not commands.isolated_e2e:
@@ -108,7 +125,7 @@ def main() -> None:
         )
     original = json.loads(args.manifest.read_text())["collected"]
     require_original_nodes(original)
-    output.mkdir(parents=True, exist_ok=False)
+    output.mkdir(parents=True, exist_ok=True)  # Preflight creates the directory first.
     commands.run(
         ["docker", "exec", redis["id"], "redis-cli", "FLUSHALL", "SYNC"], write=True
     )

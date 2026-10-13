@@ -141,6 +141,10 @@ def test_runner_failure_preserves_primary_error_and_cleans_created_resources(
     from infra.scripts import run_legacy_regressions as runner
 
     monkeypatch.setattr(runner, "ROOT", tmp_path)
+    # This test exercises downstream prepare/start failure cleanup.  The
+    # dedicated preflight matrix owns qualification behavior; keep this fault
+    # injection focused on preserving the primary error and cleanup.
+    monkeypatch.setattr(runner, "run_preflight", lambda **kwargs: SimpleNamespace(status="PASS"))
     root = tmp_path / ".dev/test-artifacts/task/checkout"
     root.mkdir(parents=True)
     secret_dir = root / ".dev/secrets"

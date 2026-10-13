@@ -22,9 +22,11 @@ from pathlib import Path
 
 if __package__:
     from . import docker_network
+    from .docker_ownership import OwnershipMismatch, OwnershipProof
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import docker_network
+    from docker_ownership import OwnershipMismatch, OwnershipProof
 
 ROOT = Path(__file__).resolve().parents[2]
 SECRET_NAMES = (
@@ -296,6 +298,7 @@ class Commands:
     def __init__(self, root: Path, *, read_only: bool = False):
         self.root = root
         self.read_only = read_only
+        self.ownership = OwnershipProof(self._inspect_resources)
         self.values = local_configuration(root)
         self.project = self.values["COMPOSE_PROJECT_NAME"]
         self.environment = dict(os.environ)
@@ -552,68 +555,65 @@ class Commands:
                 [*self.prefix, "run", "--name", name, *arguments[1:]], **kwargs
             )
         except DevError:
-            # Killing the Compose client does not stop its detached daemon work.
+            # Killing the Compose client does not stop detached daemon work.
             # Inspect the exact generated name, then address only the verified ID.
-            inspected = self.run(["docker", "inspect", name], check=False, timeout=10)
-            if inspected.returncode == 0:
-                container = json.loads(inspected.stdout)[0]
-                labels = container["Config"].get("Labels") or {}
-                if (
-                    labels.get("com.docker.compose.project") == self.project
-                    and labels.get("complect.checkout_id")
-                    == self.values["DEV_CHECKOUT_ID"]
-                ):
-                    identifier = container["Id"]
-                    self.run(
-                        ["docker", "stop", "--time", "5", identifier],
-                        write=True,
-                        check=False,
-                        timeout=15,
-                    )
-                    self.run(
-                        ["docker", "rm", "-f", identifier],
-                        write=True,
-                        check=False,
-                        timeout=15,
-                    )
+            try:
+                containers = self.ownership.owned("container", [name], {
+                    "com.docker.compose.project": self.project,
+                    "complect.checkout_id": self.values["DEV_CHECKOUT_ID"],
+                }, optional=True)
+            except OwnershipMismatch:
+                containers = []
+            if containers:
+                identifier = containers[0]["Id"]
+                self.run(
+                    ["docker", "stop", "--time", "5", identifier],
+                    write=True, check=False, timeout=15,
+                )
+                self.run(
+                    ["docker", "rm", "-f", identifier],
+                    write=True, check=False, timeout=15,
+                )
             raise
+
+    def _inspect_resources(self, kind, identifiers, *, optional=False):
+        command = ["docker", *([] if kind == "container" else [kind]), "inspect", *identifiers]
+        result = self.run(
+            command, check=not optional,
+            timeout=10 if kind == "container" and optional else 60,
+        )
+        return json.loads(result.stdout) if result.returncode == 0 else []
 
     def configuration(self, *, for_down=False):
         return json.loads(self.compose("config", "--format", "json", _for_down=for_down).stdout)
 
     def own_resources(self, config):
-        ids = self.run(
-            [
-                "docker",
-                "ps",
-                "-aq",
-                "--filter",
-                f"label=com.docker.compose.project={self.project}",
-            ]
-        ).stdout.split()
+        ids = self.run([
+            "docker", "ps", "-aq", "--filter",
+            f"label=com.docker.compose.project={self.project}",
+        ]).stdout.split()
         if ids:
-            containers = json.loads(self.run(["docker", "inspect", *ids]).stdout)
-            for container in containers:
-                labels = container["Config"].get("Labels") or {}
-                if labels.get("complect.checkout_id") != self.values["DEV_CHECKOUT_ID"]:
-                    raise DevError(
-                        "Project contains containers owned by another checkout; refusing to touch them"
-                    )
+            try:
+                self.ownership.owned("container", ids, {
+                    "complect.checkout_id": self.values["DEV_CHECKOUT_ID"],
+                })
+            except OwnershipMismatch as error:
+                raise DevError(
+                    "Project contains containers owned by another checkout; refusing to touch them"
+                ) from error
         for kind, field in (("volume", "volumes"), ("network", "networks")):
             for specification in config.get(field, {}).values():
                 name = specification.get("name")
                 if not name:
                     continue
-                result = self.run(["docker", kind, "inspect", name], check=False)
-                if result.returncode == 0:
-                    labels = json.loads(result.stdout)[0].get("Labels") or {}
-                    if (
-                        labels.get("complect.checkout_id")
-                        != self.values["DEV_CHECKOUT_ID"]
-                    ):
-                        raise DevError(
-                            f"Existing {kind} belongs to another or unmanaged checkout: {name}"
-                        )
+                try:
+                    self.ownership.owned(kind, [name], {
+                        "complect.checkout_id": self.values["DEV_CHECKOUT_ID"],
+                    }, optional=True)
+                except OwnershipMismatch as error:
+                    raise DevError(
+                        f"Existing {kind} belongs to another or unmanaged checkout: {name}"
+                    ) from error
 
     def containers(self):
         ids = self.compose("ps", "-aq").stdout.split()

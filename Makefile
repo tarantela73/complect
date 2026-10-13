@@ -41,7 +41,14 @@ postgres-logs:
 	$(COMPOSE) logs -f --tail=200 postgres_primary
 
 agent-infra-test:
-	python3 -m unittest discover -s infra/scripts/tests -v
+	python3 -B infra/scripts/run_infra_tests.py all $(INFRA_TEST_ARGS)
+
+# Local stand and complete Payments acceptance gate.
+test-payments-stand:
+	python3 -B infra/scripts/run_payments_gate.py $(PAYMENTS_GATE_ARGS)
+
+test-payments-gate:
+	python3 -B infra/scripts/run_payments_gate.py --scope full $(PAYMENTS_GATE_ARGS)
 
 # ============================================
 # DJANGO
