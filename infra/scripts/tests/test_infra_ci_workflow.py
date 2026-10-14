@@ -29,9 +29,12 @@ class InfraCiWorkflowTests(unittest.TestCase):
         for step in job["steps"]:
             self.assertNotIn("continue-on-error", step)
         build = [command for command in commands if "docker build" in command]
-        self.assertEqual(len(build), 1)
-        self.assertIn("backend/Dockerfile.dev", build[0])
-        self.assertIn('"$INFRA_TEST_BACKEND_IMAGE"', build[0])
+        self.assertEqual(len(build), 2)
+        backend_build = next(command for command in build if "backend/Dockerfile.dev" in command)
+        quality_build = next(command for command in build if "infra/Dockerfile.tests" in command)
+        self.assertIn('"$INFRA_TEST_BACKEND_IMAGE"', backend_build)
+        self.assertIn('--build-arg BASE_IMAGE="$INFRA_TEST_BACKEND_IMAGE"', quality_build)
+        self.assertIn('"$INFRA_TEST_QUALITY_IMAGE"', quality_build)
 
     def test_failures_survive_log_capture_and_evidence_upload_is_unconditional(self):
         workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)

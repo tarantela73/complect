@@ -23,6 +23,13 @@ class InfraTestRunnerTests(unittest.TestCase):
 
             def docker(command, **kwargs):
                 commands.append(command)
+                if command[1] == "run":
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        '{"status":"PASS","checks":[{"name":"ruff","exit":0,"status":"PASS"},{"name":"mypy","exit":0,"status":"PASS"},{"name":"actionlint","exit":0,"status":"PASS"}]}',
+                        "",
+                    )
                 if command[1] == "create":
                     label = command[command.index("--label") + 1]
                     labels["complect.infra_test_run"] = label.split("=", 1)[1]
@@ -77,7 +84,7 @@ class InfraTestRunnerTests(unittest.TestCase):
         code, receipt, phases, _ = self._run_with_cleanup(23, mode="all")
         self.assertEqual(code, 2)
         self.assertEqual(receipt["status"], "FAIL")
-        self.assertEqual(receipt["phases"], {"unittest": 2, "pytest": 2})
+        self.assertEqual(receipt["phases"], {"quality": 0, "unittest": 2, "pytest": 2})
         for phase in ("unittest", "pytest"):
             self.assertEqual(phases[phase]["cleanup"], "BLOCKED_STAND")
             self.assertEqual(phases[phase]["status"], "BLOCKED_STAND")
@@ -125,6 +132,30 @@ class InfraTestRunnerTests(unittest.TestCase):
         self.assertTrue(any(value.endswith(":/workspace:ro") for value in command))
         self.assertIn("--pull=never", command)
         self.assertNotIn("/var/run/docker.sock", " ".join(command))
+
+    def test_quality_command_is_offline_and_read_only(self):
+        command = run_infra_tests.build_quality_command(image="quality:test", output=Path("/tmp/quality"))
+        self.assertIn("--network=none", command)
+        self.assertIn("--read-only", command)
+        self.assertIn("--pull=never", command)
+        self.assertNotIn("/var/run/docker.sock", " ".join(command))
+
+    def test_quality_rejects_successful_process_with_invalid_receipt(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            run_infra_tests, "_docker_endpoint_is_local"
+        ), patch(
+            "infra.scripts.run_infra_tests.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, '{"status":"PASS","checks":[]}', ""),
+        ):
+            self.assertEqual(run_infra_tests.run_quality(image="quality:test", output=Path(directory)), 2)
+
+    def test_quality_checks_local_endpoint_before_launch(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            run_infra_tests, "_docker_endpoint_is_local", side_effect=RuntimeError("remote Docker")
+        ), patch("infra.scripts.run_infra_tests.subprocess.run") as process:
+            with self.assertRaisesRegex(RuntimeError, "remote Docker"):
+                run_infra_tests.run_quality(image="quality:test", output=Path(directory))
+            process.assert_not_called()
 
     def test_local_scope_is_explicit_for_full_discovery(self):
         command = run_infra_tests.build_command(

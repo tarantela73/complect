@@ -162,7 +162,7 @@ def test_runner_failure_preserves_primary_error_and_cleans_created_resources(
         "root": str(root),
         "project": "owned",
         "checkout_id": "checkout",
-        "containers": {},
+        "containers": {"backend": {"id": "backend-id", "image": "image-id", "mounts": []}},
         "database": TARGET,
         "redis": {"id": "redis-id", "name": "redis", "network": "owned"},
     }
@@ -190,7 +190,9 @@ def test_runner_failure_preserves_primary_error_and_cleans_created_resources(
             self.server_created = False
 
         def containers(self):
-            return {}
+            return {"backend": {"Id": "backend-id", "Image": "image-id", "Mounts": [],
+                                "Config": {"Labels": {"com.docker.compose.project": "owned",
+                                                       "complect.checkout_id": "checkout"}}}}
 
         def configuration(self):
             return {}
@@ -258,6 +260,8 @@ def test_runner_failure_preserves_primary_error_and_cleans_created_resources(
             str(output),
             "--run-id",
             "owned-run",
+            "--review-patch",
+            str(manifest),
         ],
     )
     expected = OSError if failure_phase == "prepare-secrets" else RuntimeError
