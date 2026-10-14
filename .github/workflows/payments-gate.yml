@@ -1,0 +1,71 @@
+name: Payments gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["payments-ci-*"]
+  workflow_dispatch:
+    inputs:
+      fault:
+        description: Disposable negative acceptance scenario
+        type: choice
+        options: [none, prepare]
+        default: none
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payments-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  payments:
+    name: payments
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      PAYMENTS_BACKEND_IMAGE: complect-payments-ci:${{ github.run_id }}-${{ github.run_attempt }}
+      PAYMENTS_POSTGRES_IMAGE: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+      PAYMENTS_REDIS_IMAGE: redis:7.2-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
+      PAYMENTS_FAULT: ${{ (startsWith(github.ref, 'refs/tags/payments-ci-negative-') && 'prepare') || inputs.fault || 'none' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare evidence directory
+        run: mkdir -p "$RUNNER_TEMP/payments-ci"
+      - name: Build locked backend image
+        run: |
+          set -euo pipefail
+          docker build -f backend/Dockerfile.dev -t "$PAYMENTS_BACKEND_IMAGE" backend \
+            2>&1 | tee "$RUNNER_TEMP/payments-ci/build.log"
+      - name: Prepare pinned stand images
+        run: |
+          set -euo pipefail
+          docker pull "$PAYMENTS_POSTGRES_IMAGE" 2>&1 | tee "$RUNNER_TEMP/payments-ci/postgres-image.log"
+          docker pull "$PAYMENTS_REDIS_IMAGE" 2>&1 | tee "$RUNNER_TEMP/payments-ci/redis-image.log"
+      - name: Run the full local Payments gate
+        run: |
+          set -euo pipefail
+          fault_args=""
+          if [ "$PAYMENTS_FAULT" = prepare ]; then
+            fault_args="--fault prepare"
+          fi
+          make test-payments-gate \
+            PAYMENTS_GATE_ARGS="--backend-image $PAYMENTS_BACKEND_IMAGE --postgres-image $PAYMENTS_POSTGRES_IMAGE --redis-image $PAYMENTS_REDIS_IMAGE --output $RUNNER_TEMP/payments-ci/gate $fault_args" \
+            2>&1 | tee "$RUNNER_TEMP/payments-ci/tests.log"
+      - name: Upload Payments evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: payments-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/payments-ci
+          if-no-files-found: error
+          retention-days: 7

@@ -1,14 +1,20 @@
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from django.core.exceptions import PermissionDenied
-from django.http import HttpRequest
+from django.http import HttpRequest as DjangoHttpRequest
 from ninja import File, Query, Router, Schema
 from ninja.files import UploadedFile
 
 from apps.common.api.errors import make_error_response
+
+if TYPE_CHECKING:
+    from apps.common.api.auth import AuthenticatedHttpRequest as HttpRequest
+else:
+    HttpRequest = DjangoHttpRequest
 from apps.common.api.permissions import require_permission
 from apps.common.contracts.finance_contracts import TxCandidateDTO
+from apps.common.repository.sre_engine import ConcurrentModificationError
 from apps.payments.models import BankStatement, BankStatementLine, BankStatementStatus, MatchStatus
 from apps.payments.services.bank_statement_service import BankStatementService
 from apps.payments.services.manual_match_service import ManualMatchService
@@ -368,7 +374,7 @@ def get_review_queue(
 
 def _get_line(stmt_id: uuid.UUID, line_id: uuid.UUID, tenant_id: uuid.UUID) -> BankStatementLine | None:
     try:
-        return BankStatementLine.objects.get(
+        return BankStatementLine.objects.using("default").get(
             id=line_id,
             statement_id=stmt_id,
             tenant_id=tenant_id,
@@ -380,7 +386,7 @@ def _get_line(stmt_id: uuid.UUID, line_id: uuid.UUID, tenant_id: uuid.UUID) -> B
 
 @router.post(
     "/statements/{stmt_id}/lines/{line_id}/match/",
-    response={200: BankStatementLineOut, 403: dict, 404: dict},
+    response={200: BankStatementLineOut, 403: dict, 404: dict, 409: dict},
     summary="Ручная привязка строки к транзакции",
 )
 @require_permission("write", "payments")
@@ -396,6 +402,10 @@ def attach_match(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID, d
             transaction_id=data.transaction_id,
             confirmed_by=_get_user_id(request),
         )
+    except ConcurrentModificationError:
+        return 409, make_error_response(
+            "CONCURRENT_MODIFICATION", "Строка выписки была изменена параллельным запросом."
+        )
     except PermissionDenied:
         return 403, make_error_response("TRANSACTION_NOT_FOUND", "Транзакция не найдена в рамках тенанта.")
     return 200, BankStatementLineOut.from_model(line)
@@ -403,7 +413,7 @@ def attach_match(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID, d
 
 @router.delete(
     "/statements/{stmt_id}/lines/{line_id}/match/",
-    response={200: BankStatementLineOut, 403: dict, 404: dict},
+    response={200: BankStatementLineOut, 403: dict, 404: dict, 409: dict},
     summary="Снять привязку строки с транзакции",
 )
 @require_permission("write", "payments")
@@ -412,11 +422,16 @@ def detach_match(request: HttpRequest, stmt_id: uuid.UUID, line_id: uuid.UUID):
     line = _get_line(stmt_id, line_id, tenant_id)
     if line is None:
         return 404, make_error_response("LINE_NOT_FOUND", "Строка выписки не найдена.")
-    line = ManualMatchService.detach(
-        tenant_id=tenant_id,
-        line=line,
-        confirmed_by=_get_user_id(request),
-    )
+    try:
+        line = ManualMatchService.detach(
+            tenant_id=tenant_id,
+            line=line,
+            confirmed_by=_get_user_id(request),
+        )
+    except ConcurrentModificationError:
+        return 409, make_error_response(
+            "CONCURRENT_MODIFICATION", "Строка выписки была изменена параллельным запросом."
+        )
     return 200, BankStatementLineOut.from_model(line)
 
 

@@ -120,7 +120,7 @@ class TestManualMatchServiceAttach:
             "get_transaction_finder",
             None,
         )
-        svc_module._patched_finder = mock
+        vars(svc_module)["_patched_finder"] = mock
         return mock
 
     def test_attach_sets_matched_status(self, monkeypatch):

@@ -162,6 +162,9 @@ def main() -> int:
                 )
                 # No --fake, backwards target, reconciliation, seed command or database reset.
                 executor.migrate(executor.loader.graph.leaf_nodes())
+                from config.runtime_role_grants import refresh_runtime_grants
+
+                refresh_runtime_grants()
                 from django.db.migrations.recorder import MigrationRecorder
 
                 applied = {f"{app}.{name}" for app, name in MigrationRecorder(connection).applied_migrations()}

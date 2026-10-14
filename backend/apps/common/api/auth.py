@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 import jwt
 from django.conf import settings
+from django.http import HttpRequest
 from ninja.security import HttpBearer
 
 from apps.common.context.core import ContextCore, set_correlation_id, set_request_id, set_tenant_id, set_user_id
@@ -31,6 +32,19 @@ def verified_request_context(request) -> ValidatedAuthContext | None:
     ):
         return None
     return context
+
+
+class GatewayHttpRequest(HttpRequest):
+    """HTTP request projection populated by the verified gateway middleware."""
+
+    gateway_client_ip: str
+
+
+class AuthenticatedHttpRequest(GatewayHttpRequest):
+    """HTTP request projection populated by the verified gateway authentication."""
+
+    jwt_user_id: uuid.UUID
+    jwt_tenant_id: uuid.UUID
 
 
 class JWTAuth(HttpBearer):
