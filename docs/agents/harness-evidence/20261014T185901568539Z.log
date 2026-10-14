@@ -1,0 +1,198 @@
+{"status": "PASS", "snapshot": "/home/sever/projects/Complect/.dev/harness/working-tree.snapshot.json"}
+{"status": "PASS", "snapshot": "/home/sever/projects/Complect/.dev/harness/working-tree.snapshot.json"}
+{
+  "status": "PASS",
+  "subsystems": {
+    "instructions": {
+      "status": "PASS",
+      "missing": []
+    },
+    "state": {
+      "status": "PASS",
+      "missing": []
+    },
+    "verification": {
+      "status": "PASS",
+      "missing": []
+    },
+    "scope": {
+      "status": "PASS",
+      "missing": []
+    },
+    "lifecycle": {
+      "status": "PASS",
+      "missing": []
+    }
+  },
+  "errors": [],
+  "limits": "Checks files, state and evidence integrity; does not prove acceptance criteria or agent effectiveness.",
+  "erp_runtime": "NOT_RUN"
+}
+TAP version 13
+# Subtest: empty repository has zero structural score
+ok 1 - empty repository has zero structural score
+  ---
+  duration_ms: 1.662261
+  type: 'test'
+  ...
+# Subtest: generic scaffold fails without verification
+ok 2 - generic scaffold fails without verification
+  ---
+  duration_ms: 64.965762
+  type: 'test'
+  ...
+# Subtest: Python gate propagates pytest exit 5
+ok 3 - Python gate propagates pytest exit 5
+  ---
+  duration_ms: 5.927757
+  type: 'test'
+  ...
+# Subtest: no implicit dependency installation or install-only success
+ok 4 - no implicit dependency installation or install-only success
+  ---
+  duration_ms: 1.909642
+  type: 'test'
+  ...
+# Subtest: generated script quotes command labels without executing substitution twice
+ok 5 - generated script quotes command labels without executing substitution twice
+  ---
+  duration_ms: 11.620213
+  type: 'test'
+  ...
+# Subtest: failed pipeline stops verification
+ok 6 - failed pipeline stops verification
+  ---
+  duration_ms: 11.136447
+  type: 'test'
+  ...
+# Subtest: generator preserves existing files
+ok 7 - generator preserves existing files
+  ---
+  duration_ms: 52.902316
+  type: 'test'
+  ...
+# Subtest: generator rejects traversal in agent-file
+ok 8 - generator rejects traversal in agent-file
+  ---
+  duration_ms: 28.745635
+  type: 'test'
+  ...
+# Subtest: valid dependency chain passes
+ok 9 - valid dependency chain passes
+  ---
+  duration_ms: 0.774044
+  type: 'test'
+  ...
+# Subtest: invalid and duplicate IDs fail
+ok 10 - invalid and duplicate IDs fail
+  ---
+  duration_ms: 0.548424
+  type: 'test'
+  ...
+# Subtest: done requires evidence
+ok 11 - done requires evidence
+  ---
+  duration_ms: 0.224055
+  type: 'test'
+  ...
+# Subtest: invalid status and empty state fail
+ok 12 - invalid status and empty state fail
+  ---
+  duration_ms: 0.220976
+  type: 'test'
+  ...
+# Subtest: unknown and incomplete dependencies fail
+ok 13 - unknown and incomplete dependencies fail
+  ---
+  duration_ms: 0.185366
+  type: 'test'
+  ...
+# Subtest: cycles and multiple active features fail
+ok 14 - cycles and multiple active features fail
+  ---
+  duration_ms: 0.142605
+  type: 'test'
+  ...
+# Subtest: CLI rejects done without evidence even at low score threshold
+ok 15 - CLI rejects done without evidence even at low score threshold
+  ---
+  duration_ms: 99.056366
+  type: 'test'
+  ...
+# Subtest: explicit verification runs from generated project directory
+ok 16 - explicit verification runs from generated project directory
+  ---
+  duration_ms: 56.736516
+  type: 'test'
+  ...
+# Subtest: generator rejects explicitly empty commands before writing instructions
+ok 17 - generator rejects explicitly empty commands before writing instructions
+  ---
+  duration_ms: 39.021622
+  type: 'test'
+  ...
+# Subtest: malformed dependency fields return errors rather than crash
+ok 18 - malformed dependency fields return errors rather than crash
+  ---
+  duration_ms: 0.240149
+  type: 'test'
+  ...
+# Subtest: forced generator rejects symlink output without modifying its target
+ok 19 - forced generator rejects symlink output without modifying its target
+  ---
+  duration_ms: 43.392683
+  type: 'test'
+  ...
+# Subtest: benchmark self-check actually executes generated verification
+ok 20 - benchmark self-check actually executes generated verification
+  ---
+  duration_ms: 201.508748
+  type: 'test'
+  ...
+# Subtest: invalid benchmark thresholds cannot turn a failure into success
+ok 21 - invalid benchmark thresholds cannot turn a failure into success
+  ---
+  duration_ms: 62.590514
+  type: 'test'
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 784.06274
+HARNESS_GATE: PASS; ERP_ACCEPTANCE: NOT_RUN
+test_absolute_traversal_and_symlink_evidence_rejected (test_agent_harness.AgentHarnessTests.test_absolute_traversal_and_symlink_evidence_rejected) ... ok
+test_completion_rejects_missing_checks_and_zero_tests (test_agent_harness.AgentHarnessTests.test_completion_rejects_missing_checks_and_zero_tests) ... ok
+test_completion_requires_independent_verification_inputs (test_agent_harness.AgentHarnessTests.test_completion_requires_independent_verification_inputs) ... ok
+test_container_archive_and_argv_exclude_erp_secrets_and_mounts (test_agent_harness.AgentHarnessTests.test_container_archive_and_argv_exclude_erp_secrets_and_mounts) ... ok
+test_dependency_cycle (test_agent_harness.AgentHarnessTests.test_dependency_cycle) ... ok
+test_done_requires_successful_evidence (test_agent_harness.AgentHarnessTests.test_done_requires_successful_evidence) ... ok
+test_empty_and_invalid_state (test_agent_harness.AgentHarnessTests.test_empty_and_invalid_state) ... ok
+test_empty_node_file_is_not_a_test_execution (test_agent_harness.AgentHarnessTests.test_empty_node_file_is_not_a_test_execution) ... ok
+test_empty_repository_fails_assessment (test_agent_harness.AgentHarnessTests.test_empty_repository_fails_assessment) ... ok
+test_evidence_is_data_never_executed (test_agent_harness.AgentHarnessTests.test_evidence_is_data_never_executed) ... ok
+test_failed_or_boolean_exit_code_rejected (test_agent_harness.AgentHarnessTests.test_failed_or_boolean_exit_code_rejected) ... ok
+test_invalid_status_and_duplicate_id (test_agent_harness.AgentHarnessTests.test_invalid_status_and_duplicate_id) ... ok
+test_malformed_fields_do_not_crash (test_agent_harness.AgentHarnessTests.test_malformed_fields_do_not_crash) ... ok
+test_modified_or_missing_log (test_agent_harness.AgentHarnessTests.test_modified_or_missing_log) ... ok
+test_multiple_active_features (test_agent_harness.AgentHarnessTests.test_multiple_active_features) ... ok
+test_skill_provenance_detects_changes_and_extra_files (test_agent_harness.AgentHarnessTests.test_skill_provenance_detects_changes_and_extra_files) ... ok
+test_skipped_or_incomplete_summaries_are_rejected (test_agent_harness.AgentHarnessTests.test_skipped_or_incomplete_summaries_are_rejected) ... ok
+test_snapshot_includes_only_referenced_ignored_harness_receipt_logs (test_agent_harness.AgentHarnessTests.test_snapshot_includes_only_referenced_ignored_harness_receipt_logs) ... ok
+test_snapshot_records_symlink_target_identity (test_agent_harness.AgentHarnessTests.test_snapshot_records_symlink_target_identity) ... ok
+test_snapshot_rejects_symlink_outside_checkout (test_agent_harness.AgentHarnessTests.test_snapshot_rejects_symlink_outside_checkout) ... ok
+test_snapshot_requires_exact_current_inventory (test_agent_harness.AgentHarnessTests.test_snapshot_requires_exact_current_inventory) ... ok
+test_source_changes_invalidate_evidence (test_agent_harness.AgentHarnessTests.test_source_changes_invalidate_evidence) ... ok
+test_timeout_preserves_partial_output_and_failed_receipt (test_agent_harness.AgentHarnessTests.test_timeout_preserves_partial_output_and_failed_receipt) ... ok
+test_unknown_self_and_incomplete_dependencies (test_agent_harness.AgentHarnessTests.test_unknown_self_and_incomplete_dependencies) ... ok
+test_unrelated_source_cannot_cover_owned_file (test_agent_harness.AgentHarnessTests.test_unrelated_source_cannot_cover_owned_file) ... ok
+test_valid_dependency_chain (test_agent_harness.AgentHarnessTests.test_valid_dependency_chain) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.423s
+
+OK
