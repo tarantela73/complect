@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_IMAGE = "complect_backend:dev"
+DEFAULT_QUALITY_IMAGE = "complect-infra-quality:dev"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -82,6 +83,29 @@ def build_command(
     return command
 
 
+def build_quality_command(*, image: str, output: Path) -> list[str]:
+    """Build the read-only command for the static quality image."""
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "--network=none",
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,exec,nosuid,nodev",
+        "-v",
+        f"{ROOT}:/workspace:ro",
+        "-v",
+        f"{output.resolve()}:/evidence:rw",
+        "-w",
+        "/workspace",
+        "-e",
+        "PYTHONPATH=/workspace:/workspace/backend",
+        image,
+    ]
+
+
 def _tool_mounts() -> list[tuple[str, str]]:
     """Expose only offline test tooling; never expose the Docker socket."""
 
@@ -113,9 +137,82 @@ def extract_manifest(output: Path) -> Path:
     return destination
 
 
-def run(mode: str, *, image: str, output: Path, scope: str = "gate") -> int:
+def run_quality(*, image: str, output: Path) -> int:
+    output.mkdir(parents=True, exist_ok=True)
+    _docker_endpoint_is_local()
+    completed = subprocess.run(
+        build_quality_command(image=image, output=output),
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=1800,
+        check=False,
+    )
+    result: dict[str, Any] = {
+        "mode": "quality",
+        "image": image,
+        "exit": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "status": "PASS" if completed.returncode == 0 else "FAIL",
+    }
+    valid_receipt = False
+    try:
+        receipt = json.loads(completed.stdout)
+        checks = receipt.get("checks") if isinstance(receipt, dict) else None
+        required = {"ruff", "mypy", "actionlint"}
+        names = [check.get("name") for check in checks] if isinstance(checks, list) else []
+        valid_receipt = (
+            isinstance(receipt, dict)
+            and receipt.get("status") == "PASS"
+            and isinstance(checks, list)
+            and len(checks) == len(required)
+            and set(names) == required
+            and len(set(names)) == len(names)
+            and all(
+                isinstance(check, dict)
+                and check.get("exit") == 0
+                and check.get("status") == "PASS"
+                for check in checks
+            )
+        )
+        if isinstance(checks, list):
+            result["checks"] = checks
+    except (TypeError, ValueError, AttributeError):
+        valid_receipt = False
+    if not valid_receipt:
+        result["status"] = "FAIL"
+        if completed.returncode == 0:
+            completed = completed.__class__(
+                completed.args,
+                2,
+                completed.stdout,
+                completed.stderr,
+            )
+    result["exit"] = completed.returncode
+    (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    return completed.returncode
+
+
+def run(
+    mode: str,
+    *,
+    image: str,
+    output: Path,
+    scope: str = "gate",
+    quality_image: str = DEFAULT_QUALITY_IMAGE,
+) -> int:
     if mode == "all":
         statuses: dict[str, int] = {}
+        try:
+            statuses["quality"] = run_quality(image=quality_image, output=output / "quality")
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            quality_output = output / "quality"
+            quality_output.mkdir(parents=True, exist_ok=True)
+            (quality_output / "result.json").write_text(
+                json.dumps({"mode": "quality", "status": "BLOCKED_STAND", "error": str(exc)}, indent=2) + "\n"
+            )
+            statuses["quality"] = 2
         for selected in ("unittest", "pytest"):
             try:
                 statuses[selected] = run(
@@ -218,10 +315,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("all", "pytest", "unittest"), default="all", nargs="?")
     parser.add_argument("--backend-image", default=os.environ.get("INFRA_TEST_BACKEND_IMAGE", DEFAULT_IMAGE))
+    parser.add_argument("--quality-image", default=os.environ.get("INFRA_TEST_QUALITY_IMAGE", DEFAULT_QUALITY_IMAGE))
     parser.add_argument("--output", type=Path, default=ROOT / ".dev/test-artifacts/infra-tests")
     args = parser.parse_args(argv)
     try:
-        return run(args.mode, image=args.backend_image, output=args.output)
+        return run(args.mode, image=args.backend_image, quality_image=args.quality_image, output=args.output)
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "result.json").write_text(

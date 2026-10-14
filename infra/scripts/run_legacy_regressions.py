@@ -17,6 +17,12 @@ import time
 from pathlib import Path
 
 from infra.scripts.dev_environment import Commands
+from infra.scripts.evidence_bundle import (
+    build_reviewer_envelope,
+    finish_run,
+    verify_post_run_sources,
+    write_post_run_evidence,
+)
 from infra.scripts.legacy_preflight import BLOCKED_STAND, run_preflight
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,6 +71,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--review-patch", type=Path, required=True)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
@@ -85,7 +92,12 @@ def main() -> None:
     if args.preflight_only:
         raise SystemExit(0)
     registered = json.loads(args.ownership.read_text())
-    commands = Commands(checkout)
+    if registered.get("compose_override"):
+        from infra.scripts.prepare_legacy_stand import stand_commands
+
+        commands = stand_commands(checkout, registered)
+    else:
+        commands = Commands(checkout)
     if not commands.isolated_e2e:
         raise RuntimeError(
             "regressions require explicit portless disposable configuration"
@@ -94,7 +106,9 @@ def main() -> None:
         raise RuntimeError(
             "evidence must be outside disposable source, inside its task directory"
         )
-    verify_owned(commands.containers(), registered, checkout)
+    owned_containers = commands.containers()
+    verify_owned(owned_containers, registered, checkout)
+    backend_image_id = owned_containers["backend"]["Image"]
     commands.own_resources(commands.configuration())
     redis = registered["redis"]
     found = json.loads(commands.run(["docker", "inspect", redis["id"]]).stdout)[0]
@@ -138,6 +152,8 @@ def main() -> None:
     server_name = commands.project + "-lifecycle-" + os.urandom(4).hex()
     owner_secrets: Path | None = None
     phase = "prepare-secrets"
+    post_run_checked = False
+    post_run_errors: list[str] = []
     try:
         (control / "nodes.json").write_text(json.dumps(original))
         runtime_secrets = control / "runtime-secrets"
@@ -316,6 +332,13 @@ with connection.cursor() as c:
         )
         (output / "pytest.exit").write_text(str(result.returncode) + "\n")
         print("regression exit", result.returncode, flush=True)
+        if args.snapshot is None:
+            raise RuntimeError("post-run source verification requires a snapshot")
+        post_run_errors = verify_post_run_sources(
+            (args.source_root or ROOT).resolve(), checkout, args.snapshot
+        )
+        write_post_run_evidence(output / "post-run-sources.json", post_run_errors)
+        post_run_checked = True
     except BaseException as exc:
         (output / "failure.json").write_text(
             json.dumps({"phase": phase, "error": type(exc).__name__}, indent=2) + "\n"
@@ -323,6 +346,22 @@ with connection.cursor() as c:
         raise
     finally:
         try:
+            if not post_run_checked and args.snapshot is not None:
+                try:
+                    fallback_errors = verify_post_run_sources(
+                        (args.source_root or ROOT).resolve(), checkout, args.snapshot
+                    )
+                    write_post_run_evidence(
+                        output / "post-run-sources.json", fallback_errors
+                    )
+                except Exception as exc:
+                    (output / "post-run-sources.json").write_text(
+                        json.dumps(
+                            {"status": BLOCKED_STAND, "errors": [type(exc).__name__]},
+                            indent=2,
+                        )
+                        + "\n"
+                    )
             found = commands.run(["docker", "inspect", server_name], check=False)
             if found.returncode == 0:
                 container = json.loads(found.stdout)[0]
@@ -364,6 +403,75 @@ with connection.cursor() as c:
     manifest = json.loads((output / "manifest.json").read_text())
     if manifest["collected"] != original:
         raise RuntimeError("original test manifest changed")
+    final_exit = int(manifest.get("exit", 2))
+    cleanup_failed = (output / "cleanup-failure.json").is_file()
+    if cleanup_failed:
+        final_exit = final_exit or 2
+    envelope_errors: list[str] = []
+    result_paths = {
+        name: output / name
+        for name in (
+            "manifest.json", "post-run-sources.json", "privilege-probes.json",
+            "lifecycle.jsonl", "target.json",
+        )
+    }
+    if cleanup_failed:
+        result_paths["cleanup-failure.json"] = output / "cleanup-failure.json"
+    try:
+        snapshot_payload = json.loads(args.snapshot.read_text())
+        source_root = (args.source_root or ROOT).resolve()
+        source_files = {
+            str(relative): source_root / str(relative)
+            for relative in snapshot_payload.get("files", {})
+        }
+        source_files[args.snapshot.name] = args.snapshot
+        envelope = build_reviewer_envelope(
+            source_files,
+            {args.review_patch.name: args.review_patch},
+            backend_image_id,
+            args.run_id,
+            result_paths,
+        )
+        envelope_path = output / "reviewer-envelope.json"
+        envelope_root = envelope.get("root")
+        if not isinstance(envelope_root, str):
+            raise RuntimeError("reviewer envelope root is missing")
+        if cleanup_failed:
+            cleanup_path = output / "cleanup-failure.json"
+            try:
+                cleanup_payload = json.loads(cleanup_path.read_text())
+                if not isinstance(cleanup_payload, dict) or not cleanup_payload.get("error"):
+                    envelope_errors.append("CLEANUP_FAILURE_ARTIFACT_INVALID")
+            except (OSError, ValueError):
+                envelope_errors.append("CLEANUP_FAILURE_ARTIFACT_INVALID")
+        receipt = finish_run(
+            output / "manifest.json",
+            envelope_path,
+            envelope,
+            Path(envelope_root),
+            cleanup_failed,
+            post_run_errors + envelope_errors,
+        )
+        verified_errors = receipt["envelope_errors"]
+        if not isinstance(verified_errors, list):
+            raise RuntimeError("reviewer envelope errors are invalid")
+        envelope_errors.extend(verified_errors)
+    except Exception as exc:
+        envelope_errors.append(type(exc).__name__)
+    if envelope_errors:
+        final_exit = final_exit or 2
+    (output / "result.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS" if final_exit == 0 and not envelope_errors else BLOCKED_STAND,
+                "exit": final_exit,
+                "cleanup": "BLOCKED_STAND" if cleanup_failed else "PASS",
+                "envelope_errors": envelope_errors,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     counts = {}
     for phase in ("setup", "call", "teardown"):
         counts[phase] = {
@@ -374,7 +482,7 @@ with connection.cursor() as c:
         }
     (output / "summary.json").write_text(json.dumps(counts, indent=2) + "\n")
     print(json.dumps(counts), flush=True)
-    raise SystemExit(int(manifest["exit"]))
+    raise SystemExit(final_exit)
 
 
 if __name__ == "__main__":
