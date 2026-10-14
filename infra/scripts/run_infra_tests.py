@@ -199,11 +199,15 @@ def run(mode: str, *, image: str, output: Path, scope: str = "gate") -> int:
                         result["status"] = "FAIL"
                         result["manifest_error"] = str(exc)
                         exit_code = 2
-                subprocess.run(["docker", "rm", "-f", container_id], cwd=ROOT, timeout=60, check=False)
+                removed = subprocess.run(["docker", "rm", "-f", container_id], cwd=ROOT, timeout=60, check=False)
+                if removed.returncode:
+                    raise subprocess.CalledProcessError(removed.returncode, removed.args)
                 result["cleanup"] = "PASS"
             except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, OwnershipMismatch) as exc:
                 result["cleanup"] = "BLOCKED_STAND"
                 result["cleanup_error"] = str(exc)
+                if result["status"] == "PASS":
+                    result["status"] = "BLOCKED_STAND"
                 exit_code = exit_code or 2
                 result["exit"] = exit_code
         (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
