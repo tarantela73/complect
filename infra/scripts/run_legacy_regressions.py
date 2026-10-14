@@ -22,13 +22,12 @@ from infra.scripts.evidence_bundle import (
     finish_run,
     verify_post_run_sources,
     write_post_run_evidence,
+    LEGACY_RESULT_CONTRACT,
 )
 from infra.scripts.legacy_preflight import BLOCKED_STAND, run_preflight
+from infra.scripts.legacy_phase_contract import ORIGINAL_NODE_IDS_SHA256
 
 ROOT = Path(__file__).resolve().parents[2]
-ORIGINAL_NODE_IDS_SHA256 = (
-    "56626883e2be0b0573b16630042739ac6b5d72375c7385294ee29693c3c5be02"
-)
 
 
 def require_original_nodes(nodes: list[str]) -> None:
@@ -91,6 +90,10 @@ def main() -> None:
         raise SystemExit(2)
     if args.preflight_only:
         raise SystemExit(0)
+    # Invalidate an earlier receipt before any new run effects can fail.
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "reviewer-envelope.json").unlink(missing_ok=True)
+    (output / "result.json").write_text(json.dumps({"status": BLOCKED_STAND, "exit": 2}) + "\n")
     registered = json.loads(args.ownership.read_text())
     if registered.get("compose_override"):
         from infra.scripts.prepare_legacy_stand import stand_commands
@@ -381,29 +384,44 @@ with connection.cursor() as c:
             )
             raise
         finally:
-            for name in (
-                "manifest.json",
-                "runtime.json",
-                "lifecycle.jsonl",
-                "target.json",
-                "privilege-probes.json",
-            ):
-                if (control / name).exists():
-                    shutil.copy2(control / name, output / name)
+            cleanup_errors = []
             try:
-                shutil.rmtree(control)
+                for name in (
+                    "manifest.json", "runtime.json", "lifecycle.jsonl",
+                    "target.json", "privilege-probes.json",
+                ):
+                    if (control / name).exists():
+                        shutil.copy2(control / name, output / name)
             finally:
-                if owner_secrets is not None:
-                    shutil.rmtree(owner_secrets)
+                for directory in (control, owner_secrets):
+                    if directory is not None:
+                        try:
+                            shutil.rmtree(directory)
+                        except OSError as exc:
+                            cleanup_errors.append(type(exc).__name__)
+                if (output / "cleanup-failure.json").is_file():
+                    cleanup_errors.append("LIFECYCLE_CLEANUP_FAILED")
+                (output / "run-cleanup.json").write_text(json.dumps({
+                    "status": BLOCKED_STAND if cleanup_errors else "PASS",
+                    "errors": cleanup_errors,
+                    "lifecycle_container": server_name,
+                    "control_removed": not control.exists(),
+                    "owner_secrets_removed": owner_secrets is None or not owner_secrets.exists(),
+                }, indent=2) + "\n")
+                if cleanup_errors and not (output / "cleanup-failure.json").is_file():
+                    (output / "cleanup-failure.json").write_text(json.dumps({"error": cleanup_errors}) + "\n")
     if not (output / "manifest.json").is_file():
         (output / "failure.json").write_text(
             json.dumps({"phase": phase, "error": "MissingPytestManifest"}) + "\n"
         )
         raise RuntimeError("pytest failed before producing a phase manifest")
-    manifest = json.loads((output / "manifest.json").read_text())
-    if manifest["collected"] != original:
-        raise RuntimeError("original test manifest changed")
-    final_exit = int(manifest.get("exit", 2))
+    try:
+        manifest = json.loads((output / "manifest.json").read_text())
+    except ValueError:
+        manifest = {}
+    if not isinstance(manifest, dict):
+        manifest = {}
+    final_exit = result.returncode
     cleanup_failed = (output / "cleanup-failure.json").is_file()
     if cleanup_failed:
         final_exit = final_exit or 2
@@ -412,14 +430,18 @@ with connection.cursor() as c:
         name: output / name
         for name in (
             "manifest.json", "post-run-sources.json", "privilege-probes.json",
-            "lifecycle.jsonl", "target.json",
+            "lifecycle.jsonl", "target.json", "run-cleanup.json", "result.json",
         )
     }
     if cleanup_failed:
         result_paths["cleanup-failure.json"] = output / "cleanup-failure.json"
+    # A pending result is fail-closed until finish_run publishes the full packet.
+    (output / "result.json").write_text(json.dumps({"status": BLOCKED_STAND, "exit": final_exit or 2}) + "\n")
     try:
         snapshot_payload = json.loads(args.snapshot.read_text())
-        source_root = (args.source_root or ROOT).resolve()
+        # Bind the verified source copy retained with the stand, so session-state
+        # updates after acceptance cannot rewrite the evidence source artifacts.
+        source_root = checkout
         source_files = {
             str(relative): source_root / str(relative)
             for relative in snapshot_payload.get("files", {})
@@ -431,6 +453,7 @@ with connection.cursor() as c:
             backend_image_id,
             args.run_id,
             result_paths,
+            result_contract=LEGACY_RESULT_CONTRACT,
         )
         envelope_path = output / "reviewer-envelope.json"
         envelope_root = envelope.get("root")
@@ -451,16 +474,22 @@ with connection.cursor() as c:
             Path(envelope_root),
             cleanup_failed,
             post_run_errors + envelope_errors,
+            process_exit=result.returncode,
         )
         verified_errors = receipt["envelope_errors"]
         if not isinstance(verified_errors, list):
             raise RuntimeError("reviewer envelope errors are invalid")
         envelope_errors.extend(verified_errors)
+        receipt_exit = receipt["exit"]
+        if not isinstance(receipt_exit, int):
+            raise RuntimeError("reviewer receipt exit invalid")
+        final_exit = receipt_exit
     except Exception as exc:
         envelope_errors.append(type(exc).__name__)
     if envelope_errors:
         final_exit = final_exit or 2
-    (output / "result.json").write_text(
+    if envelope_errors and not (output / "reviewer-envelope.json").is_file():
+        (output / "result.json").write_text(
         json.dumps(
             {
                 "status": "PASS" if final_exit == 0 and not envelope_errors else BLOCKED_STAND,
@@ -473,10 +502,13 @@ with connection.cursor() as c:
         + "\n"
     )
     counts = {}
+    reports = manifest.get("reports", [])
+    if not isinstance(reports, list):
+        reports = []
     for phase in ("setup", "call", "teardown"):
         counts[phase] = {
             kind: sum(
-                r["when"] == phase and r["outcome"] == kind for r in manifest["reports"]
+                isinstance(r, dict) and r.get("when") == phase and r.get("outcome") == kind for r in reports
             )
             for kind in ("passed", "failed", "skipped")
         }

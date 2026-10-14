@@ -18,6 +18,7 @@ DEFAULT_SCOPE = (
     "infra/scripts/run_infra_tests.py",
     "infra/scripts/run_legacy_regressions.py",
     "infra/scripts/infra_test_selection.py",
+    "infra/scripts/legacy_phase_contract.py",
     "infra/scripts/docker_ownership.py",
     "infra/scripts/evidence_bundle.py",
     "infra/scripts/prepare_legacy_stand.py",
@@ -28,6 +29,7 @@ RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_infra_test_runner.py",
     "infra/scripts/tests/test_infra_ci_workflow.py",
     "infra/scripts/tests/test_prepare_legacy_stand.py",
+    "infra/scripts/tests/test_legacy_phase_contract.py",
 )
 
 

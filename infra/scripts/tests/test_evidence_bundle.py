@@ -4,8 +4,12 @@ import hashlib
 import json
 import tempfile
 import unittest
+import contextlib
+import io
+import sys
 from pathlib import Path
 from unittest.mock import patch
+from infra.scripts.legacy_phase_contract import ORIGINAL_NODE_IDS
 
 from infra.scripts.evidence_bundle import (
     EvidenceBundleError,
@@ -14,10 +18,176 @@ from infra.scripts.evidence_bundle import (
     read_exact_chunk,
     verify_reviewer_envelope,
     verify_post_run_sources,
+    LEGACY_RESULT_CONTRACT,
+    LEGACY_REQUIRED_RESULTS,
+    main,
 )
 
 
 class EvidenceBundleTests(unittest.TestCase):
+    def legacy_packet(self, root: Path):
+        paths = {name: root / name for name in LEGACY_REQUIRED_RESULTS}
+        payloads = {
+            "manifest.json": {
+                "exit": 0, "collected": list(ORIGINAL_NODE_IDS),
+                "reports": [{"nodeid": node, "when": phase, "outcome": "passed"}
+                            for node in ORIGINAL_NODE_IDS for phase in ("setup", "call", "teardown")],
+            },
+            "post-run-sources.json": {"status": "PASS", "errors": []},
+            "privilege-probes.json": [{"sqlstate": "42501"}],
+            "target.json": {"run_id": "run"},
+            "run-cleanup.json": {"status": "PASS", "errors": []},
+            "result.json": {"status": "BLOCKED_STAND", "exit": 2},
+        }
+        for name, path in paths.items():
+            path.write_text(json.dumps(payloads[name]) + "\n" if name in payloads else '{"operation":"flush"}\n')
+        source = root / "source.py"
+        source.write_text("source\n")
+        patch_file = root / "change.patch"
+        patch_file.write_text("patch\n")
+        return build_reviewer_envelope(
+            {"source": source}, {"patch": patch_file}, "image", "run", paths,
+            result_contract=LEGACY_RESULT_CONTRACT,
+        )
+
+    def test_finish_publishes_hash_bound_terminal_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            envelope = self.legacy_packet(root)
+            receipt = finish_run(root / "manifest.json", root / "envelope.json", envelope, root, False)
+            self.assertEqual(receipt["status"], "PASS")
+            self.assertEqual(json.loads((root / "result.json").read_text()), receipt)
+            published = json.loads((root / "envelope.json").read_text())
+            self.assertEqual(verify_reviewer_envelope(published, root), [])
+            self.assertEqual(published["results"]["result.json"]["sha256"], hashlib.sha256((root / "result.json").read_bytes()).hexdigest())
+
+    def test_required_results_cannot_alias_one_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            envelope = self.legacy_packet(root)
+            finish_run(root / "manifest.json", root / "envelope.json", envelope, root, False)
+            published = json.loads((root / "envelope.json").read_text())
+            published["results"]["target.json"] = published["results"]["lifecycle.jsonl"]
+            self.assertIn("RESULT_REQUIRED_PATH_DUPLICATE", verify_reviewer_envelope(published, root))
+
+    def test_finish_rejects_incomplete_phases_and_preserves_pytest_exit(self) -> None:
+        for pytest_exit in (0, 7):
+            with self.subTest(pytest_exit=pytest_exit), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                envelope = self.legacy_packet(root)
+                manifest_path = root / "manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                manifest["reports"].pop()
+                manifest["exit"] = pytest_exit
+                manifest_path.write_text(json.dumps(manifest))
+                envelope["results"]["manifest.json"]["sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                before = manifest_path.read_bytes()
+                receipt = finish_run(manifest_path, root / "envelope.json", envelope, root, False)
+                self.assertEqual(receipt["status"], "BLOCKED_STAND")
+                self.assertEqual(receipt["exit"], pytest_exit or 2)
+                self.assertEqual(manifest_path.read_bytes(), before)
+                self.assertTrue(any("missing phase:" in error for error in receipt["envelope_errors"]))
+                published = json.loads((root / "envelope.json").read_text())
+                self.assertEqual(verify_reviewer_envelope(published, root, integrity_only=True), [])
+                self.assertTrue(verify_reviewer_envelope(published, root))
+
+    def test_finish_preserves_malformed_manifest_and_records_diagnostics(self) -> None:
+        for raw in ('{"exit":"bad","collected":null,"reports":null}', '[]', '{invalid'):
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                envelope = self.legacy_packet(root)
+                manifest_path = root / "manifest.json"
+                manifest_path.write_text(raw)
+                envelope["results"]["manifest.json"]["sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                receipt = finish_run(manifest_path, root / "envelope.json", envelope, root, False)
+                self.assertEqual(receipt["status"], "BLOCKED_STAND")
+                self.assertEqual(manifest_path.read_text(), raw)
+                self.assertTrue(receipt["envelope_errors"])
+
+
+    def test_envelope_publication_failure_cannot_accept_old_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            envelope = self.legacy_packet(root)
+            finish_run(root / "manifest.json", root / "envelope.json", envelope, root, False)
+            published = json.loads((root / "envelope.json").read_text())
+            original_replace = Path.replace
+
+            def failing_replace(path, target):
+                if Path(target).name == "envelope.json":
+                    raise OSError("publication failed")
+                return original_replace(path, target)
+
+            with patch.object(Path, "replace", failing_replace), self.assertRaises(OSError):
+                finish_run(root / "manifest.json", root / "envelope.json", published, root, True)
+            self.assertTrue(verify_reviewer_envelope(json.loads((root / "envelope.json").read_text()), root))
+
+    def test_cli_requires_contract_and_has_explicit_old_integrity_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / "artifact"
+            artifact.write_text("{}")
+            envelope = build_reviewer_envelope({"source": artifact}, {"patch": artifact}, "image", "run", {"result": artifact})
+            path = root / "envelope.json"
+            path.write_text(json.dumps(envelope))
+            command = ["evidence_bundle", "verify", "--envelope", str(path), "--root", str(root)]
+            output = io.StringIO()
+            with patch.object(sys, "argv", command), contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as raised:
+                main()
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("RESULT_CONTRACT_REQUIRED", output.getvalue())
+            with patch.object(sys, "argv", command + ["--integrity-only"]), contextlib.redirect_stdout(io.StringIO()):
+                main()
+
+
+    def test_old_envelope_requires_explicit_integrity_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / "artifact.json"
+            artifact.write_text("{}\n")
+            envelope = build_reviewer_envelope(
+                {"source": artifact}, {"patch": artifact}, "image", "run",
+                {"result": artifact},
+            )
+            self.assertIn("RESULT_CONTRACT_REQUIRED", verify_reviewer_envelope(envelope, root))
+            self.assertEqual(verify_reviewer_envelope(envelope, root, integrity_only=True), [])
+
+    def test_legacy_contract_requires_each_record_and_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.py"
+            source.write_text("source\n")
+            patch_file = root / "change.patch"
+            patch_file.write_text("patch\n")
+            paths = {name: root / name for name in LEGACY_REQUIRED_RESULTS}
+            for path in paths.values():
+                path.write_text("{}\n")
+            for name in LEGACY_REQUIRED_RESULTS:
+                with self.subTest(name=name, missing="record"):
+                    envelope = build_reviewer_envelope(
+                        {"source": source}, {"patch": patch_file}, "image", "run", paths,
+                        result_contract=LEGACY_RESULT_CONTRACT,
+                    )
+                    del envelope["results"][name]
+                    self.assertIn(f"RESULT_REQUIRED_MISSING:{name}", verify_reviewer_envelope(envelope, root))
+                with self.subTest(name=name, missing="file"):
+                    envelope = build_reviewer_envelope(
+                        {"source": source}, {"patch": patch_file}, "image", "run", paths,
+                        result_contract=LEGACY_RESULT_CONTRACT,
+                    )
+                    paths[name].unlink()
+                    self.assertIn("RESULT_ARTIFACT_MISSING", verify_reviewer_envelope(envelope, root))
+                    paths[name].write_text("{}\n")
+                with self.subTest(name=name, missing="hash"):
+                    envelope = build_reviewer_envelope(
+                        {"source": source}, {"patch": patch_file}, "image", "run", paths,
+                        result_contract=LEGACY_RESULT_CONTRACT,
+                    )
+                    paths[name].write_text("changed\n")
+                    self.assertIn("RESULT_HASH_MISMATCH", verify_reviewer_envelope(envelope, root))
+                    paths[name].write_text("{}\n")
+
+
     def test_exact_reader_never_returns_replacement_that_was_not_hashed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source"
@@ -66,7 +236,7 @@ class EvidenceBundleTests(unittest.TestCase):
                 run_id="run-1",
                 result_paths={"gate": result},
             )
-            self.assertEqual(verify_reviewer_envelope(envelope, root), [])
+            self.assertEqual(verify_reviewer_envelope(envelope, root, integrity_only=True), [])
             result.write_text("changed\n")
             self.assertIn(
                 "RESULT_HASH_MISMATCH", verify_reviewer_envelope(envelope, root)

@@ -423,6 +423,42 @@
         "ERP_ACCEPTANCE: NOT_RUN",
         "Runtime regression validation belongs to the complete working-tree snapshot and is not transferred to this isolated commit."
       ]
+    },
+    {
+      "id": "feat-013",
+      "name": "Infra evidence review fixes",
+      "description": "Approved spec docs/superpowers/specs/2026-10-15-infra-evidence-review-fixes.md",
+      "status": "blocked",
+      "dependencies": [],
+      "files": [
+        "infra/scripts/prepare_legacy_stand.py",
+        "infra/scripts/evidence_bundle.py",
+        "infra/scripts/run_legacy_regressions.py",
+        "infra/scripts/legacy_phase_contract.py",
+        "infra/scripts/infra_test_selection.py",
+        "infra/scripts/run_infra_quality.py",
+        "infra/scripts/tests/test_prepare_legacy_stand.py",
+        "infra/scripts/tests/test_evidence_bundle.py",
+        "infra/scripts/tests/test_legacy_phase_contract.py",
+        "docs/development/infra-gates.md",
+        "infra/scripts/tests/test_infra_test_selection.py"
+      ],
+      "acceptance_criteria": [
+        "Interruption preserves cause and fails closed on unknown inventory; explicit owned recovery",
+        "Exact original133 with all399 successful phases; preserve pytest errors",
+        "Versioned seven-result acceptance; explicit old integrity mode; terminal result hash-bound before envelope",
+        "Fresh real Docker interruption/recovery/cleanup and full133; shared infra gate; Standards/Spec review; scoped commit"
+      ],
+      "evidence": [],
+      "notes": [
+        "Approved review-fixes spec implemented; independent Standards PASS and Spec PASS.",
+        "Current Docker infra gate:261 unittest/259passed/2conditional skips;60pytest PASS;Ruff/mypy/actionlint PASS.",
+        "Fresh legacy133:399/399 phasesPASS,0skips/failures; preflight/post-run sources/run cleanup/envelope PASS; full ownedstand cleanup PASS.",
+        "Formal Harness BLOCKED_STALE_SNAPSHOT; existing shared snapshot and earlier receipts preserved. GitHub Actions/push/ERP/production/Kong acceptance NOT_RUN.",
+        "Evidence .dev/test-artifacts/infra-review-fixes-20261015/report.md and final-stand/run/reviewer-envelope.json."
+      ],
+      "implementation_status": "PASS",
+      "validation_status": "PASS_LOCAL_GATE"
     }
   ]
 }

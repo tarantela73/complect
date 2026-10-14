@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import signal
 import shutil
 import subprocess
 import uuid
@@ -18,6 +19,18 @@ from infra.scripts.legacy_preflight import require_original_nodes, verify_prepar
 from infra.scripts.run_infra_tests import ROOT, _docker_endpoint_is_local
 
 MANIFEST = ROOT / "infra/legacy133.json"
+
+
+class StandInterrupted(Exception):
+    """Preparation was interrupted after its receipt had been created."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _raise_sigterm(_signum, _frame):
+    raise StandInterrupted("SIGTERM")
 
 
 def _write(path: Path, value: Any) -> None:
@@ -71,8 +84,30 @@ def _assert_owned(kind: str, resource: dict[str, Any], receipt: dict[str, Any]) 
         raise ValueError("stand resource ownership mismatch")
 
 
+def _inspect_optional(commands: Commands, arguments: list[str]) -> dict[str, Any] | None:
+    """Confirm absence by a successful bounded listing; failed probes are unknown."""
+    kind = "container" if arguments[1] == "inspect" else arguments[1]
+    identifier = arguments[-1]
+    if kind == "container":
+        listing = ["docker", "ps", "-aq", "--no-trunc", "--filter", f"id={identifier}"]
+    elif kind == "network":
+        listing = ["docker", "network", "ls", "-q", "--no-trunc", "--filter", f"id={identifier}"]
+    elif kind == "volume":
+        listing = ["docker", "volume", "ls", "-q", "--filter", f"name={identifier}"]
+    elif kind == "image":
+        listing = ["docker", "image", "ls", "-q", "--no-trunc", "--filter", f"reference={identifier}"]
+    else:
+        raise ValueError("unsupported stand resource kind")
+    names = commands.run(listing).stdout.split()
+    if not names or (kind == "volume" and identifier not in names):
+        return None
+    return json.loads(commands.run(arguments).stdout)[0]
+
+
 def _inventory(commands: Commands, receipt: dict[str, Any]) -> None:
     """Register partial preparation as well as successful resources before cleanup."""
+    receipt["inventory_complete"] = False
+    receipt["inventory_status"] = "in_progress"
     resources: list[dict[str, Any]] = []
     receipt["resources"] = resources
     for kind, listing in (("container", ["ps", "-aq"]), ("network", ["network", "ls", "-q"]),
@@ -80,15 +115,34 @@ def _inventory(commands: Commands, receipt: dict[str, Any]) -> None:
         names = commands.run(["docker", *listing, "--filter", f"label=com.docker.compose.project={commands.project}"]).stdout.split()
         for name in names:
             prefix = [] if kind == "container" else [kind]
-            actual = json.loads(commands.run(["docker", *prefix, "inspect", name]).stdout)[0]
+            actual = _inspect_optional(commands, ["docker", *prefix, "inspect", name])
+            if actual is None:
+                continue
             _assert_owned(kind, actual, receipt)
             resources.append({"kind": kind, "id": actual.get("Id", actual.get("Name")),
                               "fingerprint": _fingerprint(kind, actual), "labels": _labels(kind, actual)})
     receipt["resources"] = resources
     reference = f"{commands.project}_backend:dev"
-    image = commands.run(["docker", "image", "inspect", reference], check=False)
-    if image.returncode == 0:
-        receipt["image"] = {"reference": reference, "id": json.loads(image.stdout)[0]["Id"]}
+    image = _inspect_optional(commands, ["docker", "image", "inspect", reference])
+    known = receipt.get("image")
+    if image is not None:
+        if known and (receipt.get("image_removed") or image["Id"] != known["id"]):
+            raise ValueError("stand image identity changed")
+        receipt["image"] = {"reference": reference, "id": image["Id"]}
+        receipt.pop("image_removed", None)
+    else:
+        receipt.pop("image", None)
+    removed = set(receipt.get("removed", []))
+    reappeared = {
+        record["kind"] + ":" + record["id"]
+        for record in resources
+        if record["kind"] + ":" + record["id"] in removed
+    }
+    if reappeared:
+        receipt["inventory_error"] = "removed_resource_reappeared"
+        raise ValueError("removed resource reappeared")
+    receipt["inventory_complete"] = True
+    receipt["inventory_status"] = "complete"
 
 
 def cleanup(receipt_path: Path) -> dict[str, Any]:
@@ -102,6 +156,8 @@ def cleanup(receipt_path: Path) -> dict[str, Any]:
     if commands.project != receipt["project"] or commands.values["DEV_CHECKOUT_ID"] != receipt["checkout_id"]:
         raise ValueError("stand configuration identity mismatch")
     errors = [{"error": receipt["inventory_error"]}] if receipt.get("inventory_error") else []
+    if receipt.get("inventory_complete") is not True:
+        errors.append({"error": "inventory_incomplete"})
     removed = set(receipt.get("removed", []))
     for record in receipt.get("resources", []):
         key = record["kind"] + ":" + record["id"]
@@ -110,7 +166,12 @@ def cleanup(receipt_path: Path) -> dict[str, Any]:
         try:
             kind = record["kind"]
             prefix = [] if kind == "container" else [kind]
-            actual = json.loads(commands.run(["docker", *prefix, "inspect", record["id"]]).stdout)[0]
+            actual = _inspect_optional(commands, ["docker", *prefix, "inspect", record["id"]])
+            if actual is None:
+                removed.add(key)
+                receipt["removed"] = sorted(removed)
+                _write(receipt_path, receipt)
+                continue
             _assert_owned(kind, actual, receipt)
             if _fingerprint(kind, actual) != record["fingerprint"] or _labels(kind, actual) != record["labels"]:
                 raise ValueError("stand resource identity changed")
@@ -136,6 +197,44 @@ def cleanup(receipt_path: Path) -> dict[str, Any]:
             errors.append({"resource": "image", "error": type(exc).__name__})
     receipt["cleanup"] = "BLOCKED_STAND" if errors else "PASS"
     receipt["cleanup_errors"] = errors
+    _write(receipt_path, receipt)
+    return receipt
+
+
+def recover_inventory(receipt_path: Path) -> dict[str, Any]:
+    """Refresh a partial receipt after an interruption; do not resume preparation."""
+    _docker_endpoint_is_local()
+    receipt = json.loads(receipt_path.read_text())
+    checkout = Path(receipt["root"])
+    if checkout != receipt_path.resolve().parent / "checkout" or checkout.is_symlink():
+        raise ValueError("stand receipt/root mismatch")
+    commands = stand_commands(checkout, receipt)
+    if commands.project != receipt["project"] or commands.values["DEV_CHECKOUT_ID"] != receipt["checkout_id"]:
+        raise ValueError("stand configuration identity mismatch")
+    receipt["inventory_complete"] = False
+    receipt["inventory_status"] = "in_progress"
+    _write(receipt_path, receipt)
+    for record in receipt.get("resources", []):
+        kind = record["kind"]
+        prefix = [] if kind == "container" else [kind]
+        key = f"{kind}:{record['id']}"
+        actual = _inspect_optional(commands, ["docker", *prefix, "inspect", record["id"]])
+        if key in set(receipt.get("removed", [])) and actual is not None:
+            raise ValueError("removed stand resource is still present")
+        if actual is None:
+            continue
+        _assert_owned(kind, actual, receipt)
+        if (_fingerprint(kind, actual) != record["fingerprint"]
+                or _labels(kind, actual) != record["labels"]):
+            raise ValueError("stand resource identity changed")
+    _inventory(commands, receipt)
+    receipt.pop("inventory_error", None)
+    receipt.pop("cleanup_errors", None)
+    receipt["recovery"] = {
+        "explicit": True,
+        "project": commands.project,
+        "checkout_id": commands.values["DEV_CHECKOUT_ID"],
+    }
     _write(receipt_path, receipt)
     return receipt
 
@@ -182,10 +281,15 @@ def prepare(source_root: Path, snapshot_path: Path, directory: Path, *, manifest
         "project": base.project, "checkout_id": base.values["DEV_CHECKOUT_ID"],
         "compose_override": {"path": str(override), "sha256": hashlib.sha256(override.read_bytes()).hexdigest()},
         "status": "BLOCKED_STAND", "resources": [],
+        "inventory_complete": False, "inventory_status": "unknown",
     }
     path = directory / "ownership.json"
     _write(path, receipt)
     commands = stand_commands(checkout, receipt)
+    previous_sigterm = signal.signal(
+        signal.SIGTERM,
+        _raise_sigterm,
+    )
     try:
         with (directory / "prepare.log").open("w") as log, contextlib.redirect_stdout(log):
             build_backend(commands)
@@ -210,9 +314,12 @@ def prepare(source_root: Path, snapshot_path: Path, directory: Path, *, manifest
         _inventory(commands, receipt)
         _write(path, receipt)
         return receipt
-    except Exception as exc:
+    except BaseException as exc:
+        receipt["status"] = "BLOCKED_STAND"
+        receipt["interruption"] = {"reason": getattr(exc, "reason", type(exc).__name__)}
         receipt["error"] = type(exc).__name__
         receipt["error_message"] = commands.redact(str(exc))
+        _write(path, receipt)
         try:
             _inventory(commands, receipt)
         except Exception as inventory_error:
@@ -220,11 +327,13 @@ def prepare(source_root: Path, snapshot_path: Path, directory: Path, *, manifest
         _write(path, receipt)
         try:
             cleanup(path)
-        except Exception as cleanup_error:
+        except BaseException as cleanup_error:
             receipt["cleanup"] = "BLOCKED_STAND"
             receipt["cleanup_errors"] = [{"error": type(cleanup_error).__name__}]
-            _write(path, receipt)
+        _write(path, receipt)
         raise
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -237,16 +346,22 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--manifest", type=Path, default=MANIFEST)
     remove = commands.add_parser("cleanup")
     remove.add_argument("--ownership", type=Path, required=True)
+    recover = commands.add_parser("recover-inventory")
+    recover.add_argument("--ownership", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "prepare":
             prepare(args.source_root, args.snapshot, args.directory, manifest=args.manifest)
             print(json.dumps({"status": "PASS", "ownership": str(args.directory / "ownership.json")}))
             return 0
+        if args.command == "recover-inventory":
+            result = recover_inventory(args.ownership.resolve())
+            print(json.dumps({"status": result["inventory_status"], "ownership": str(args.ownership)}))
+            return 0 if result.get("inventory_complete") is True else 2
         result = cleanup(args.ownership.resolve())
         print(json.dumps({"status": result["cleanup"], "errors": result["cleanup_errors"]}))
         return 0 if result["cleanup"] == "PASS" else 2
-    except Exception as exc:
+    except BaseException as exc:
         print(json.dumps({"status": "BLOCKED_STAND", "error": type(exc).__name__, "message": str(exc)}))
         return 2
 

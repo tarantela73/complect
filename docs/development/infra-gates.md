@@ -77,6 +77,35 @@ make legacy-stand-cleanup LEGACY_STAND_ARGS="--ownership $task_dir/stand/ownersh
 
 ## Точные артефакты для ревью
 
+Ctrl+C и обрабатываемый SIGTERM сохраняют причину остановки и запускают
+инвентаризацию и очистку подтверждённых ресурсов. Неизвестная полнота inventory
+блокирует успешный cleanup даже при пустом списке. После обрыва выполните явное
+восстановление, затем очистку:
+
+```bash
+python3 -B -m infra.scripts.prepare_legacy_stand recover-inventory --ownership "$task_dir/stand/ownership.json"
+make legacy-stand-cleanup LEGACY_STAND_ARGS="--ownership $task_dir/stand/ownership.json"
+```
+
+Восстановление проверяет идентичность, метки, fingerprint и конфигурацию стенда,
+сохраняет подтверждённые ID и не возобновляет подготовку или тесты.
+
+Приёмка требует `result_contract=complect-legacy-results-v1` и семь результатов:
+`manifest.json`, `post-run-sources.json`, `privilege-probes.json`, `lifecycle.jsonl`,
+`target.json`, `run-cleanup.json`, `result.json`. Дополнительная диагностика также
+проверяется по хешам. Receipt `run-cleanup.json` относится к временным ресурсам
+прогона; полный стенд очищается отдельной командой.
+
+Успешный manifest содержит исходные 133 ID и ровно 399 успешных фаз
+`setup/call/teardown`, без пропусков, skipped и дубликатов. Runner сохраняет
+исходный manifest и ненулевой код pytest. При нарушении контракта код 0 становится
+ненулевым, terminal result получает `BLOCKED_STAND` и диагностику ID/фазы.
+Terminal result записывается и хешируется перед публикацией envelope.
+
+Старые envelope доступны только для явной проверки целостности:
+`python3 -B -m infra.scripts.evidence_bundle verify --envelope PATH --root ROOT --integrity-only`.
+Этот режим не назначает профиль приёмки автоматически.
+
 Начинайте ревью с envelope данного прогона. Проверяйте явно указанный файл
 через `python3 -B -m infra.scripts.evidence_bundle verify --envelope PATH --root ROOT`.
 Envelope связывает snapshot, патч, image ID, run ID и точные результаты с
