@@ -80,7 +80,16 @@ class Stand:
         return json.loads(self.docker(kind, "inspect", identifier).stdout)[0]
 
     def _inspect_resources(self, kind, identifiers, *, optional=False):
-        return [self.inspect(kind, identifier) for identifier in identifiers]
+        resources = [self.inspect(kind, identifier) for identifier in identifiers]
+        if kind == "container":
+            for resource in resources:
+                # Docker may enumerate its mount map in a different order per inspect.
+                # Compare every mount field exactly, with only enumeration order canonicalized.
+                if isinstance(resource.get("Mounts"), list):
+                    resource["Mounts"] = sorted(
+                        resource["Mounts"], key=lambda mount: json.dumps(mount, sort_keys=True)
+                    )
+        return resources
 
     def register(self, kind, identifier):
         try:
