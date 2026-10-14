@@ -1,5 +1,12 @@
 # Передача сессии Harness
 
+## 2026-10-15 — Payments CI: порядок mounts
+
+Первый реальный GitHub positive gate прошёл все бизнес-фазы, но cleanup вернул BLOCKED_STAND: Docker перечислял одинаковые mounts в разном порядке. Narrow Payments adapter канонизирует порядок, все поля fingerprint проверяются точно. RED/GREEN и семь field mutation checks PASS; свежий local fullgate all11PASS. Новый Harness receipt `docs/agents/harness-evidence/20261014T210629866457Z.json`. Старый receipt сохранён в evidence_history.
+
+Repo теперь public, защита main отсутствует (404), rulesets пусты. Негативный CI38635709596 корректно сообщил injected prepare; positive retry ожидается. #16/#21 остаются открыты до CI/required-status evidence. Evidence `.dev/test-artifacts/payments-ci-mount-order-20261015/`. ERP/production/Kong NOT_RUN.
+
+
 ## 2026-10-15 — Payments #16–21
 
 feat-005 done: #17–20 подтверждены текущими working-final и candidate-final gate, каждый 55 Payments + 5 HTTP, два физических replica-цикла, lifecycle и cleanup. Негативный отказ после lag восстанавливает replay и синхронизацию; prepare/foreign_target/socket/cleanup также дают честный BLOCKED_STAND. Свежий Harness receipt: `docs/agents/harness-evidence/20261014T204159580646Z.json`.

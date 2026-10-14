@@ -7,6 +7,8 @@ from copy import deepcopy
 from pathlib import Path
 import subprocess
 
+import pytest
+
 from infra.scripts.run_payments_gate import Stand
 
 
@@ -236,3 +238,53 @@ def test_cleanup_preserves_primary_error_with_cleanup_error(tmp_path, monkeypatc
     assert stand.cleanup() is False
     assert stand.report["primary_error"] == primary_error
     assert "socket closed" in stand.report["phases"]["cleanup"]["errors"][0]["error"]
+
+
+def test_registration_and_cleanup_accept_only_mount_order_change(tmp_path, monkeypatch):
+    stand = _stand(tmp_path)
+    mounts = [
+        {"Type": "bind", "Source": "/owned/b", "Destination": "/b", "RW": False, "Mode": "ro,z", "Propagation": "rprivate"},
+        {"Type": "bind", "Source": "/owned/a", "Destination": "/a", "RW": True, "Mode": "z", "Propagation": "rprivate"},
+    ]
+    observed = {"Id": "owned-container", "Name": "/owned-container",
+                "Image": "owned-image", "Mounts": deepcopy(mounts),
+                "Config": {"Labels": {"complect.payments_run": stand.run_id}}}
+    monkeypatch.setattr(stand, "inspect", lambda kind, identifier: deepcopy(observed))
+    calls = []
+    monkeypatch.setattr(stand, "docker", lambda *args, **kwargs: calls.append(args))
+    assert stand.register("container", "owned-container") == "owned-container"
+    observed["Mounts"].reverse()
+    assert stand.cleanup() is True
+    assert calls == [("container", "rm", "-f", "owned-container")]
+    assert stand.owned[0]["removed"] is True
+    assert sorted(stand.owned[0]["mounts"], key=lambda m: m["Source"]) == sorted(mounts, key=lambda m: m["Source"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("Source", "/foreign"), ("Destination", "/foreign"), ("Type", "volume"),
+    ("RW", True), ("Mode", "rw"), ("Propagation", "rshared"), ("extra", "changed"),
+])
+def test_mount_order_canonicalization_preserves_every_fingerprint_field(
+    tmp_path, monkeypatch, field, value
+):
+    stand = _stand(tmp_path)
+    observed = {
+        "Id": "owned-container", "Name": "/owned-container", "Image": "owned-image",
+        "Config": {"Labels": {"complect.payments_run": stand.run_id}},
+        "Mounts": [
+            {"Type": "bind", "Source": "/owned/b", "Destination": "/b", "RW": False, "Mode": "ro,z", "Propagation": "rprivate"},
+            {"Type": "bind", "Source": "/owned/a", "Destination": "/a", "RW": True, "Mode": "z", "Propagation": "rprivate"},
+        ],
+    }
+    monkeypatch.setattr(stand, "inspect", lambda kind, identifier: deepcopy(observed))
+    calls = []
+    monkeypatch.setattr(stand, "docker", lambda *args, **kwargs: calls.append(args))
+    stand.register("container", "owned-container")
+    observed["Mounts"][0][field] = value
+    observed["Mounts"].reverse()
+    assert stand.cleanup() is False
+    assert calls == []
+    assert "removed" not in stand.owned[0]
+    assert stand.report["phases"]["cleanup"]["errors"] == [
+        {"id": "owned-container", "error": "cleanup image/mount mismatch"}
+    ]
