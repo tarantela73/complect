@@ -1,6 +1,8 @@
 import json
+import hashlib
 import tempfile
 import unittest
+import signal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -25,6 +27,7 @@ class PrepareLegacyStandTests(unittest.TestCase):
         labels = {"com.docker.compose.project": "owned", "complect.checkout_id": "checkout-id"}
         resource = {"Id": "owned-id", "Image": "image-id", "Mounts": [], "Config": {"Labels": labels}}
         receipt = {"root": str(parent / "checkout"), "project": "owned", "checkout_id": "checkout-id",
+                   "inventory_complete": True, "inventory_status": "complete",
                    "resources": [{"kind": "container", "id": "owned-id", "labels": labels,
                                   "fingerprint": {"Id": "owned-id", "Image": "image-id", "Mounts": []}}]}
         path = parent / "ownership.json"
@@ -34,6 +37,8 @@ class PrepareLegacyStandTests(unittest.TestCase):
         commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
 
         def run(command, **kwargs):
+            if command[:2] == ["docker", "ps"]:
+                return SimpleNamespace(stdout="owned-id\n")
             if command[:2] == ["docker", "inspect"]:
                 return SimpleNamespace(stdout=json.dumps([resource]))
             if removal_error:
@@ -51,7 +56,7 @@ class PrepareLegacyStandTests(unittest.TestCase):
             ):
                 result = prepare_legacy_stand.cleanup(path)
             self.assertEqual(result["cleanup"], "BLOCKED_STAND")
-            self.assertEqual(commands.run.call_count, 1)
+            self.assertFalse(any(call.kwargs.get("write") for call in commands.run.call_args_list))
 
     def test_removal_failure_blocks_cleanup(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -73,7 +78,7 @@ class PrepareLegacyStandTests(unittest.TestCase):
                 again = prepare_legacy_stand.cleanup(path)
             self.assertEqual(result["cleanup"], "PASS")
             self.assertEqual(again["cleanup"], "PASS")
-            self.assertEqual(commands.run.call_count, 2)
+            self.assertEqual(sum(call.args[0][:2] == ["docker", "rm"] for call in commands.run.call_args_list), 1)
 
     def test_foreign_ownership_is_not_removed(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -83,15 +88,166 @@ class PrepareLegacyStandTests(unittest.TestCase):
             actual = json.loads(commands.run(["docker", "inspect", "owned-id"]).stdout)[0]
             actual["Config"]["Labels"]["complect.checkout_id"] = "foreign-checkout"
             commands.run.reset_mock()
-            commands.run.side_effect = None
-            commands.run.return_value = SimpleNamespace(stdout=json.dumps([actual]))
+            commands.run.side_effect = lambda args, **kwargs: SimpleNamespace(stdout="owned-id\n" if args[:2] == ["docker", "ps"] else json.dumps([actual]))
             with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(
                 prepare_legacy_stand, "stand_commands", return_value=commands,
             ):
                 result = prepare_legacy_stand.cleanup(path)
             self.assertEqual(result["cleanup"], "BLOCKED_STAND")
-            self.assertEqual(commands.run.call_count, 1)
+            self.assertFalse(any(call.kwargs.get("write") for call in commands.run.call_args_list))
             self.assertEqual(json.loads(path.read_text())["resources"], receipt["resources"])
+
+
+    def test_unknown_inventory_blocks_cleanup_even_when_empty(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            path = parent / "ownership.json"
+            path.write_text(json.dumps({
+                "root": str(parent / "checkout"), "project": "owned", "checkout_id": "checkout-id",
+                "resources": [], "inventory_complete": False,
+            }))
+            commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
+            with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(
+                prepare_legacy_stand, "stand_commands", return_value=commands
+            ):
+                result = prepare_legacy_stand.cleanup(path)
+            self.assertEqual(result["cleanup"], "BLOCKED_STAND")
+            self.assertIn({"error": "inventory_incomplete"}, result["cleanup_errors"])
+
+    def test_recovery_rejects_changed_recorded_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            checkout = parent / "checkout"
+            checkout.mkdir()
+            override = parent / "stand.compose.json"
+            override.write_text("{}")
+            digest = hashlib.sha256(override.read_bytes()).hexdigest()
+            labels = {"com.docker.compose.project": "owned", "complect.checkout_id": "checkout-id"}
+            original = {"Id": "owned-id", "Image": "image-id", "Mounts": [], "Config": {"Labels": labels}}
+            changed = dict(original, Image="foreign-image")
+            receipt = {"root": str(checkout), "project": "owned", "checkout_id": "checkout-id",
+                       "compose_override": {"path": str(override), "sha256": digest},
+                       "resources": [{"kind": "container", "id": "owned-id", "labels": labels,
+                                      "fingerprint": prepare_legacy_stand._fingerprint("container", original)}],
+                       "inventory_complete": False}
+            path = parent / "ownership.json"
+            path.write_text(json.dumps(receipt))
+            commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
+            commands.run.return_value = SimpleNamespace(stdout=json.dumps([changed]))
+            with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(
+                prepare_legacy_stand, "stand_commands", return_value=commands
+            ):
+                with self.assertRaises(ValueError):
+                    prepare_legacy_stand.recover_inventory(path)
+
+    def test_recovery_clears_error_and_confirms_already_removed_resource(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            checkout = parent / "checkout"
+            checkout.mkdir()
+            path = parent / "ownership.json"
+            receipt = {
+                "root": str(checkout), "project": "owned", "checkout_id": "checkout-id",
+                "status": "BLOCKED_STAND", "interruption": {"reason": "SIGTERM"},
+                "resources": [{"kind": "container", "id": "gone", "fingerprint": {}, "labels": {}}],
+                "removed": ["container:gone"], "inventory_error": "RuntimeError",
+                "cleanup_errors": [{"error": "RuntimeError"}], "inventory_complete": False,
+            }
+            path.write_text(json.dumps(receipt))
+            commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
+            commands.run.return_value = SimpleNamespace(returncode=0, stdout="")
+            with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(prepare_legacy_stand, "stand_commands", return_value=commands):
+                result = prepare_legacy_stand.recover_inventory(path)
+                self.assertTrue(result["inventory_complete"])
+                self.assertNotIn("inventory_error", result)
+                self.assertNotIn("cleanup_errors", result)
+                self.assertEqual(result["status"], "BLOCKED_STAND")
+                self.assertEqual(result["interruption"]["reason"], "SIGTERM")
+                self.assertEqual(prepare_legacy_stand.cleanup(path)["cleanup"], "PASS")
+
+    def test_recovery_rejects_inconclusive_image_probe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            checkout = parent / "checkout"
+            checkout.mkdir()
+            path = parent / "ownership.json"
+            receipt = {"root": str(checkout), "project": "owned", "checkout_id": "checkout-id", "resources": [], "inventory_complete": False}
+            path.write_text(json.dumps(receipt))
+            commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
+
+            def run(arguments, **kwargs):
+                if arguments[:3] == ["docker", "image", "ls"]:
+                    raise RuntimeError("Docker inventory unavailable")
+                if arguments[:3] == ["docker", "image", "inspect"]:
+                    return SimpleNamespace(returncode=1, stdout="", stderr="Docker inventory unavailable")
+                return SimpleNamespace(returncode=0, stdout="")
+
+            commands.run.side_effect = run
+            with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(prepare_legacy_stand, "stand_commands", return_value=commands):
+                with self.assertRaises(RuntimeError):
+                    prepare_legacy_stand.recover_inventory(path)
+            self.assertFalse(json.loads(path.read_text())["inventory_complete"])
+
+    def test_recovery_rejects_removed_id_that_is_still_present_with_foreign_labels(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            path, commands = self._cleanup_receipt(parent)
+            receipt = json.loads(path.read_text())
+            receipt["removed"] = ["container:owned-id"]
+            receipt["inventory_complete"] = False
+            path.write_text(json.dumps(receipt))
+            actual = {"Id": "owned-id", "Image": "image-id", "Mounts": [], "Config": {"Labels": {"com.docker.compose.project": "foreign"}}}
+
+            def run(arguments, **kwargs):
+                if arguments[:2] == ["docker", "ps"]:
+                    return SimpleNamespace(stdout="" if any("label=" in part for part in arguments) else "owned-id\n")
+                if arguments[:2] == ["docker", "inspect"]:
+                    return SimpleNamespace(stdout=json.dumps([actual]))
+                return SimpleNamespace(stdout="")
+
+            commands.run.side_effect = run
+            with patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(prepare_legacy_stand, "stand_commands", return_value=commands):
+                with self.assertRaises(ValueError):
+                    prepare_legacy_stand.recover_inventory(path)
+            self.assertFalse(any(call.kwargs.get("write") for call in commands.run.call_args_list))
+
+    def test_interruption_after_preparation_keeps_blocked_receipt_and_restores_signal(self):
+        for reason in ("SIGTERM", "KeyboardInterrupt"):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                directory = root / ".dev/test-artifacts/stand"
+                snapshot = root / "snapshot.json"
+                snapshot.write_text(json.dumps({"format": "complect-working-tree-snapshot-v1", "files": {}}))
+                manifest = root / "manifest.json"
+                # Use the canonical public manifest rather than a synthesized node list.
+                manifest.write_bytes(prepare_legacy_stand.MANIFEST.read_bytes())
+                labels = {"com.docker.compose.project": "owned", "complect.checkout_id": "checkout-id"}
+                container = {"Id": "owned-id", "Image": "image", "Mounts": [], "Config": {"Labels": labels}, "NetworkSettings": {"Networks": {"owned_network": {}}}, "Name": "/owned-redis"}
+                commands = Mock(project="owned", values={"DEV_CHECKOUT_ID": "checkout-id"})
+                commands.containers.return_value = {"postgres_primary": container, "redis": container}
+                commands.redact.side_effect = lambda value: value
+                interrupted = False
+
+                def run(arguments, **kwargs):
+                    nonlocal interrupted
+                    if arguments[:2] == ["docker", "exec"]:
+                        return SimpleNamespace(stdout="16384|cluster|complect_migrator|complect_migrator")
+                    if arguments[:2] == ["docker", "ps"] and not interrupted:
+                        interrupted = True
+                        if reason == "SIGTERM":
+                            signal.raise_signal(signal.SIGTERM)
+                        raise KeyboardInterrupt()
+                    return SimpleNamespace(stdout="", returncode=0)
+
+                commands.run.side_effect = run
+                previous = signal.getsignal(signal.SIGTERM)
+                with patch.object(prepare_legacy_stand, "ROOT", root), patch.object(prepare_legacy_stand.agent_harness, "verify_working_tree_snapshot", return_value=[]), patch.object(prepare_legacy_stand, "_docker_endpoint_is_local"), patch.object(prepare_legacy_stand, "configure"), patch.object(prepare_legacy_stand, "Commands", return_value=commands), patch.object(prepare_legacy_stand, "stand_commands", return_value=commands), patch.object(prepare_legacy_stand, "build_backend"), patch.object(prepare_legacy_stand, "prepare_database_startup"), patch.object(prepare_legacy_stand.subprocess, "run"):
+                    with self.assertRaises(prepare_legacy_stand.StandInterrupted if reason == "SIGTERM" else KeyboardInterrupt):
+                        prepare_legacy_stand.prepare(root, snapshot, directory, manifest=manifest)
+                receipt = json.loads((directory / "ownership.json").read_text())
+                self.assertEqual(receipt["status"], "BLOCKED_STAND")
+                self.assertEqual(receipt["interruption"]["reason"], reason)
+                self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
 
 
 if __name__ == "__main__":
