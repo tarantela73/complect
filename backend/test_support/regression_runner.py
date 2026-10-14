@@ -80,7 +80,15 @@ class Evidence:
         yield
 
     def pytest_runtest_logreport(self, report: Any) -> None:
-        self.reports.append({"nodeid": report.nodeid, "when": report.when, "outcome": report.outcome})
+        entry: dict[str, Any] = {
+            "nodeid": report.nodeid,
+            "when": report.when,
+            "outcome": report.outcome,
+        }
+        user_properties = getattr(report, "user_properties", None)
+        if user_properties:
+            entry["user_properties"] = dict(user_properties)
+        self.reports.append(entry)
 
     def pytest_sessionfinish(self, session: Any, exitstatus: int) -> None:
         self.manifest.write_text(

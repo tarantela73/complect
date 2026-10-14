@@ -16,7 +16,11 @@ import uuid
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
+
 from apps.common.contracts.finance_contracts import FinanceTransactionFinder
+from apps.common.repository.sre_engine import EnterpriseSreRepository
 from apps.payments.models.bank_statement import BankStatement
 from apps.payments.models.bank_statement_line import BankStatementLine, MatchStatus
 
@@ -27,12 +31,17 @@ class MatchingService:
     def __init__(self, finder: FinanceTransactionFinder) -> None:
         self._finder = finder
 
+    @transaction.atomic
     def match_statement(self, stmt: BankStatement) -> dict[str, int]:
         """
         Сопоставляет все PARSED строки выписки.
         Возвращает счётчики: {MATCHED, PARTIAL, AMBIGUOUS, UNMATCHED}.
         """
-        lines = list(stmt.lines.filter(parse_status="parsed").select_for_update(skip_locked=True))
+        lines = list(
+            stmt.lines.filter(parse_status="parsed", tenant_id=stmt.tenant_id, is_deleted=False)
+            .order_by("id")
+            .select_for_update(skip_locked=True)
+        )
         counters: dict[str, int] = {
             MatchStatus.MATCHED: 0,
             MatchStatus.PARTIAL: 0,
@@ -40,22 +49,17 @@ class MatchingService:
             MatchStatus.UNMATCHED: 0,
         }
 
-        updates: list[BankStatementLine] = []
         for line in lines:
+            if line.is_legal_hold:
+                raise PermissionDenied("LEGAL_HOLD_ACTIVE")
             status, confidence, tx_id = self._match_line(line, stmt.tenant_id)
-            line.match_status = status
-            line.match_confidence = confidence
-            if tx_id is not None:
-                line.transaction_id = tx_id
-            updates.append(line)
-            counters[status] += 1
-
-        if updates:
-            BankStatementLine.objects.bulk_update(
-                updates,
-                fields=["match_status", "match_confidence", "transaction_id"],
-                batch_size=200,
+            EnterpriseSreRepository.atomic_cas_update(
+                line,
+                match_status=status,
+                match_confidence=confidence,
+                transaction_id=tx_id if tx_id is not None else line.transaction_id,
             )
+            counters[status] += 1
 
         return counters
 
