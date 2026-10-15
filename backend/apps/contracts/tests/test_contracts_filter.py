@@ -8,7 +8,7 @@ import pytest
 
 from apps.common.tenancy.context import set_tenant_context
 from apps.common.tenancy.context_core import RequestContext, set_context
-from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
+from apps.contracts.models.contract import Contract, ResourceSupplyType
 from apps.contracts.queries.contract_queries import get_contracts_page
 
 

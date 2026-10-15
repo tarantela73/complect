@@ -217,6 +217,7 @@ class TestConsumerReclaim:
     def test_reclaim_expired_lease_returns_true(self):
         """Worker B can take over after Worker A's lease expires."""
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -233,6 +234,7 @@ class TestConsumerReclaim:
     def test_reclaim_transfers_ownership(self):
         """After reclaim, claimed_by_instance_id is updated to the new owner."""
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -250,6 +252,7 @@ class TestConsumerReclaim:
     def test_reclaim_sets_new_lease_expires_at(self):
         """reclaim() must extend the lease to a new future deadline."""
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -272,7 +275,6 @@ class TestConsumerReclaim:
 
     def test_reclaim_does_not_affect_valid_owner(self):
         """Failed reclaim must leave the original owner and lease untouched."""
-        from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
         instance_a, instance_b = uuid.uuid4(), uuid.uuid4()
@@ -295,6 +297,7 @@ class TestConsumerReclaim:
     def test_reclaim_acked_record_returns_false(self):
         """Already-acked records must not be reclaimed."""
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -312,6 +315,7 @@ class TestConsumerReclaim:
         Verified via sequential DB simulation: second call sees updated lease_expires_at.
         """
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         event_id, tenant_id = uuid.uuid4(), uuid.uuid4()
@@ -333,7 +337,6 @@ class TestConsumerReclaim:
 class TestConsumerHeartbeat:
     def test_heartbeat_extends_lease(self):
         """heartbeat() must push lease_expires_at further into the future."""
-        from django.utils import timezone as tz
 
         event_id, tenant_id, instance_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         ConsumerIdempotencyService.claim(event_id, "svc", tenant_id, instance_id=instance_id, lease_ttl=300)
@@ -363,6 +366,7 @@ class TestConsumerHeartbeat:
         that is intentional behaviour (absorbs clock skew/jitter at the boundary).
         """
         from datetime import timedelta
+
         from django.utils import timezone as tz
 
         ttl = 300

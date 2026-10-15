@@ -14,8 +14,9 @@ import time
 
 import django
 import psycopg
-from config import dev_database
 from django.db import connection
+
+from config import dev_database
 
 django.setup()
 

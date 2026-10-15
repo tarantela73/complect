@@ -14,7 +14,7 @@ Covers:
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -369,7 +369,7 @@ class TestRunBatch:
         consumer = _StrictConsumer()
         acked_rec = _make_outbox()
         consumer.handle(acked_rec)
-        fresh_rec = _make_outbox()
+        _fresh_rec = _make_outbox()
         count = consumer.run_batch(batch_size=100)
         assert count == 1
         assert len(consumer.processed) == 2
@@ -406,9 +406,9 @@ class TestRunBatch:
     def test_strict_mode_orders_by_aggregate_seq(self):
         consumer = _StrictConsumer()
         agg_id = uuid.uuid4()
-        r3 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=3)
-        r1 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=1)
-        r2 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=2)
+        _r3 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=3)
+        _r1 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=1)
+        _r2 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=2)
         consumer.run_batch()
         seqs = [e.aggregate_seq for e in consumer.processed]
         assert seqs == [1, 2, 3]
@@ -573,8 +573,8 @@ class TestFinanceContractClosedConsumer:
         )
 
     def test_posts_transaction_for_positive_remaining_amount(self):
-        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
         from apps.finance.models.transaction import Transaction
+        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
 
         contract_id = uuid.uuid4()
         self._make_contract(contract_id, total_amount=50000)

@@ -9,7 +9,6 @@ import textwrap
 
 import pytest
 
-
 EXPECTED_MIGRATED_MODELS = {
     ("contracts.Contract", "contracts_contracts"),
     ("contracts.ContractAttachment", "contracts_attachments"),

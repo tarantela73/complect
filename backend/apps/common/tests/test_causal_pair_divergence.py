@@ -514,7 +514,7 @@ class TestCheckCausalPairSloTask:
         with structlog.testing.capture_logs() as logs:
             check_causal_pair_slo_task()
 
-        violation_logs = [l for l in logs if l.get("event") == "causal_pair_slo_violation"]
+        violation_logs = [entry for entry in logs if entry.get("event") == "causal_pair_slo_violation"]
         assert len(violation_logs) >= 1
         log = violation_logs[0]
         assert log["pair_name"] == "contract_closed → finance_transaction_posted"
@@ -535,9 +535,9 @@ class TestCheckCausalPairSloTask:
             check_causal_pair_slo_task()
 
         violation_logs = [
-            l
-            for l in logs
-            if l.get("event") == "causal_pair_slo_violation" and l.get("source_outbox_id") == str(source.id)
+            entry
+            for entry in logs
+            if entry.get("event") == "causal_pair_slo_violation" and entry.get("source_outbox_id") == str(source.id)
         ]
         assert len(violation_logs) == 0
 
@@ -554,9 +554,9 @@ class TestCheckCausalPairSloTask:
             check_causal_pair_slo_task()
 
         violation_logs = [
-            l
-            for l in logs
-            if l.get("event") == "causal_pair_slo_violation" and l.get("source_outbox_id") == str(source.id)
+            entry
+            for entry in logs
+            if entry.get("event") == "causal_pair_slo_violation" and entry.get("source_outbox_id") == str(source.id)
         ]
         assert len(violation_logs) == 0
 

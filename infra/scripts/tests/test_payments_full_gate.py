@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import shutil
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,28 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class FullGateCommandTests(unittest.TestCase):
+    def test_missing_env_template_blocks_before_any_docker_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory) / "checkout"
+            scripts = checkout / "infra/scripts"
+            scripts.mkdir(parents=True)
+            for name in ("run_payments_gate.py", "docker_ownership.py", "payments_gate_evidence.py"):
+                shutil.copyfile(ROOT / "infra/scripts" / name, scripts / name)
+            fake = Path(directory) / "docker"
+            fake.write_text("#!/bin/sh\necho unexpected-docker-call >&2\nexit 7\n")
+            fake.chmod(0o700)
+            output = Path(directory) / "evidence"
+            result = subprocess.run([sys.executable, "-B", str(scripts / "run_payments_gate.py"),
+                                     "--scope", "full", "--output", str(output)],
+                                    env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"]},
+                                    capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            report = json.loads((output / "result.json").read_text())
+            self.assertEqual(report["status"], "BLOCKED_STAND")
+            self.assertEqual(report["primary_error"]["reason"], "required checkout input missing: .env.dev.example")
+            self.assertEqual(report["owned"], [])
+            self.assertEqual(report["phases"]["cleanup"]["status"], "PASS")
+
     def test_missing_image_blocks_dependencies_and_records_cleanup(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("PAYMENTS_CLI_TEST_TMPDIR")) as directory:
             output = Path(directory) / "evidence"

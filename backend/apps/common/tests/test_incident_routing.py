@@ -13,7 +13,6 @@ from apps.common.services.incident_routing import (
     IncidentBundle,
     IncidentContext,
     IncidentRoutingPolicy,
-    RoutingDecision,
 )
 
 _NOW = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)

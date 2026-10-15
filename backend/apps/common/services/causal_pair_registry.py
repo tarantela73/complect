@@ -127,7 +127,6 @@ class OutboxBackedDomainEffectRegistry:
         return CausalPairRegistry.expected_effects_for(event_type)
 
     def observed_effects(self, causal_root_id: uuid.UUID) -> frozenset[str]:
-        from django.db.models import Q
 
         from apps.common.models.outbox import OutboxRecord
 

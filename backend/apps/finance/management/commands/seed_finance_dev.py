@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 from apps.finance.models.transaction import Transaction, TransactionStatus, TransactionType
 

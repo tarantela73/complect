@@ -8,7 +8,7 @@ import json
 import uuid
 
 import pytest
-from django.test import Client, RequestFactory, override_settings
+from django.test import Client, RequestFactory
 
 from apps.common.api.errors import (
     django_bad_request,

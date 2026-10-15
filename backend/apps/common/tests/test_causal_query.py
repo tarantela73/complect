@@ -260,7 +260,7 @@ class TestGetChainByCorrelation:
         r1 = _make_outbox(correlation_id=corr_id)
         # Force r2 to have a later created_at
         OutboxRecord.objects.filter(pk=r1.pk).update(created_at=tz.now() - timedelta(seconds=10))
-        r2 = _make_outbox(correlation_id=corr_id)
+        _r2 = _make_outbox(correlation_id=corr_id)
 
         chain = CausalQueryService.get_chain_by_correlation(
             correlation_id=corr_id,

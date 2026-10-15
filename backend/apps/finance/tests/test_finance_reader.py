@@ -15,8 +15,6 @@ from datetime import date
 import pytest
 
 from apps.common.tenancy.context import set_tenant_context
-from apps.contracts.models.contract import Contract, ContractStatus, ResourceSupplyType
-from apps.contracts.repositories.contract_repo import ContractRepository
 from apps.finance.models.transaction import Transaction, TransactionStatus, TransactionType
 from apps.finance.services.finance_reader import FinanceReaderService
 
@@ -110,7 +108,7 @@ class TestFinanceReaderService:
 
     def test_limit_returns_most_recent(self):
         for i in range(8):
-            tx = self._make_tx(amount=(i + 1) * 100)
+            _tx = self._make_tx(amount=(i + 1) * 100)
 
         result = self.reader.get_last_posted_payments(self.tenant_id, self.contract_id, limit=3)
 

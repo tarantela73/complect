@@ -9,6 +9,7 @@ from ninja import Query, Router
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.contracts.models.contract import ContractStatus
+from apps.contracts.policies.closure_policy import ContractClosurePolicyViolation
 from apps.contracts.queries.attachment_queries import get_attachments_list
 from apps.contracts.queries.contract_queries import (
     get_contract_detail,
@@ -26,7 +27,6 @@ from apps.contracts.schemas.contract_dto import (
     ContractResponseSchema,
     ContractUpdateSchema,
 )
-from apps.contracts.policies.closure_policy import ContractClosurePolicyViolation
 from apps.contracts.services.attachment_service import AttachmentService
 from apps.contracts.services.contract_activate_service import ContractActivateService
 from apps.contracts.services.contract_closure import ContractClosureService

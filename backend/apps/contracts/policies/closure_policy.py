@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from apps.contracts.models.contract import Contract, ContractStatus
 
 
-class ContractClosurePolicyViolation(ValidationError):
+class ContractClosurePolicyViolation(ValidationError):  # noqa: N818 - established domain exception contract
     """Raised when the three-condition closure gate is not met."""
 
     def __init__(self, detail: dict[str, bool]) -> None:

@@ -1,7 +1,7 @@
 # backend/apps/common/tests/test_chain_completeness_monitor.py
 import uuid
 from datetime import timedelta
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone as tz
@@ -121,7 +121,7 @@ class TestChainCompletenessMonitorMeasure:
         Chain is complete only when BOTH nodes are acked (Invariant 4).
         """
         root = _make_outbox()
-        compensation = _make_outbox(causal_root_id=root.causal_root_id)
+        _compensation = _make_outbox(causal_root_id=root.causal_root_id)
 
         _ack(root)
         # compensation not acked

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import ClassVar, Optional
 
-
 _STATUS_LABELS = {
     "open": "Открыта",
     "in_progress": "В работе",

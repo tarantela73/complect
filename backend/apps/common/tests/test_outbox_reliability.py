@@ -2,11 +2,11 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
-import apps.common.tasks.outbox_dispatcher as dispatcher_module
 import pytest
 from django.conf import settings
 from django.utils import timezone as tz
 
+import apps.common.tasks.outbox_dispatcher as dispatcher_module
 from apps.common.events.contracts import ContractClosedEvent
 from apps.common.models.outbox import OutboxRecord
 from apps.common.services.outbox_service import TransactionalOutboxService

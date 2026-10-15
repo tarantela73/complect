@@ -129,6 +129,8 @@ class Stand:
         return self.register("container", result.stdout.strip())
 
     def preflight(self):
+        if not (ROOT / ".env.dev.example").is_file():
+            raise StandError("required checkout input missing: .env.dev.example")
         context = self.docker("context", "show").stdout.strip()
         endpoint = json.loads(self.docker("context", "inspect", context).stdout)[0][
             "Endpoints"
