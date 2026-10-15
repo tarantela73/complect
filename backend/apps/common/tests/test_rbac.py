@@ -9,8 +9,9 @@ Coverage targets:
   - require_permission decorator: unauthenticated, allowed, denied
   - RoleBinding model constraints
 """
+
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import PermissionDenied
@@ -18,7 +19,6 @@ from django.test import RequestFactory, override_settings
 
 from apps.common.models.rbac import Permission, Role, RoleBinding, RolePermission
 from apps.common.security.policy_engine import PolicyEngine, _cache_key
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -286,10 +286,33 @@ class TestPolicyEngineTenantIsolation:
 
 
 class TestRequirePermissionDecorator:
+    @pytest.fixture(autouse=True)
+    def clean_request_context(self):
+        from apps.common.context.core import clear_context
+
+        clear_context()
+        yield
+        clear_context()
+
     def _make_request(self, user_id=None, tenant_id=None):
-        request = MagicMock()
-        request.jwt_user_id = user_id
-        request.jwt_tenant_id = tenant_id
+        import jwt
+        from django.conf import settings
+
+        from apps.common.api.auth import jwt_auth
+        from apps.common.contracts.auth_context import ValidatedAuthContext
+
+        request = RequestFactory().get("/")
+        if user_id is not None and tenant_id is not None:
+            token = jwt.encode(
+                {"user_id": str(user_id), "tenant_id": str(tenant_id), "type": "access", "exp": 9999999999},
+                settings.SECRET_KEY,
+                algorithm="HS256",
+            )
+            request.META["HTTP_AUTHORIZATION"] = "Bearer " + token
+            # Policy tests isolate the users Protocol; HTTP tests exercise the real adapter.
+            with patch("apps.common.api.auth.get_auth_context_validator") as validator:
+                validator.return_value.validate.return_value = ValidatedAuthContext(user_id, tenant_id)
+                assert jwt_auth(request)
         return request
 
     def test_unauthenticated_raises_permission_denied(self):

@@ -11,6 +11,16 @@ from apps.common.context.core import (
     get_user_id,
     is_primary_db_enforced,
 )
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token
+
+
+def authenticated_client(tenant_id=None):
+    user = User.objects.create_user(
+        username="context-" + uuid.uuid4().hex,
+        tenant_id=tenant_id or uuid.uuid4(),
+    )
+    return Client(headers={"Authorization": "Bearer " + _make_access_token(user)})
 
 
 # [ИСПРАВЛЕНО]: Жесткий ИБ-заслон. Принудительно взводим маршрутизатор config.urls для тест-раннера
@@ -19,7 +29,7 @@ from apps.common.context.core import (
 class TestTransportContextIsolation:
     def test_context_cleanup_after_request(self):
         """[TEST 1: CLEANUP] Гарантирует тотальное выжигание ВСЕХ ContextVar из потока."""
-        client = Client()
+        client = authenticated_client()
         tenant_id = uuid.uuid4()
         user_id = uuid.uuid4()
 
@@ -49,7 +59,7 @@ class TestTransportContextIsolation:
 
         assert is_primary_db_enforced() is False
 
-    def test_protected_route_requires_context_headers(self):
+    def test_protected_route_requires_access_bearer(self):
         """[TEST 2: FAIL-CLOSED] Проверяет защиту доменного периметра (401)."""
         client = Client()
         response = client.get(
@@ -59,8 +69,8 @@ class TestTransportContextIsolation:
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "AUTH_GATE_DENIED"
 
-    def test_malformed_headers_rejected(self):
-        """[TEST 3: MALFORMED UUID] Проверяет отсечку битых UUID в заголовках (400)."""
+    def test_malformed_identity_headers_do_not_authenticate(self):
+        """[TEST 3] Identity headers never replace access authentication."""
         client = Client()
         headers = {
             "HTTP_X_TENANT_ID": "INVALID-UUID-STRING",
@@ -68,12 +78,12 @@ class TestTransportContextIsolation:
             "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
         }
         response = client.get("/api/v1/contracts/", **headers)
-        assert response.status_code == 400
-        assert response.json()["error"]["code"] == "MALFORMED_CONTEXT_HEADERS"
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "AUTH_GATE_DENIED"
 
     def test_malformed_correlation_id_rejected(self):
         """[TEST 4: MALFORMED CORRELATION ID] Верифицирует валидацию UUID для Correlation-ID (400)."""
-        client = Client()
+        client = authenticated_client()
         headers = {
             "HTTP_X_TENANT_ID": str(uuid.uuid4()),
             "HTTP_X_USER_ID": str(uuid.uuid4()),
@@ -87,11 +97,10 @@ class TestTransportContextIsolation:
 
     def test_context_isolation_between_requests(self):
         """[TEST 5: LEAK PREVENTION] Гарантирует изоляцию памяти между последовательными запросами."""
-        client = Client()
         tenant_a = uuid.uuid4()
         tenant_b = uuid.uuid4()
 
-        response_a = client.get(
+        response_a = authenticated_client(tenant_a).get(
             "/api/v1/contracts/",
             HTTP_X_TENANT_ID=str(tenant_a),
             HTTP_X_USER_ID=str(uuid.uuid4()),
@@ -101,7 +110,7 @@ class TestTransportContextIsolation:
         )
         assert response_a.status_code == 200
 
-        response_b = client.get(
+        response_b = authenticated_client(tenant_b).get(
             "/api/v1/contracts/",
             HTTP_X_TENANT_ID=str(tenant_b),
             HTTP_X_USER_ID=str(uuid.uuid4()),
@@ -131,7 +140,7 @@ class TestTransportContextIsolation:
 
     def test_primary_flag_cleanup(self):
         """[TEST 8: PRIMARY FLAG CLEANUP] Проверяет сброс флага Command Side базы в False."""
-        client = Client()
+        client = authenticated_client()
         headers = {
             "HTTP_X_TENANT_ID": str(uuid.uuid4()),
             "HTTP_X_USER_ID": str(uuid.uuid4()),

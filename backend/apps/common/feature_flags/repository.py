@@ -35,20 +35,14 @@ class FeatureFlagRepository:
         except ObjectDoesNotExist:
             # SRE-Защита: Если флага нет в БД, по умолчанию фича ВЫКЛЮЧЕНА (Safe Fail)
             logger.error("FEATURE_FLAG_MISSING_IN_DB", flag_name=flag_name)
-            redis_client.setex(
-                redis_key, 300, "0"
-            )  # Кэшируем негативный ответ на 5 минут
+            redis_client.setex(redis_key, 300, "0")  # Кэшируем негативный ответ на 5 минут
             return False
 
     @classmethod
     def set_flag_state(cls, flag_name: str, enable: bool) -> None:
         """Транзакционно изменяет состояние флага в СУБД и инвалидирует Redis кэш."""
-        FeatureFlag.objects.update_or_create(
-            name=flag_name, defaults={"is_enabled": enable}
-        )
+        FeatureFlag.objects.update_or_create(name=flag_name, defaults={"is_enabled": enable})
         redis_client = settings.REDIS_CLIENT
         # Моментально выбиваем старый кэш (Cache Invalidation)
         redis_client.delete(f"{cls.CACHE_PREFIX}{flag_name}")
-        logger.info(
-            "FEATURE_FLAG_STATE_CHANGED", flag_name=flag_name, is_enabled=enable
-        )
+        logger.info("FEATURE_FLAG_STATE_CHANGED", flag_name=flag_name, is_enabled=enable)

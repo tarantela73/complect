@@ -75,8 +75,8 @@ class BaseEnterpriseModel(models.Model):
                 name="idx_tenant_cursor",
             ),
         ]
-        
-        
+
+
 class AuditIntegrityLog(models.Model):
     """
     Append-only audit chain.
@@ -157,4 +157,4 @@ class AuditIntegrityLog(models.Model):
                 condition=~Q(current_hash=""),
                 name="audit_current_hash_not_empty",
             ),
-        ]        
+        ]

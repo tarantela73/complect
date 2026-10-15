@@ -29,7 +29,9 @@ class IdempotencyEnforcementMiddleware:
 
     # Auth endpoints issue/rotate tokens — they are NOT idempotent by design
     # (each call produces a new token), so idempotency enforcement is skipped.
-    IDEMPOTENCY_EXEMPT_PREFIXES = ("/api/v1/auth/",)
+    # Public endpoints are anonymous (no auth context for Redis key) and protected
+    # by Cloudflare Turnstile + WAF rate limiting instead (ADR-0023).
+    IDEMPOTENCY_EXEMPT_PREFIXES = ("/api/v1/auth/", "/api/v1/public/")
 
     def __init__(self, get_response):
         self.get_response = get_response

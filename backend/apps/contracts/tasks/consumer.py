@@ -7,6 +7,7 @@ ensure snapshot idempotency: if seq=5 arrived before seq=4, seq=4 is discarded.
 
 This is the canonical Mode B template. Copy and adapt for new snapshot consumers.
 """
+
 import uuid
 
 import structlog

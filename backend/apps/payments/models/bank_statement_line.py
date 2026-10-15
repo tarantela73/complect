@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import uuid
+from typing import TYPE_CHECKING
+
 from django.db import models
 
 from apps.common.models.base import BaseEnterpriseModel
@@ -24,6 +29,9 @@ class BankStatementLine(BaseEnterpriseModel):
     raw_line хранит исходный текст строки для отладки парсера.
     transaction_id и contract_id — loose UUID-ссылки без FK (Domain Isolation ADR-0005).
     """
+
+    if TYPE_CHECKING:
+        statement_id: uuid.UUID
 
     statement = models.ForeignKey(
         BankStatement,

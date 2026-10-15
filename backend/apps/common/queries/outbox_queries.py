@@ -2,6 +2,7 @@
 CQRS Query Side — system-wide Outbox health metrics.
 Read-only. No tenant scoping — operational visibility is cross-tenant by design.
 """
+
 from apps.common.models.outbox import OutboxRecord
 
 

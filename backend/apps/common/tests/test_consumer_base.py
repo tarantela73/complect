@@ -11,9 +11,10 @@ Covers:
 - FinanceContractClosedConsumer: posts transaction, emits TransactionPostedEvent
 - ContractsTransactionSyncConsumer: updates paid_amount, fence guards ordering
 """
+
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,6 +29,7 @@ _NOW = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_outbox(
     event_type: str = "contracts.ContractClosed",
@@ -141,9 +143,9 @@ class _OptionalEmissionConsumer(BaseDomainConsumer):
 # StreamEvent construction
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestStreamEventConstruction:
-
     def test_fields_populated_from_outbox_record(self):
         agg_id = uuid.uuid4()
         rec = _make_outbox(aggregate_id=agg_id, aggregate_type="contracts.contract", aggregate_seq=7)
@@ -172,9 +174,9 @@ class TestStreamEventConstruction:
 # Idempotency
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestIdempotency:
-
     def test_first_claim_processes_event(self):
         consumer = _StrictConsumer()
         rec = _make_outbox()
@@ -199,6 +201,7 @@ class TestIdempotency:
         # Here we verify the idempotency contract at the service layer:
         # claim() returns False when a ProcessedEvent row already exists.
         from apps.common.services.consumer_idempotency import ConsumerIdempotencyService
+
         rec = _make_outbox()
         tid = uuid.UUID(str(rec.payload_json.get("tenant_id", str(_TENANT))))
         inst_a = uuid.uuid4()
@@ -226,9 +229,9 @@ class TestIdempotency:
 # Mode B — Fence check
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestFenceCheck:
-
     def _fenced(self, agg_id: uuid.UUID, seq: int) -> OutboxRecord:
         return _make_outbox(
             event_type="finance.TransactionPosted",
@@ -292,15 +295,13 @@ class TestFenceCheck:
 # Incident routing on failure
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestIncidentRouting:
-
     def test_process_failure_routes_incident(self):
         consumer = _FailingConsumer()
         rec = _make_outbox()
-        with patch(
-            "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
-        ) as mock_route:
+        with patch("apps.common.services.incident_routing.IncidentRoutingPolicy.route") as mock_route:
             mock_decision = MagicMock()
             mock_decision.structlog_labels = {"routing.owner": "platform_sre"}
             mock_route.return_value = mock_decision
@@ -332,9 +333,7 @@ class TestIncidentRouting:
         event = BaseDomainConsumer._to_stream_event(rec)
         exc = RuntimeError("repeat_error")
 
-        with patch(
-            "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
-        ) as mock_route:
+        with patch("apps.common.services.incident_routing.IncidentRoutingPolicy.route") as mock_route:
             mock_decision = MagicMock()
             mock_decision.structlog_labels = {}
             mock_route.return_value = mock_decision
@@ -356,9 +355,9 @@ class TestIncidentRouting:
 # run_batch
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestRunBatch:
-
     def test_returns_count_of_records_fetched(self):
         consumer = _StrictConsumer()
         for _ in range(3):
@@ -370,7 +369,7 @@ class TestRunBatch:
         consumer = _StrictConsumer()
         acked_rec = _make_outbox()
         consumer.handle(acked_rec)
-        fresh_rec = _make_outbox()
+        _fresh_rec = _make_outbox()
         count = consumer.run_batch(batch_size=100)
         assert count == 1
         assert len(consumer.processed) == 2
@@ -383,6 +382,7 @@ class TestRunBatch:
 
     def test_excludes_permanently_failed_records(self):
         from django.utils import timezone as tz
+
         consumer = _StrictConsumer()
         rec = _make_outbox()
         rec.failed_permanently_at = tz.now()
@@ -406,9 +406,9 @@ class TestRunBatch:
     def test_strict_mode_orders_by_aggregate_seq(self):
         consumer = _StrictConsumer()
         agg_id = uuid.uuid4()
-        r3 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=3)
-        r1 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=1)
-        r2 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=2)
+        _r3 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=3)
+        _r1 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=1)
+        _r2 = _make_outbox(aggregate_id=agg_id, aggregate_type="c", aggregate_seq=2)
         consumer.run_batch()
         seqs = [e.aggregate_seq for e in consumer.processed]
         assert seqs == [1, 2, 3]
@@ -469,9 +469,9 @@ class TestRunBatch:
 # Emission enforcement
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestEmissionVerification:
-
     def test_required_passes_when_emission_exists(self):
         consumer = _RequiredEmissionConsumer(should_emit=True)
         rec = _make_outbox()
@@ -496,9 +496,7 @@ class TestEmissionVerification:
 
         consumer = _RequiredEmissionConsumer(should_emit=False)
         rec = _make_outbox()
-        with patch(
-            "apps.common.services.incident_routing.IncidentRoutingPolicy.route"
-        ) as mock_route:
+        with patch("apps.common.services.incident_routing.IncidentRoutingPolicy.route") as mock_route:
             mock_decision = MagicMock()
             mock_decision.structlog_labels = {}
             mock_route.return_value = mock_decision
@@ -543,9 +541,7 @@ class TestEmissionVerification:
         with structlog.testing.capture_logs() as logs:
             consumer.handle(rec)
         warning_events = [
-            e for e in logs
-            if e.get("log_level") == "warning"
-            and e.get("event") == "consumer_optional_emission_absent"
+            e for e in logs if e.get("log_level") == "warning" and e.get("event") == "consumer_optional_emission_absent"
         ]
         assert len(warning_events) == 1
         assert warning_events[0]["event_type"] == "fake.OptionalEvent"
@@ -561,11 +557,12 @@ class TestEmissionVerification:
 # FinanceContractClosedConsumer (integration)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestFinanceContractClosedConsumer:
-
     def _make_contract(self, contract_id: uuid.UUID, total_amount: int = 50000) -> None:
         from apps.contracts.models.contract import Contract
+
         Contract.objects.create(
             id=contract_id,
             tenant_id=_TENANT,
@@ -576,8 +573,8 @@ class TestFinanceContractClosedConsumer:
         )
 
     def test_posts_transaction_for_positive_remaining_amount(self):
-        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
         from apps.finance.models.transaction import Transaction
+        from apps.finance.tasks.consumer import FinanceContractClosedConsumer
 
         contract_id = uuid.uuid4()
         self._make_contract(contract_id, total_amount=50000)
@@ -734,11 +731,12 @@ class TestFinanceContractClosedConsumer:
 # ContractsTransactionSyncConsumer (Mode B)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 class TestContractsTransactionSyncConsumer:
-
     def _make_contract(self, contract_id: uuid.UUID, paid_amount: int = 0) -> None:
         from apps.contracts.models.contract import Contract
+
         Contract.objects.create(
             id=contract_id,
             tenant_id=_TENANT,
