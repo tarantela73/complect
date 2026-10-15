@@ -74,29 +74,31 @@ class BankStatementService:
                 failed_lines=failed_count,
             )
 
-            BankStatementLine.objects.bulk_create([
-                BankStatementLine(
-                    id=uuid.uuid4(),
-                    tenant_id=tenant_id,
-                    statement=stmt,
-                    line_number=pl.line_number,
-                    raw_line=pl.raw_line,
-                    parse_status=pl.parse_status,
-                    parse_error=pl.parse_error or "",
-                    transaction_date=pl.transaction_date,
-                    amount=pl.amount,
-                    direction=pl.direction or "",
-                    currency=pl.currency or "",
-                    description=pl.description or "",
-                    counterparty_name=pl.counterparty_name or "",
-                    counterparty_inn=pl.counterparty_inn or "",
-                    counterparty_account=pl.counterparty_account or "",
-                    reference=pl.reference or "",
-                    doc_number=pl.doc_number or "",
-                    doc_type=pl.doc_type or "",
-                )
-                for pl in result.lines
-            ])
+            BankStatementLine.objects.bulk_create(
+                [
+                    BankStatementLine(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        statement=stmt,
+                        line_number=pl.line_number,
+                        raw_line=pl.raw_line,
+                        parse_status=pl.parse_status,
+                        parse_error=pl.parse_error or "",
+                        transaction_date=pl.transaction_date,
+                        amount=pl.amount,
+                        direction=pl.direction or "",
+                        currency=pl.currency or "",
+                        description=pl.description or "",
+                        counterparty_name=pl.counterparty_name or "",
+                        counterparty_inn=pl.counterparty_inn or "",
+                        counterparty_account=pl.counterparty_account or "",
+                        reference=pl.reference or "",
+                        doc_number=pl.doc_number or "",
+                        doc_type=pl.doc_type or "",
+                    )
+                    for pl in result.lines
+                ]
+            )
 
         stmt.refresh_from_db()
         return stmt

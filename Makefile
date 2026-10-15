@@ -161,3 +161,10 @@ prune:
 
 health:
 	curl http://localhost:8010/health/
+
+# Disposable Payments contract: same runner as the required CI job.
+test-payments-stand:
+	python3 -B infra/scripts/run_payments_gate.py $(PAYMENTS_GATE_ARGS)
+
+test-payments-gate:
+	python3 -B infra/scripts/run_payments_gate.py --scope full $(PAYMENTS_GATE_ARGS)

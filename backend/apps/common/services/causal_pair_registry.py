@@ -30,10 +30,12 @@ class FinalizationBoundary(Protocol):
 
 # All event types referenced by any CausalPairDefinition must appear here.
 # Adding a pair with an unregistered event type will fail the contract test.
-KNOWN_EVENTS: frozenset[str] = frozenset({
-    "contracts.ContractClosed",
-    "finance.TransactionPosted",
-})
+KNOWN_EVENTS: frozenset[str] = frozenset(
+    {
+        "contracts.ContractClosed",
+        "finance.TransactionPosted",
+    }
+)
 
 CAUSAL_PAIRS: tuple[CausalPairDefinition, ...] = (
     CausalPairDefinition(
@@ -125,7 +127,6 @@ class OutboxBackedDomainEffectRegistry:
         return CausalPairRegistry.expected_effects_for(event_type)
 
     def observed_effects(self, causal_root_id: uuid.UUID) -> frozenset[str]:
-        from django.db.models import Q
 
         from apps.common.models.outbox import OutboxRecord
 

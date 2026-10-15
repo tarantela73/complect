@@ -39,7 +39,6 @@ def _ack_outbox(outbox_record: OutboxRecord, tenant_id=None):
 
 @pytest.mark.django_db
 class TestGetChainByRoot:
-
     def test_single_node_acked_chain_is_complete(self):
         """Normal flow: root record created, acked → chain_complete=True."""
         root = _make_outbox()
@@ -211,7 +210,6 @@ class TestGetChainByRoot:
 
 @pytest.mark.django_db
 class TestGetChainByCorrelation:
-
     def test_returns_all_events_with_correlation_id(self):
         """Class B query returns all OutboxRecords sharing the same correlation_id."""
         corr_id = uuid.uuid4()
@@ -261,10 +259,8 @@ class TestGetChainByCorrelation:
         corr_id = uuid.uuid4()
         r1 = _make_outbox(correlation_id=corr_id)
         # Force r2 to have a later created_at
-        OutboxRecord.objects.filter(pk=r1.pk).update(
-            created_at=tz.now() - timedelta(seconds=10)
-        )
-        r2 = _make_outbox(correlation_id=corr_id)
+        OutboxRecord.objects.filter(pk=r1.pk).update(created_at=tz.now() - timedelta(seconds=10))
+        _r2 = _make_outbox(correlation_id=corr_id)
 
         chain = CausalQueryService.get_chain_by_correlation(
             correlation_id=corr_id,
@@ -278,7 +274,6 @@ class TestGetChainByCorrelation:
 
 @pytest.mark.django_db
 class TestGetAggregateHistory:
-
     def test_returns_empty_chain_with_aggregate_seq_unavailable(self):
         """Class C is blocked on ADR-0012 — must return empty chain with correct missing layer."""
         chain = CausalQueryService.get_aggregate_history(

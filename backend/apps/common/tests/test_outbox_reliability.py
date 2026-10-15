@@ -2,11 +2,11 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
-import apps.common.tasks.outbox_dispatcher as dispatcher_module
 import pytest
 from django.conf import settings
 from django.utils import timezone as tz
 
+import apps.common.tasks.outbox_dispatcher as dispatcher_module
 from apps.common.events.contracts import ContractClosedEvent
 from apps.common.models.outbox import OutboxRecord
 from apps.common.services.outbox_service import TransactionalOutboxService
@@ -32,7 +32,6 @@ def _push() -> OutboxRecord:
 
 @pytest.mark.django_db(transaction=True)
 class TestOutboxReliabilityMesh:
-
     # ── at-least-once delivery ────────────────────────────────────────────────
 
     def test_record_retained_on_redis_failure(self):
@@ -202,6 +201,7 @@ class TestOutboxReliabilityMesh:
 
         def hold_lock_in_separate_connection():
             from django.db import connections
+
             conn = connections.create_connection("default")
             try:
                 conn.ensure_connection()
@@ -286,6 +286,7 @@ class TestOutboxReliabilityMesh:
     def test_push_fires_dispatcher_on_commit(self):
         """push_to_outbox must enqueue the dispatcher task after the transaction commits."""
         from django.core.cache import cache
+
         cache.delete("outbox:dispatch:wakeup")
         cache.delete("outbox:dispatch:inflight")
 
@@ -306,6 +307,7 @@ class TestOutboxReliabilityMesh:
         trigger a duplicate dispatcher — the first task is still in-flight.
         """
         from django.core.cache import cache
+
         cache.delete("outbox:dispatch:wakeup")
         cache.delete("outbox:dispatch:inflight")
 
@@ -320,18 +322,15 @@ class TestOutboxReliabilityMesh:
             cache.delete("outbox:dispatch:wakeup")  # simulate TTL expiry of coalesce window
             _push()  # second write: wakeup acquired BUT inflight still set → no second task
 
-        assert len(dispatch_calls) == 1, (
-            f"Expected 1 dispatch (inflight guard), got {len(dispatch_calls)}"
-        )
+        assert len(dispatch_calls) == 1, f"Expected 1 dispatch (inflight guard), got {len(dispatch_calls)}"
 
     def test_task_clears_inflight_guard_on_completion(self):
         """Dispatcher task must delete the inflight guard key after processing."""
         from django.core.cache import cache
+
         cache.set("outbox:dispatch:inflight", 1, timeout=30)
         _push()
 
         run_outbox_polling_dispatcher_task()
 
-        assert cache.get("outbox:dispatch:inflight") is None, (
-            "Inflight guard was not cleared after task completed"
-        )
+        assert cache.get("outbox:dispatch:inflight") is None, "Inflight guard was not cleared after task completed"

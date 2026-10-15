@@ -12,12 +12,13 @@ ManualMatchDialog happy-path and auto-matching can be tested in the browser:
   - 2 PENDING  transactions (amount + date match available)
   - 1 POSTED   transaction  (amount + INN match)
 """
+
 from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 from apps.finance.models.transaction import Transaction, TransactionStatus, TransactionType
 
@@ -28,7 +29,7 @@ _SEED = [
     # Strategy 1 candidates — exact external_ref match with doc_number in bank line
     dict(
         external_ref="DOC-2025-001",
-        amount=1_500_000,       # 15 000.00 руб
+        amount=1_500_000,  # 15 000.00 руб
         counterparty_inn="7700000001",
         value_date=_TODAY - timedelta(days=1),
         transaction_type=TransactionType.PAYMENT,
@@ -36,7 +37,7 @@ _SEED = [
     ),
     dict(
         external_ref="DOC-2025-002",
-        amount=3_200_000,       # 32 000.00 руб
+        amount=3_200_000,  # 32 000.00 руб
         counterparty_inn="7700000002",
         value_date=_TODAY,
         transaction_type=TransactionType.PAYMENT,
@@ -45,7 +46,7 @@ _SEED = [
     # Strategy 2 candidates — amount + date window match
     dict(
         external_ref="",
-        amount=7_500_000,       # 75 000.00 руб
+        amount=7_500_000,  # 75 000.00 руб
         counterparty_inn="5000000001",
         value_date=_TODAY - timedelta(days=2),
         transaction_type=TransactionType.PAYMENT,
@@ -53,7 +54,7 @@ _SEED = [
     ),
     dict(
         external_ref="",
-        amount=12_000_000,      # 120 000.00 руб
+        amount=12_000_000,  # 120 000.00 руб
         counterparty_inn="5000000002",
         value_date=_TODAY - timedelta(days=1),
         transaction_type=TransactionType.PAYMENT,
@@ -62,7 +63,7 @@ _SEED = [
     # Strategy 3 candidate — amount + INN (POSTED, no external_ref, no easy date match)
     dict(
         external_ref="",
-        amount=45_000_000,      # 450 000.00 руб
+        amount=45_000_000,  # 450 000.00 руб
         counterparty_inn="9900000099",
         value_date=_TODAY - timedelta(days=30),
         transaction_type=TransactionType.PAYMENT,
@@ -92,17 +93,18 @@ class Command(BaseCommand):
 
         if options["clear"]:
             deleted, _ = Transaction.objects.filter(tenant_id=tenant_id).delete()
-            self.stdout.write(self.style.WARNING(
-                f"Deleted {deleted} transactions for tenant {tenant_id}"
-            ))
+            self.stdout.write(self.style.WARNING(f"Deleted {deleted} transactions for tenant {tenant_id}"))
 
         created = 0
         for spec in _SEED:
             # Idempotent: skip if external_ref already exists for this tenant
-            if spec["external_ref"] and Transaction.objects.filter(
-                tenant_id=tenant_id,
-                external_ref=spec["external_ref"],
-            ).exists():
+            if (
+                spec["external_ref"]
+                and Transaction.objects.filter(
+                    tenant_id=tenant_id,
+                    external_ref=spec["external_ref"],
+                ).exists()
+            ):
                 self.stdout.write(f"  skip (exists): {spec['external_ref']}")
                 continue
 
@@ -122,6 +124,4 @@ class Command(BaseCommand):
             label = spec["external_ref"] or f"amount={spec['amount']} inn={spec['counterparty_inn']}"
             self.stdout.write(f"  created: {label}")
 
-        self.stdout.write(self.style.SUCCESS(
-            f"\nDone: {created} transaction(s) created for tenant {tenant_id}"
-        ))
+        self.stdout.write(self.style.SUCCESS(f"\nDone: {created} transaction(s) created for tenant {tenant_id}"))

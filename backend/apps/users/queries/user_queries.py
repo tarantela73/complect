@@ -11,6 +11,7 @@ from apps.users.services.auth_service import _pk_to_uuid4
 @dataclass
 class UserListItem:
     id: int
+    user_uuid: str
     email: str
     full_name: str
     is_active: bool
@@ -53,15 +54,18 @@ def list_users(tenant_id: uuid.UUID) -> list[UserListItem]:
     result = []
     for u in users:
         user_uuid = _pk_to_uuid4(u.pk)
-        result.append(UserListItem(
-            id=u.pk,
-            email=u.email,
-            full_name=u.first_name or u.username,
-            is_active=u.is_active,
-            roles=sorted(roles_by_user_uuid.get(user_uuid, [])),
-            last_login=u.last_login.isoformat() if u.last_login else None,
-            created_at=u.date_joined.isoformat(),
-        ))
+        result.append(
+            UserListItem(
+                id=u.pk,
+                user_uuid=user_uuid,
+                email=u.email,
+                full_name=u.first_name or u.username,
+                is_active=u.is_active,
+                roles=sorted(roles_by_user_uuid.get(user_uuid, [])),
+                last_login=u.last_login.isoformat() if u.last_login else None,
+                created_at=u.date_joined.isoformat(),
+            )
+        )
     return result
 
 
@@ -71,9 +75,7 @@ def list_roles() -> list[RoleDetail]:
         RoleDetail(
             name=r.name,
             description=r.description,
-            permissions=sorted(
-                f"{p.resource}.{p.action}" for p in r.permissions.all()
-            ),
+            permissions=sorted(f"{p.resource}.{p.action}" for p in r.permissions.all()),
         )
         for r in roles
     ]

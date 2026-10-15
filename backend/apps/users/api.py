@@ -7,13 +7,18 @@ from ninja import Router, Schema
 from apps.common.api.auth import jwt_auth
 from apps.users.schemas.auth import (
     LoginRequest,
+    MergeConvergenceCompleteRequest,
+    MergeConvergenceStartRequest,
+    MergeConvergenceStartResponse,
     MFASetupResponse,
     MFAStatusResponse,
     MFAVerifyRequest,
     RefreshRequest,
     TokenResponse,
 )
+from apps.users.security.deferred_merge_execution_policy import DeferredMergeExecutionDisabled
 from apps.users.services import auth_service, mfa_service
+from apps.users.services.merge_convergence_service import MergeConvergenceError, MergeConvergenceService
 
 router = Router(tags=["auth"])
 
@@ -116,26 +121,81 @@ def mfa_setup(request: HttpRequest):
     from apps.users.models import User
 
     try:
-        user = User.objects.get(pk=request.jwt_user_id)
+        user = User.objects.get(
+            pk=request.jwt_user_id.int & 0xFFFFFFFFFFFF,
+            tenant_id=request.jwt_tenant_id,
+        )
     except User.DoesNotExist:
         return 403, {"error": {"code": "USER_NOT_FOUND"}}
 
-    secret, otpauth_url = mfa_service.setup_totp(user)
+    try:
+        secret, otpauth_url = mfa_service.setup_totp(user)
+    except PermissionDenied as exc:
+        return 403, {"error": {"code": str(exc)}}
     return 200, MFASetupResponse(secret=secret, otpauth_url=otpauth_url)
 
 
-@router.post("/mfa/confirm", response={200: MFAStatusResponse, 400: dict}, auth=jwt_auth)
+@router.post("/mfa/confirm", response={200: MFAStatusResponse, 400: dict, 403: dict}, auth=jwt_auth)
 def mfa_confirm(request: HttpRequest, body: MFAVerifyRequest):
     from apps.users.models import User
 
     try:
-        user = User.objects.get(pk=request.jwt_user_id)
+        user = User.objects.get(
+            pk=request.jwt_user_id.int & 0xFFFFFFFFFFFF,
+            tenant_id=request.jwt_tenant_id,
+        )
     except User.DoesNotExist:
         return 400, {"error": {"code": "USER_NOT_FOUND"}}
 
     try:
         mfa_service.confirm_totp_setup(user, body.totp_code)
     except PermissionDenied as exc:
+        if str(exc) == "LEGAL_HOLD_ACTIVE":
+            return 403, {"error": {"code": str(exc)}}
         return 400, {"error": {"code": str(exc), "message": "Неверный код MFA."}}
 
     return 200, MFAStatusResponse(mfa_enabled=True)
+
+
+@router.post(
+    "/merge-convergence/start",
+    response={200: MergeConvergenceStartResponse, 403: dict},
+    auth=jwt_auth,
+)
+def merge_convergence_start(request: HttpRequest, body: MergeConvergenceStartRequest):
+    actor_pk = request.jwt_user_id.int & 0xFFFFFFFFFFFF
+    try:
+        challenge = MergeConvergenceService().start(
+            operation_id=body.operation_id,
+            actor_pk=actor_pk,
+        )
+    except (MergeConvergenceError, DeferredMergeExecutionDisabled) as exc:
+        return 403, {"error": {"code": str(exc), "message": "Merge convergence is unavailable."}}
+    return 200, MergeConvergenceStartResponse(
+        challenge_token=challenge.challenge_token,
+        idempotency_key=challenge.idempotency_key,
+        expires_at=challenge.expires_at,
+        mfa_secret=challenge.mfa_secret,
+        otpauth_url=challenge.otpauth_url,
+    )
+
+
+@router.post(
+    "/merge-convergence/complete",
+    response={204: None, 403: dict},
+    auth=jwt_auth,
+)
+def merge_convergence_complete(request: HttpRequest, body: MergeConvergenceCompleteRequest):
+    actor_pk = request.jwt_user_id.int & 0xFFFFFFFFFFFF
+    try:
+        MergeConvergenceService().complete(
+            challenge_token=body.challenge_token,
+            actor_pk=actor_pk,
+            new_password=body.new_password,
+            totp_code=body.totp_code,
+            idempotency_key=body.idempotency_key,
+            requeue_id=body.requeue_id,
+        )
+    except (MergeConvergenceError, DeferredMergeExecutionDisabled) as exc:
+        return 403, {"error": {"code": str(exc), "message": "Merge convergence failed."}}
+    return 204, None

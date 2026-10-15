@@ -28,8 +28,8 @@ class ContractClosureService:
             # 1. Чтение строки с блокировкой FOR UPDATE на уровне репозитория [4.7 isolation policy]
             contract = ContractRepository.get_by_id_for_update(contract_id)
 
-            has_ready_documents = bool(AttachmentRepository.list_file_ids(contract_id))
-            ContractClosurePolicy.verify_closure_eligibility(contract, has_ready_documents)
+            document_conditions = AttachmentRepository.get_closure_conditions(contract_id)
+            ContractClosurePolicy.verify_closure_eligibility(contract, document_conditions)
 
             # 3. Атомарный CAS-апдейт через репозиторий с инкрементом версии
             success = ContractRepository.atomic_compare_and_swap(contract, status=ContractStatus.CLOSED)

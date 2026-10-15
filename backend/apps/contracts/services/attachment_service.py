@@ -30,6 +30,7 @@ class AttachmentService:
         file_id: uuid.UUID,
         actor_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        attachment_type: str = "OTHER",
     ) -> None:
         """
         Прикрепляет файл к договору.
@@ -42,9 +43,7 @@ class AttachmentService:
         contract = ContractRepository.get_by_id(contract_id)
 
         if contract.is_legal_hold or contract.status not in _MUTABLE_CONTRACT_STATUSES:
-            raise ValidationError(
-                f"Прикрепление файла невозможно: договор в статусе {contract.status}."
-            )
+            raise ValidationError(f"Прикрепление файла невозможно: договор в статусе {contract.status}.")
 
         meta: FileMetaDTO | None = self._files.get_file_meta(file_id, tenant_id)
         if meta is None:
@@ -52,8 +51,7 @@ class AttachmentService:
 
         if meta.status not in _ATTACHABLE_STATUSES:
             raise ValidationError(
-                f"Файл недоступен для прикрепления (статус: {meta.status}). "
-                "Прикреплять можно только AVAILABLE файлы."
+                f"Файл недоступен для прикрепления (статус: {meta.status}). Прикреплять можно только AVAILABLE файлы."
             )
 
         try:
@@ -61,6 +59,7 @@ class AttachmentService:
                 contract_id=contract_id,
                 file_id=file_id,
                 attached_by=actor_id,
+                attachment_type=attachment_type,
             )
         except IntegrityError as exc:
             raise ValidationError("Файл уже прикреплён к этому договору.") from exc

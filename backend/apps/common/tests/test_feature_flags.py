@@ -15,9 +15,7 @@ class TestFeatureFlagsGovernanceMesh:
         flag_name = "kill_switch_heavy_analytics"
 
         # 1. Создаем аварийный рубильник в базе данных и включаем его по умолчанию
-        FeatureFlag.objects.create(
-            name=flag_name, flag_type=FeatureFlagType.KILL_SWITCH, is_enabled=True
-        )
+        FeatureFlag.objects.create(name=flag_name, flag_type=FeatureFlagType.KILL_SWITCH, is_enabled=True)
 
         # Сбрасываем кэш, чтобы репозиторий прочитал свежие данные
         FeatureFlagRepository.set_flag_state(flag_name, enable=True)

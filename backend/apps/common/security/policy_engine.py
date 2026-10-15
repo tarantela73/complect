@@ -17,6 +17,7 @@ RoleBinding mutations via PolicyEngine.invalidate().
 Design invariant: PolicyEngine knows nothing about the causal graph. Authorization
 denials are audit events, NOT causal incidents. They do not appear in OutboxRecord.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -48,11 +49,7 @@ def _load_permissions(actor_id: uuid.UUID, tenant_id: uuid.UUID) -> list[str]:
         .prefetch_related("role__permissions")
     )
 
-    return [
-        f"{perm.action}:{perm.resource}"
-        for binding in bindings
-        for perm in binding.role.permissions.all()
-    ]
+    return [f"{perm.action}:{perm.resource}" for binding in bindings for perm in binding.role.permissions.all()]
 
 
 class PolicyEngine:
@@ -113,9 +110,7 @@ class PolicyEngine:
         """
         from apps.common.models.rbac import RoleBinding
 
-        bindings = RoleBinding.objects.filter(role_id=role_id, is_active=True).values_list(
-            "tenant_id", "user_id"
-        )
+        bindings = RoleBinding.objects.filter(role_id=role_id, is_active=True).values_list("tenant_id", "user_id")
         keys = [_cache_key(uuid.UUID(str(t)), uuid.UUID(str(u))) for t, u in bindings]
         if keys:
             cache.delete_many(keys)

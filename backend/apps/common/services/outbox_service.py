@@ -65,6 +65,7 @@ class TransactionalOutboxService:
                 from apps.common.tasks.outbox_dispatcher import (
                     run_outbox_polling_dispatcher_task,
                 )
+
                 if cache.add(_WAKEUP_CACHE_KEY, 1, timeout=_WAKEUP_COALESCE_TTL):
                     if cache.add(_INFLIGHT_CACHE_KEY, 1, timeout=_INFLIGHT_GUARD_TTL):
                         try:

@@ -9,7 +9,9 @@ from django.db import transaction
 
 from apps.common.context.core import get_correlation_id
 from apps.common.contracts.finance_contracts import TxCandidateDTO
+from apps.common.repository.sre_engine import ConcurrentModificationError, EnterpriseSreRepository
 from apps.common.services.outbox_service import TransactionalOutboxService
+from apps.common.tenancy.context import get_current_tenant_id
 from apps.payments.events import BankStatementLineMatchedEvent
 from apps.payments.models.bank_statement_line import BankStatementLine, MatchStatus
 
@@ -24,19 +26,27 @@ class ManualMatchService:
         transaction_id: uuid.UUID,
         confirmed_by: uuid.UUID,
     ) -> BankStatementLine:
+        _ensure_tenant_scope(tenant_id)
         from apps.finance.services.transaction_finder import get_transaction_finder  # noqa: PLC0415
 
         if get_transaction_finder().find_by_id(tenant_id, transaction_id) is None:
             raise PermissionDenied("TRANSACTION_NOT_IN_TENANT")
 
-        previous_status = line.match_status
         with transaction.atomic():
-            BankStatementLine.objects.filter(id=line.id, tenant_id=tenant_id).update(
-                match_status=MatchStatus.MATCHED,
-                match_confidence=100,
-                transaction_id=transaction_id,
-            )
-            line.refresh_from_db()
+            persisted = _lock_line_for_match(tenant_id, line)
+            previous_status = persisted.match_status
+            if (
+                persisted.match_status != MatchStatus.MATCHED
+                or persisted.match_confidence != 100
+                or persisted.transaction_id != transaction_id
+            ):
+                EnterpriseSreRepository.atomic_cas_update(
+                    line,
+                    match_status=MatchStatus.MATCHED,
+                    match_confidence=100,
+                    transaction_id=transaction_id,
+                )
+            line.refresh_from_db(using="default")
             TransactionalOutboxService.push_to_outbox(
                 BankStatementLineMatchedEvent.create(
                     correlation_id=_safe_correlation_id(),
@@ -58,16 +68,20 @@ class ManualMatchService:
         line: BankStatementLine,
         confirmed_by: uuid.UUID,
     ) -> BankStatementLine:
-        if line.match_status == MatchStatus.UNMATCHED:
-            return line
-        previous_status = line.match_status
+        _ensure_tenant_scope(tenant_id)
         with transaction.atomic():
-            BankStatementLine.objects.filter(id=line.id, tenant_id=tenant_id).update(
+            persisted = _lock_line_for_match(tenant_id, line)
+            if persisted.match_status == MatchStatus.UNMATCHED:
+                line.refresh_from_db(using="default")
+                return line
+            previous_status = persisted.match_status
+            EnterpriseSreRepository.atomic_cas_update(
+                line,
                 match_status=MatchStatus.UNMATCHED,
                 match_confidence=0,
                 transaction_id=None,
             )
-            line.refresh_from_db()
+            line.refresh_from_db(using="default")
             TransactionalOutboxService.push_to_outbox(
                 BankStatementLineMatchedEvent.create(
                     correlation_id=_safe_correlation_id(),
@@ -107,16 +121,36 @@ class ManualMatchService:
         if line.doc_number:
             _add(finder.find_by_external_ref(tenant_id, line.doc_number))
         if line.transaction_date:
-            _add(finder.find_by_amount_and_date(
-                tenant_id,
-                amount_kopecks,
-                date_from=line.transaction_date - _DATE_WINDOW,
-                date_to=line.transaction_date + _DATE_WINDOW,
-            ))
+            _add(
+                finder.find_by_amount_and_date(
+                    tenant_id,
+                    amount_kopecks,
+                    date_from=line.transaction_date - _DATE_WINDOW,
+                    date_to=line.transaction_date + _DATE_WINDOW,
+                )
+            )
         if line.counterparty_inn:
             _add(finder.find_by_amount_and_inn(tenant_id, amount_kopecks, line.counterparty_inn))
 
         return result
+
+
+def _ensure_tenant_scope(tenant_id: uuid.UUID) -> None:
+    if tenant_id != get_current_tenant_id():
+        raise PermissionDenied("LINE_NOT_IN_TENANT")
+
+
+def _lock_line_for_match(tenant_id: uuid.UUID, line: BankStatementLine) -> BankStatementLine:
+    persisted = (
+        BankStatementLine.objects.using("default")
+        .select_for_update()
+        .get(id=line.id, tenant_id=tenant_id)
+    )
+    if persisted.is_legal_hold:
+        raise PermissionDenied("LEGAL_HOLD_ACTIVE")
+    if persisted.version != line.version:
+        raise ConcurrentModificationError("OCC Conflict: Строка выписки была изменена параллельным процессом.")
+    return persisted
 
 
 def _to_kopecks(amount: Decimal | None) -> int | None:

@@ -2,6 +2,7 @@
 CQRS Query Side — read-only projections for contract attachments.
 Cross-domain read goes through FileServiceProtocol, no ORM FK to files.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -38,6 +39,7 @@ def get_attachments_list(
                 download_url=meta.download_url,
                 attached_by=attachment.attached_by,
                 attached_at=attachment.created_at,
+                attachment_type=attachment.attachment_type,
             )
         )
 

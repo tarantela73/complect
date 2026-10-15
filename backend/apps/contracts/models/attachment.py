@@ -6,6 +6,14 @@ from apps.common.models.base import BaseEnterpriseModel
 from apps.contracts.models.contract import Contract
 
 
+class AttachmentType(models.TextChoices):
+    CONTRACT_SIGNED = "CONTRACT_SIGNED", "Подписанный договор"
+    ACT_COMPLETED = "ACT_COMPLETED", "Акт выполненных работ"
+    ESTIMATE = "ESTIMATE", "Смета"
+    INVOICE = "INVOICE", "Счёт"
+    OTHER = "OTHER", "Прочее"
+
+
 class ContractAttachment(BaseEnterpriseModel):
     """
     Junction record: один файл (по file_id) прикреплён к одному договору.
@@ -26,6 +34,13 @@ class ContractAttachment(BaseEnterpriseModel):
     file_id = models.UUIDField(db_index=True)
 
     attached_by = models.UUIDField(editable=False)
+
+    attachment_type = models.CharField(
+        max_length=20,
+        choices=AttachmentType.choices,
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "contracts_attachments"

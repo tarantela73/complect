@@ -189,3 +189,9 @@ CLAUDE.md
 .claudeignore
 
 
+
+# Local disposable proof and secrets stay outside source.
+.dev/
+
+# Reviewed template required by the disposable gate; real env files remain ignored.
+!.env.dev.example

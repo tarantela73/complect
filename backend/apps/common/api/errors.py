@@ -66,6 +66,7 @@ def ninja_permission_denied_handler(request: HttpRequest, exc: Exception):
 # These fire when exceptions propagate past Ninja and all middleware
 # (e.g. CSRF failure, ASGI 404 for unknown paths, uncaught server errors).
 
+
 def django_bad_request(request: HttpRequest, exception=None):
     return JsonResponse(
         make_error_response("BAD_REQUEST", "Некорректный запрос."),

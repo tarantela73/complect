@@ -1,4 +1,5 @@
 # backend/config/settings/local.py
+import json
 import os
 
 import redis
@@ -15,6 +16,29 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 DEBUG = _env_bool("DEBUG", default=True)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+
+IAM_DEFERRED_MERGE_EXECUTION_ENABLED = _env_bool(
+    "IAM_DEFERRED_MERGE_EXECUTION_ENABLED",
+    default=False,
+)
+IAM_DEFERRED_MERGE_COVERAGE_DIGEST = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_DIGEST", "")
+IAM_DEFERRED_MERGE_COVERAGE_KEY_ID = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_KEY_ID", "")
+IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE", "")
+IAM_DEFERRED_MERGE_COVERAGE_COMMIT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_COMMIT", "")
+IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT", "")
+IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT", "")
+IAM_DEFERRED_MERGE_COVERAGE_NONCE = os.getenv("IAM_DEFERRED_MERGE_COVERAGE_NONCE", "")
+BUILD_COMMIT = os.getenv("BUILD_COMMIT", "")
+IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS = json.loads(
+    os.getenv("IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS", "{}"),
+)
+IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS = json.loads(
+    os.getenv("IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS", "{}"),
+)
+IAM_MFA_CURRENT_KEY_ID = os.getenv("IAM_MFA_CURRENT_KEY_ID", "")
+IAM_MFA_ENCRYPTION_KEYS = json.loads(os.getenv("IAM_MFA_ENCRYPTION_KEYS", "{}"))
+
 
 # ===========================================================================
 # DATABASE
@@ -23,7 +47,7 @@ DEBUG = _env_bool("DEBUG", default=True)
 DB_PASSWORD = get_secret(
     "POSTGRES_PASSWORD",
     secret_file_env="DATABASE_PASSWORD_FILE",
-    default="dev_root_secure_postgres_pass_2026",
+    default=None if os.getenv("DATABASE_PASSWORD_FILE") else "dev_root_secure_postgres_pass_2026",
 )
 
 DB_NAME = os.getenv("POSTGRES_DB", "complect_db")
@@ -33,11 +57,7 @@ DB_REPLICA_HOST = os.getenv("DATABASE_REPLICA_HOST", "postgres_replica")
 DB_PORT = os.getenv("DATABASE_PORT", "5432")
 
 _DB_OPTIONS = {
-    "options": (
-        "-c statement_timeout=30000 "
-        "-c lock_timeout=10000 "
-        "-c idle_in_transaction_session_timeout=15000"
-    ),
+    "options": ("-c statement_timeout=30000 -c lock_timeout=10000 -c idle_in_transaction_session_timeout=15000"),
 }
 
 DATABASES = {
@@ -69,7 +89,11 @@ DATABASES = {
 POSTGRES_REPLICA_ENABLED = _env_bool("POSTGRES_REPLICA_ENABLED", default=True)
 POSTGRES_REPLICA_MAX_LAG = float(os.getenv("POSTGRES_REPLICA_MAX_LAG", "1.0"))
 
-SECRET_KEY = os.getenv("SECRET_KEY", "local-dev-insecure-key-change-me-32chars")
+SECRET_KEY = get_secret(
+    "SECRET_KEY",
+    secret_file_env="DJANGO_SECRET_KEY_FILE",
+    default=None if os.getenv("DJANGO_SECRET_KEY_FILE") else "local-dev-insecure-key-change-me-32chars",
+)
 ALLOWED_HOSTS = ["*"]
 
 REDIS_DEFAULT_URL = os.getenv("REDIS_DEFAULT_URL", "redis://redis:6379/0")
@@ -100,10 +124,16 @@ ENABLE_OTEL = _env_bool("ENABLE_OTEL", default=False)
 
 REDIS_CLIENT = redis.Redis.from_url(REDIS_DEFAULT_URL, decode_responses=True)
 
-EXPECTED_GATEWAY_TOKEN = os.getenv("EXPECTED_GATEWAY_TOKEN", "complect_internal_secure_mesh_token_2026")
+EXPECTED_GATEWAY_TOKEN = get_secret(
+    "EXPECTED_GATEWAY_TOKEN",
+    secret_file_env="EXPECTED_GATEWAY_TOKEN_FILE",
+    default=None if os.getenv("EXPECTED_GATEWAY_TOKEN_FILE") else "dev-local-insecure-gateway-token",
+)
 
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+# Use the first real tenant UUID from the DB, or keep this placeholder for fresh installs.
+
 CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
@@ -117,3 +147,4 @@ CORS_ALLOW_HEADERS = [
     "idempotency-key",
 ]
 
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
