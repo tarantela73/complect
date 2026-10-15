@@ -51,7 +51,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "apps.common.middleware.context_isolation.ContextIsolationMiddleware",
-    "apps.common.middleware.kill_switch.SreGlobalKillSwitchMiddleware",  
+    "apps.common.middleware.kill_switch.SreGlobalKillSwitchMiddleware",
     "apps.common.tenancy.middleware.AsgiTenantEnforcementMiddleware",
     "apps.common.middleware.idempotency.IdempotencyEnforcementMiddleware",
     "apps.common.middleware.lifecycle.read_your_own_writes.ReadYourOwnWritesStickyMiddleware",
@@ -143,13 +143,13 @@ CELERY_TASK_MAX_RETRIES = 5
 # rule 4.15 — queue topology (7 queues, high/normal/low priority tiers)
 _default_exchange = Exchange("default", type="direct")
 CELERY_TASK_QUEUES = (
-    Queue("default",       _default_exchange,         routing_key="default"),
-    Queue("outbox",        Exchange("outbox"),         routing_key="outbox"),
-    Queue("notifications", Exchange("notifications"),  routing_key="notifications"),
-    Queue("finance",       Exchange("finance"),        routing_key="finance"),
-    Queue("files",         Exchange("files"),          routing_key="files"),
-    Queue("retention",     Exchange("retention"),      routing_key="retention"),
-    Queue("integration",   Exchange("integration"),    routing_key="integration"),
+    Queue("default", _default_exchange, routing_key="default"),
+    Queue("outbox", Exchange("outbox"), routing_key="outbox"),
+    Queue("notifications", Exchange("notifications"), routing_key="notifications"),
+    Queue("finance", Exchange("finance"), routing_key="finance"),
+    Queue("files", Exchange("files"), routing_key="files"),
+    Queue("retention", Exchange("retention"), routing_key="retention"),
+    Queue("integration", Exchange("integration"), routing_key="integration"),
 )
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_IMPORTS = (
@@ -165,6 +165,9 @@ CELERY_IMPORTS = (
     "apps.files.tasks.recovery_scanner",
     "apps.notifications.consumer.notifications_consumer",
     "apps.integration.tasks.webhook_consumer",
+    "apps.users.tasks.identity_merge_maintenance",
+    "apps.users.tasks.identity_merge_requeue",
+    "apps.users.tasks.identity_merge_redis_cleanup",
 )
 
 # rule 4.15 / ADR-0003 — canonical Beat schedule, synced to DB by DatabaseScheduler on startup
@@ -209,6 +212,21 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
         "options": {"queue": "notifications"},
     },
+    "identity-merge-expiry": {
+        "task": "apps.users.tasks.identity_merge_maintenance.expire_pending_identity_merges",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
+    },
+    "identity-merge-requeue": {
+        "task": "apps.users.tasks.identity_merge_requeue.process_identity_merge_requeues",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
+    },
+    "identity-merge-redis-cleanup": {
+        "task": "apps.users.tasks.identity_merge_redis_cleanup.process_identity_merge_redis_cleanup",
+        "schedule": 60.0,
+        "options": {"queue": "retention"},
+    },
     "webhook-fanout-consumer": {
         "task": "apps.integration.tasks.webhook_consumer.run_webhook_fanout_consumer_task",
         "schedule": 10.0,  # every 10 seconds; same cadence as outbox dispatcher
@@ -238,10 +256,12 @@ OUTBOX_ARCHIVE_WINDOW_DAYS: int = 30
 # Mode A: aggregate types that require serial dispatch (delta semantics).
 # Events for these types go to per-slot Redis Streams processed by a
 # single-concurrency worker. Misclassifying delta→Mode B = silent data corruption.
-SERIAL_DISPATCH_AGGREGATE_TYPES: frozenset[str] = frozenset({
-    "finance.transaction",
-    "finance.balance",
-})
+SERIAL_DISPATCH_AGGREGATE_TYPES: frozenset[str] = frozenset(
+    {
+        "finance.transaction",
+        "finance.balance",
+    }
+)
 # Hash sharding for Mode A slots: hash(aggregate_id) % N. Limits Redis Stream
 # proliferation while preserving per-aggregate FIFO within a slot.
 OUTBOX_SERIAL_ROUTING_SLOTS: int = 256
@@ -254,6 +274,14 @@ CHAIN_COMPLETENESS_SLO_WINDOW_SECONDS = 300
 CHAIN_COMPLETENESS_OBSERVATION_SLACK_SECONDS = 300
 # SLO target (99.9%): fraction of chains that must be complete within the SLO window.
 CHAIN_COMPLETENESS_SLO_TARGET = 0.999
+
+# ===========================================================================
+# MAP / GIS INTEGRATION
+# ===========================================================================
+# DaData Suggestions API key (server-side only — never expose to client)
+
+# Feature flag: use Росреестр PKK6 ЗОУИТ overlay instead of OpenRailwayMap.
+# Set to False if the tile service is unavailable.
 
 # ===========================================================================
 # INTERNATIONALIZATION
@@ -308,12 +336,28 @@ POSTGRES_REPLICA_MAX_LAG = 1.0
 # ===========================================================================
 # RBAC
 # ===========================================================================
-# OFF       — bypass all checks (use during initial rollout or in tests that don't need RBAC)
-# LOG_ONLY  — evaluate and log denials, never block (default; safe for gradual rollout)
-# ENFORCE   — raise PermissionDenied on denial
-RBAC_ENFORCEMENT_MODE = "LOG_ONLY"
+# OFF       — bypass all checks (use in tests that don't need RBAC)
+# LOG_ONLY  — evaluate and log denials, never block (override in local.py for gradual rollout)
+# ENFORCE   — raise PermissionDenied on denial (production default)
+RBAC_ENFORCEMENT_MODE = "ENFORCE"
 # Per-user permission set cache TTL in seconds. Short enough for security, long for perf.
 RBAC_POLICY_CACHE_TTL = 60
+
+# IAM Release N: convergence remains fail-closed until a signed, build-bound
+# credential-entrypoint coverage attestation is present.
+IAM_RECONCILIATION_APPROVAL_PUBLIC_KEYS: dict[str, str] = {}
+IAM_DEFERRED_MERGE_EXECUTION_ENABLED = False
+IAM_DEFERRED_MERGE_COVERAGE_DIGEST = ""
+IAM_DEFERRED_MERGE_COVERAGE_KEY_ID = ""
+IAM_DEFERRED_MERGE_COVERAGE_SIGNATURE = ""
+IAM_DEFERRED_MERGE_COVERAGE_COMMIT = ""
+IAM_DEFERRED_MERGE_COVERAGE_APPROVED_AT = ""
+IAM_DEFERRED_MERGE_COVERAGE_EXPIRES_AT = ""
+IAM_DEFERRED_MERGE_COVERAGE_NONCE = ""
+IAM_DEFERRED_MERGE_COVERAGE_PUBLIC_KEYS: dict[str, str] = {}
+IAM_MFA_CURRENT_KEY_ID = ""
+IAM_MFA_ENCRYPTION_KEYS: dict[str, str] = {}
+BUILD_COMMIT = ""
 
 # ===========================================================================
 # AUDIT / RETENTION
@@ -342,7 +386,7 @@ FILES_STORAGE_BACKEND: str = "STUB"
 AWS_S3_BUCKET_NAME: str = S3_PRODUCTION_BUCKET
 AWS_S3_REGION_NAME: str = "us-east-1"
 # Presigned URL TTLs (seconds). Presigned PUT must complete before upload TTL expires.
-FILES_PRESIGNED_UPLOAD_TTL: int = 900    # 15 min
+FILES_PRESIGNED_UPLOAD_TTL: int = 900  # 15 min
 FILES_PRESIGNED_DOWNLOAD_TTL: int = 3600  # 1 hr
 
 # ScanEngine selector: "STUB" (dev/test) or "CLAMAV" (production).
@@ -358,16 +402,16 @@ CLAMAV_CB_RECOVERY_TTL: int = 60
 FILES_RECOVERY_SCAN_BATCH_SIZE: int = 50
 
 # System control policy — adaptive batch sizing.
-FILES_CONTROL_BATCH_SIZE_DEFAULT: int = 100    # nominal
-FILES_CONTROL_BATCH_SIZE_REDUCED: int = 25     # scan latency elevated
-FILES_CONTROL_BATCH_SIZE_THROTTLED: int = 10   # CB rate or backlog high
-FILES_CONTROL_CB_RATE_THRESHOLD: int = 3       # CB opens in window before throttle
+FILES_CONTROL_BATCH_SIZE_DEFAULT: int = 100  # nominal
+FILES_CONTROL_BATCH_SIZE_REDUCED: int = 25  # scan latency elevated
+FILES_CONTROL_BATCH_SIZE_THROTTLED: int = 10  # CB rate or backlog high
+FILES_CONTROL_CB_RATE_THRESHOLD: int = 3  # CB opens in window before throttle
 FILES_CONTROL_CB_RATE_WINDOW_SECONDS: int = 300
 FILES_CONTROL_SCAN_LATENCY_THRESHOLD_MS: float = 5000.0  # per-file ms EWMA
 FILES_CONTROL_BACKLOG_THROTTLE_THRESHOLD: int = 100
-FILES_CONTROL_SCAN_EWMA_ALPHA: float = 0.3     # α for scan_ms EWMA
-FILES_CONTROL_SCAN_EWMA_TTL: int = 600         # EWMA key TTL (10 min)
-FILES_CONTROL_PARAM_TTL: int = 120             # batch_size key TTL; expires → default
+FILES_CONTROL_SCAN_EWMA_ALPHA: float = 0.3  # α for scan_ms EWMA
+FILES_CONTROL_SCAN_EWMA_TTL: int = 600  # EWMA key TTL (10 min)
+FILES_CONTROL_PARAM_TTL: int = 120  # batch_size key TTL; expires → default
 
 # ===========================================================================
 # LIVEKIT

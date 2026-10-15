@@ -5,6 +5,7 @@ Tests for ContractAttachment domain:
   - get_attachments_list: projection, deleted file skip, download_url logic
   - AttachmentRepository: soft_delete CAS, list_file_ids
 """
+
 from __future__ import annotations
 
 import uuid
@@ -65,6 +66,7 @@ def _mock_file_service_none() -> MagicMock:
 
 # ── AttachmentService.attach ──────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestAttachmentServiceAttach:
     def setup_method(self):
@@ -89,9 +91,7 @@ class TestAttachmentServiceAttach:
     def test_attach_non_available_file_raises(self):
         for bad_status in ("PENDING_UPLOAD", "UPLOADED", "SCANNING", "QUARANTINED"):
             file_id = uuid.uuid4()
-            svc = AttachmentService(
-                _mock_file_service(file_id=file_id, tenant_id=self.tenant_id, status=bad_status)
-            )
+            svc = AttachmentService(_mock_file_service(file_id=file_id, tenant_id=self.tenant_id, status=bad_status))
             with pytest.raises(ValidationError, match="Прикреплять можно только AVAILABLE файлы"):
                 svc.attach(
                     contract_id=self.contract.id,
@@ -198,13 +198,12 @@ class TestAttachmentServiceAttach:
             actor_id=self.actor_id,
             tenant_id=self.tenant_id,
         )
-        active = ContractAttachment.objects.filter(
-            contract_id=self.contract.id, file_id=file_id, is_deleted=False
-        )
+        active = ContractAttachment.objects.filter(contract_id=self.contract.id, file_id=file_id, is_deleted=False)
         assert active.count() == 1
 
 
 # ── AttachmentService.detach ──────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestAttachmentServiceDetach:
@@ -270,15 +269,14 @@ class TestAttachmentServiceDetach:
     def test_detach_legal_hold_raises(self):
         file_id = uuid.uuid4()
         self._attach(file_id)
-        ContractAttachment.objects.filter(
-            contract_id=self.contract.id, file_id=file_id
-        ).update(is_legal_hold=True)
+        ContractAttachment.objects.filter(contract_id=self.contract.id, file_id=file_id).update(is_legal_hold=True)
         svc = AttachmentService(MagicMock())
         with pytest.raises(PermissionDenied, match="ATTACHMENT_LEGAL_HOLD"):
             svc.detach(contract_id=self.contract.id, file_id=file_id, actor_id=self.actor_id)
 
 
 # ── get_attachments_list ──────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestGetAttachmentsList:

@@ -30,9 +30,7 @@ def _make_outbox(causal_root_id=None, offset_seconds=_IN_WINDOW_OFFSET):
         correlation_id=uuid.uuid4(),
         causal_root_id=causal_root_id if causal_root_id is not None else record_id,
     )
-    OutboxRecord.objects.filter(pk=r.pk).update(
-        created_at=tz.now() - timedelta(seconds=offset_seconds)
-    )
+    OutboxRecord.objects.filter(pk=r.pk).update(created_at=tz.now() - timedelta(seconds=offset_seconds))
     r.refresh_from_db()
     return r
 
@@ -51,7 +49,6 @@ def _ack(outbox_record: OutboxRecord) -> ProcessedEvent:
 
 @pytest.mark.django_db
 class TestChainCompletenessMonitorMeasure:
-
     def test_empty_window_returns_zero_totals(self):
         metrics = ChainCompletenessMonitor.measure()
 
@@ -112,9 +109,7 @@ class TestChainCompletenessMonitorMeasure:
         denominator — it is a DLQ failure, not a completeness failure (Invariant 3).
         """
         root = _make_outbox()
-        OutboxRecord.objects.filter(pk=root.pk).update(
-            failed_permanently_at=tz.now()
-        )
+        OutboxRecord.objects.filter(pk=root.pk).update(failed_permanently_at=tz.now())
 
         metrics = ChainCompletenessMonitor.measure()
 
@@ -174,9 +169,7 @@ class TestChainCompletenessMonitorMeasure:
             correlation_id=uuid.uuid4(),
             causal_root_id=None,
         )
-        OutboxRecord.objects.filter(pk=r.pk).update(
-            created_at=tz.now() - timedelta(seconds=_IN_WINDOW_OFFSET)
-        )
+        OutboxRecord.objects.filter(pk=r.pk).update(created_at=tz.now() - timedelta(seconds=_IN_WINDOW_OFFSET))
         r.refresh_from_db()
 
         metrics = ChainCompletenessMonitor.measure()
@@ -219,7 +212,6 @@ class TestChainCompletenessMonitorMeasure:
 
 @pytest.mark.django_db
 class TestRunChainCompletenessMonitorTask:
-
     def test_task_emits_info_log_when_no_violation(self):
         root = _make_outbox()
         _ack(root)

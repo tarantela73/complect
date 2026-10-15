@@ -41,6 +41,7 @@ def list_users_endpoint(request: HttpRequest):
         items=[
             {
                 "id": u.id,
+                "user_uuid": u.user_uuid,
                 "email": u.email,
                 "full_name": u.full_name,
                 "is_active": u.is_active,
@@ -88,9 +89,7 @@ def disable_user_endpoint(request: HttpRequest, user_id: int):
     actor_id: uuid.UUID = request.jwt_user_id
 
     try:
-        user_admin_service.disable_user(
-            tenant_id=tenant_id, user_id=user_id, actor_id=actor_id
-        )
+        user_admin_service.disable_user(tenant_id=tenant_id, user_id=user_id, actor_id=actor_id)
     except ValidationError as exc:
         code, msg = _parse_validation_error(exc)
         return 422, make_error_response(code, msg)
@@ -104,9 +103,7 @@ def enable_user_endpoint(request: HttpRequest, user_id: int):
     tenant_id: uuid.UUID = request.jwt_tenant_id
     actor_id: uuid.UUID = request.jwt_user_id
 
-    user_admin_service.enable_user(
-        tenant_id=tenant_id, user_id=user_id, actor_id=actor_id
-    )
+    user_admin_service.enable_user(tenant_id=tenant_id, user_id=user_id, actor_id=actor_id)
     return 204, None
 
 

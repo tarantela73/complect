@@ -5,7 +5,8 @@ from unittest.mock import patch
 import pytest
 from django.test import Client
 
-from apps.common.tenancy.context import set_tenant_context
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token
 
 
 @pytest.mark.django_db
@@ -15,14 +16,12 @@ class TestIdempotencySecurityMesh:
         client = Client()
         idem_key = str(uuid.uuid4())
         tenant_uuid = uuid.uuid4()
-        user_uuid = uuid.uuid4()
-
-        set_tenant_context(tenant_uuid)
+        email = f"idempotency_{uuid.uuid4().hex[:8]}@test.com"
+        user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=tenant_uuid)
 
         headers = {
             "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
-            "HTTP_X_TENANT_ID": str(tenant_uuid),
-            "HTTP_X_USER_ID": str(user_uuid),
+            "HTTP_AUTHORIZATION": f"Bearer {_make_access_token(user)}",
             "HTTP_IDEMPOTENCY_KEY": idem_key,
             "content_type": "application/json",
         }

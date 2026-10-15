@@ -2,6 +2,7 @@
 Pure unit tests for CausalIncidentClassifier (ADR-0018).
 No DB access — CausalChain is constructed directly.
 """
+
 import uuid
 from datetime import datetime, timezone
 

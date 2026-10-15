@@ -204,9 +204,7 @@ class IncidentRoutingPolicy:
         types = {i.incident_type for i in ctx.incidents}
         all_domains = _compute_all_domains(ctx)
         data_corruption = _is_data_corruption(ctx)
-        requires_ic = ctx.is_compound and (
-            _compound_escalation_triggers(ctx) or data_corruption
-        )
+        requires_ic = ctx.is_compound and (_compound_escalation_triggers(ctx) or data_corruption)
 
         if requires_ic:
             owner_team = "incident_commander"

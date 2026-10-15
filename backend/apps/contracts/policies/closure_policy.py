@@ -3,31 +3,43 @@ from django.core.exceptions import ValidationError
 from apps.contracts.models.contract import Contract, ContractStatus
 
 
+class ContractClosurePolicyViolation(ValidationError):
+    """Raised when the three-condition closure gate is not met."""
+
+    def __init__(self, detail: dict[str, bool]) -> None:
+        self.closure_detail = detail
+        conditions = []
+        if not detail.get("paid"):
+            conditions.append("оплата не завершена")
+        if not detail.get("has_signed"):
+            conditions.append("отсутствует подписанный договор")
+        if not detail.get("has_act"):
+            conditions.append("отсутствует акт выполненных работ")
+        message = "Закрытие невозможно: " + "; ".join(conditions) + "."
+        super().__init__(message, code="CONTRACT_MISSING_REQUIRED_DOCUMENT")
+
+
 class ContractClosurePolicy:
-    """Чистые бизнес-инварианты и правила перевода договоров в финальные стейты."""
+    """Бизнес-инварианты перевода договора в финальный статус CLOSED."""
 
     @staticmethod
-    def verify_closure_eligibility(contract: Contract, has_ready_documents: bool) -> None:
+    def verify_closure_eligibility(
+        contract: Contract,
+        document_conditions: dict[str, bool],
+    ) -> None:
         """
-        [CQRS LAW] Проверяет, готов ли договор снабжения к закрытию.
-        Выбрасывает ValidationError при малейшем нарушении условий ТЗ.
+        Проверяет три необходимых условия закрытия договора.
+        Raises ContractClosurePolicyViolation (subclass of ValidationError) if any fails.
         """
         if contract.status == ContractStatus.CLOSED:
             raise ValidationError("Операция отклонена: Договор уже имеет статус 'Закрыт'.")
 
-        # Жесткая блокировка мутаций при юридическом удержании [5.6 LEGAL HOLD POLICY]
         if contract.is_legal_hold or contract.status == ContractStatus.LEGAL_HOLD:
             raise ValidationError("Юридическое удержание активировано. Любые изменения документа заблокированы.")
 
-        # Проверка обязательного наличия проверенных файлов [Пункт 9 ТЗ]
-        if not has_ready_documents:
-            raise ValidationError(
-                "Закрытие невозможно: в конвейере FSM отсутствуют валидные файлы актов (MIME PDF/JPG/PNG)."
-            )
+        paid = contract.paid_amount >= contract.total_amount
+        has_signed = document_conditions.get("has_signed", False)
+        has_act = document_conditions.get("has_act", False)
 
-        # Защита от дебиторской задолженности [Раздел 2.3 ТЗ]
-        if contract.paid_amount < contract.total_amount:
-            remaining = (contract.total_amount - contract.paid_amount) / 100
-            raise ValidationError(
-                f"Закрытие отклонено: обнаружена непогашенная дебиторская задолженность в размере {remaining} руб."
-            )
+        if not (paid and has_signed and has_act):
+            raise ContractClosurePolicyViolation(detail={"paid": paid, "has_signed": has_signed, "has_act": has_act})

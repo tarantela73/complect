@@ -3,6 +3,7 @@ Contract tests: every HTTP boundary in the system must return rule 6.6 envelope.
 Covers Ninja handlers, middleware rejections, Django fallback handlers,
 and the outermost ASGI error boundary.
 """
+
 import json
 import uuid
 
@@ -17,14 +18,18 @@ from apps.common.api.errors import (
     make_error_response,
 )
 from apps.common.middleware.asgi_error import AsgiErrorBoundaryMiddleware
+from apps.users.models import User
+from apps.users.services.auth_service import _make_access_token
 
-VALID_HEADERS = {
-    "HTTP_X_TENANT_ID": str(uuid.uuid4()),
-    "HTTP_X_USER_ID": str(uuid.uuid4()),
-    "HTTP_X_REQUEST_ID": str(uuid.uuid4()),
-    "HTTP_X_CORRELATION_ID": str(uuid.uuid4()),
-    "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
-}
+
+def _valid_headers() -> dict:
+    tenant_id = uuid.uuid4()
+    email = f"error_envelope_{uuid.uuid4().hex[:8]}@test.com"
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=tenant_id)
+    return {
+        "HTTP_X_GATEWAY_TOKEN": "complect_internal_secure_mesh_token_2026",
+        "HTTP_AUTHORIZATION": f"Bearer {_make_access_token(user)}",
+    }
 
 
 def _assert_envelope(data: dict, expected_code: str) -> None:
@@ -38,6 +43,7 @@ def _assert_envelope(data: dict, expected_code: str) -> None:
 
 
 # ── make_error_response unit ──────────────────────────────────────────────────
+
 
 class TestMakeErrorResponse:
     def test_envelope_shape(self):
@@ -55,6 +61,7 @@ class TestMakeErrorResponse:
 
 # ── Django fallback handlers ──────────────────────────────────────────────────
 
+
 class TestDjangoFallbackHandlers:
     """
     Django-level handlers (handler400/403/404/500) must return rule 6.6 envelope.
@@ -69,6 +76,7 @@ class TestDjangoFallbackHandlers:
         response = django_bad_request(request)
         assert response.status_code == 400
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "BAD_REQUEST")
 
@@ -77,6 +85,7 @@ class TestDjangoFallbackHandlers:
         response = django_permission_denied(request)
         assert response.status_code == 403
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "FORBIDDEN")
 
@@ -85,6 +94,7 @@ class TestDjangoFallbackHandlers:
         response = django_page_not_found(request)
         assert response.status_code == 404
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "NOT_FOUND")
 
@@ -93,6 +103,7 @@ class TestDjangoFallbackHandlers:
         response = django_server_error(request)
         assert response.status_code == 500
         import json
+
         data = json.loads(response.content)
         _assert_envelope(data, "INTERNAL_SERVER_ERROR")
 
@@ -101,6 +112,7 @@ class TestDjangoFallbackHandlers:
         request = self.rf.get("/")
         response = django_server_error(request)
         import json
+
         data = json.loads(response.content)
         assert data["error"]["detail"] is None
         assert "traceback" not in str(data)
@@ -108,6 +120,7 @@ class TestDjangoFallbackHandlers:
 
 
 # ── Middleware rejections ─────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("config.urls")
@@ -129,7 +142,7 @@ class TestMiddlewareEnvelope:
         assert response.status_code == 401
         _assert_envelope(response.json(), "AUTH_GATE_DENIED")
 
-    def test_malformed_tenant_id_returns_envelope(self):
+    def test_malformed_non_authoritative_tenant_id_cannot_bypass_auth_gate(self):
         client = Client()
         response = client.get(
             "/api/v1/contracts/",
@@ -137,8 +150,8 @@ class TestMiddlewareEnvelope:
             HTTP_X_USER_ID="also-not-a-uuid",
             HTTP_X_GATEWAY_TOKEN="complect_internal_secure_mesh_token_2026",
         )
-        assert response.status_code == 400
-        _assert_envelope(response.json(), "MALFORMED_CONTEXT_HEADERS")
+        assert response.status_code == 401
+        _assert_envelope(response.json(), "AUTH_GATE_DENIED")
 
     def test_missing_idempotency_key_returns_envelope(self):
         client = Client()
@@ -146,7 +159,7 @@ class TestMiddlewareEnvelope:
             "/api/v1/contracts/",
             content_type="application/json",
             data="{}",
-            **VALID_HEADERS,
+            **_valid_headers(),
         )
         assert response.status_code == 400
         _assert_envelope(response.json(), "MISSING_IDEMPOTENCY_KEY")
@@ -157,7 +170,7 @@ class TestMiddlewareEnvelope:
             "/api/v1/contracts/",
             content_type="application/json",
             data="{}",
-            **VALID_HEADERS,
+            **_valid_headers(),
             HTTP_IDEMPOTENCY_KEY="not-a-uuid",
         )
         assert response.status_code == 400
@@ -165,6 +178,7 @@ class TestMiddlewareEnvelope:
 
 
 # ── ASGI error boundary ───────────────────────────────────────────────────────
+
 
 class TestAsgiErrorBoundary:
     """
@@ -244,6 +258,7 @@ class TestAsgiErrorBoundary:
 
 # ── Ninja validation error ────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("config.urls")
 class TestNinjaValidationEnvelope:
@@ -253,7 +268,7 @@ class TestNinjaValidationEnvelope:
         client = Client()
         response = client.get(
             "/api/v1/contracts/not-a-valid-uuid/",
-            **VALID_HEADERS,
+            **_valid_headers(),
         )
         # ninja_validation_error_handler maps ValidationError → 400 VALIDATION_ERROR
         assert response.status_code == 400

@@ -7,19 +7,21 @@ logger = structlog.get_logger(__name__)
 
 # Infrastructure exceptions that indicate systemic failure, not business errors.
 # ValidationError, PermissionDenied, Http404 are excluded — they are expected flows.
-_INFRA_EXC_NAMES: frozenset[str] = frozenset({
-    "DatabaseError",
-    "OperationalError",
-    "InterfaceError",
-    "InternalError",
-    "ProgrammingError",
-    "ConnectionError",
-    "TimeoutError",
-    "ConnectionRefusedError",
-    "BrokenPipeError",
-    "RedisError",
-    "ResponseError",
-})
+_INFRA_EXC_NAMES: frozenset[str] = frozenset(
+    {
+        "DatabaseError",
+        "OperationalError",
+        "InterfaceError",
+        "InternalError",
+        "ProgrammingError",
+        "ConnectionError",
+        "TimeoutError",
+        "ConnectionRefusedError",
+        "BrokenPipeError",
+        "RedisError",
+        "ResponseError",
+    }
+)
 
 
 def _is_infrastructure_exception(exc: BaseException) -> bool:

@@ -3,6 +3,7 @@ Admin API integration tests.
 
 Tests the full HTTP stack: JWT auth → RBAC check → service → response.
 """
+
 import json
 import uuid
 
@@ -20,7 +21,9 @@ GW_TOKEN = "complect_internal_secure_mesh_token_2026"
 @pytest.fixture(autouse=True)
 def seed_roles(db):
     for action, resource in [
-        ("read", "users"), ("create", "users"), ("write", "users"),
+        ("read", "users"),
+        ("create", "users"),
+        ("write", "users"),
         ("read", "contracts"),
     ]:
         Permission.objects.get_or_create(action=action, resource=resource)
@@ -29,9 +32,7 @@ def seed_roles(db):
     manager, _ = Role.objects.get_or_create(name="manager")
     viewer, _ = Role.objects.get_or_create(name="viewer")
 
-    for action, resource in [
-        ("read", "users"), ("create", "users"), ("write", "users"), ("read", "contracts")
-    ]:
+    for action, resource in [("read", "users"), ("create", "users"), ("write", "users"), ("read", "contracts")]:
         perm = Permission.objects.get(action=action, resource=resource)
         RolePermission.objects.get_or_create(role=admin, permission=perm)
 
@@ -43,9 +44,7 @@ def seed_roles(db):
 
 def _make_user_with_role(role_name: str, tenant_id: uuid.UUID = TENANT_ID) -> tuple[User, str]:
     email = f"{role_name}_{uuid.uuid4().hex[:8]}@test.com"
-    user = User.objects.create_user(
-        username=email, email=email, password="Pass1!", tenant_id=tenant_id
-    )
+    user = User.objects.create_user(username=email, email=email, password="Pass1!", tenant_id=tenant_id)
     role = Role.objects.get(name=role_name)
     RoleBinding.objects.create(
         tenant_id=tenant_id,
@@ -96,12 +95,14 @@ class TestCreateUser:
         user, token = _make_user_with_role("admin")
         resp = Client().post(
             "/api/v1/admin/users/",
-            data=json.dumps({
-                "email": "newuser@example.com",
-                "full_name": "New User",
-                "roles": ["viewer"],
-                "send_invite_email": False,
-            }),
+            data=json.dumps(
+                {
+                    "email": "newuser@example.com",
+                    "full_name": "New User",
+                    "roles": ["viewer"],
+                    "send_invite_email": False,
+                }
+            ),
             content_type="application/json",
             **_headers(user, token, mutating=True),
         )
@@ -123,17 +124,19 @@ class TestCreateUser:
 
     def test_duplicate_email_returns_422(self):
         user, token = _make_user_with_role("admin")
-        payload = json.dumps({
-            "email": "dup@example.com", "full_name": "Dup",
-            "roles": [], "send_invite_email": False,
-        })
+        payload = json.dumps(
+            {
+                "email": "dup@example.com",
+                "full_name": "Dup",
+                "roles": [],
+                "send_invite_email": False,
+            }
+        )
         c = Client()
         first_headers = _headers(user, token, mutating=True)
         c.post("/api/v1/admin/users/", data=payload, content_type="application/json", **first_headers)
         second_headers = {**first_headers, "HTTP_IDEMPOTENCY_KEY": str(uuid.uuid4())}
-        resp = c.post(
-            "/api/v1/admin/users/", data=payload, content_type="application/json", **second_headers
-        )
+        resp = c.post("/api/v1/admin/users/", data=payload, content_type="application/json", **second_headers)
         assert resp.status_code == 422
 
 

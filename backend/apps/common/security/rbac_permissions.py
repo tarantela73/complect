@@ -9,6 +9,7 @@ This module is the authoritative source for:
   - Admin UI for role management
   - Regression guard in test_endpoint_coverage.py
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -60,6 +61,8 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("dlq", "write"),
     # dashboard (overview summary — all authenticated roles)
     Permission("dashboard", "read"),
+    # director_dashboard (KPI screen — director + admin only)
+    Permission("director_dashboard", "read"),
     # notifications (in-app notification feed — all authenticated roles)
     Permission("notifications", "read"),
     # ops (platform runtime observability — platform admin only)
@@ -70,12 +73,21 @@ PERMISSIONS: tuple[Permission, ...] = (
     # payments (bank statement import)
     Permission("payments", "read"),
     Permission("payments", "write"),
+    # requests (lead form / CRM)
+    Permission("requests", "read"),
+    Permission("requests", "write"),
+    # cms (public site content management)
+    Permission("cms", "read"),
+    Permission("cms", "write"),
+    Permission("cms", "publish"),
+    # tasks (assignments module — sprint C)
+    Permission("tasks", "read"),
+    Permission("tasks", "write"),
+    Permission("tasks", "delete"),
 )
 
 # Lookup by (action, resource) — matches require_permission() call signature
-_BY_PAIR: dict[tuple[str, str], Permission] = {
-    (p.action, p.resource): p for p in PERMISSIONS
-}
+_BY_PAIR: dict[tuple[str, str], Permission] = {(p.action, p.resource): p for p in PERMISSIONS}
 
 
 def get_permission(action: str, resource: str) -> Permission:

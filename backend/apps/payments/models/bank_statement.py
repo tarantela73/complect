@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.db.models.manager import Manager
+
+    from apps.payments.models.bank_statement_line import BankStatementLine
 
 from django.db import models
 
@@ -18,6 +26,9 @@ class BankStatement(BaseEnterpriseModel):
     Загруженная банковская выписка.
     raw_text хранит исходный текст файла для повторной обработки при изменении парсера.
     """
+
+    if TYPE_CHECKING:
+        lines: Manager["BankStatementLine"]
 
     file_name = models.CharField(max_length=255)
     file_format = models.CharField(

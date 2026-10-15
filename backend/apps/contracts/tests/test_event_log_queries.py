@@ -2,6 +2,7 @@
 Tests for ContractEventLog read projection (Outbox → timeline).
 Verifies: tenant isolation, event ordering, label mapping, empty result.
 """
+
 from __future__ import annotations
 
 import uuid

@@ -90,11 +90,7 @@ class ChainCompletenessMonitor:
             root_id: uuid.UUID = r["causal_root_id"] or r["id"]
             root_to_record_ids[root_id].add(r["id"])
 
-        complete_chains = sum(
-            1
-            for record_ids in root_to_record_ids.values()
-            if record_ids.issubset(acked_ids)
-        )
+        complete_chains = sum(1 for record_ids in root_to_record_ids.values() if record_ids.issubset(acked_ids))
         total_chains = len(root_to_record_ids)
         incomplete_chains = total_chains - complete_chains
         completeness_rate = complete_chains / total_chains

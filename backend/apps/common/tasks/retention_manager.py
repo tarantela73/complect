@@ -98,9 +98,7 @@ def run_database_partition_and_retention_job_task() -> None:
                 CREATE TABLE IF NOT EXISTS {future_partition_name} PARTITION OF common_audit_integrity_logs
                 FOR VALUES FROM ('{start_bound}') TO ('{end_bound}');
             """)
-            logger.info(
-                "FUTURE_DATABASE_PARTITION_CREATED", partition=future_partition_name
-            )
+            logger.info("FUTURE_DATABASE_PARTITION_CREATED", partition=future_partition_name)
             pass
         except Exception as exc:
             logger.critical("DATABASE_PARTITION_REJECTED", error=str(exc))

@@ -1,3 +1,4 @@
+from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 
@@ -45,6 +46,9 @@ class Contract(BaseEnterpriseModel):
     # Nullable: исторические договоры заполняются через Celery-backfill (Release N+1).
     contragent_id = models.UUIDField(null=True, blank=True)
 
+    # Expand & Contract (ADR-0002, Release N): nullable только. NOT NULL — Release N+1.
+    contract_date = models.DateField(null=True, blank=True)
+
     search_vector = models.GeneratedField(
         expression=(
             SearchVector("contract_number", config="simple", weight="A")
@@ -61,6 +65,7 @@ class Contract(BaseEnterpriseModel):
                 fields=["tenant_id", "contragent_id", "status", "is_deleted", "-id"],
                 name="idx_contract_tenant_contragent",
             ),
+            GinIndex(fields=["search_vector"], name="contracts_search_gin"),
         ]
         constraints = [
             models.UniqueConstraint(

@@ -15,15 +15,12 @@ class FinanceReaderService:
         contract_id: uuid.UUID,
         limit: int = 5,
     ) -> list[LastPaymentDTO]:
-        qs = (
-            Transaction.objects.filter(
-                tenant_id=tenant_id,
-                contract_id=contract_id,
-                status=TransactionStatus.POSTED,
-                is_deleted=False,
-            )
-            .order_by("-id")[:limit]
-        )
+        qs = Transaction.objects.filter(
+            tenant_id=tenant_id,
+            contract_id=contract_id,
+            status=TransactionStatus.POSTED,
+            is_deleted=False,
+        ).order_by("-id")[:limit]
         return [
             LastPaymentDTO(
                 transaction_id=tx.id,

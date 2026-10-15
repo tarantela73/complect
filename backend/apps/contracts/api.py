@@ -2,6 +2,7 @@ import uuid
 from typing import Optional
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import HttpRequest
 from ninja import Query, Router
 
@@ -25,6 +26,7 @@ from apps.contracts.schemas.contract_dto import (
     ContractResponseSchema,
     ContractUpdateSchema,
 )
+from apps.contracts.policies.closure_policy import ContractClosurePolicyViolation
 from apps.contracts.services.attachment_service import AttachmentService
 from apps.contracts.services.contract_activate_service import ContractActivateService
 from apps.contracts.services.contract_closure import ContractClosureService
@@ -45,8 +47,16 @@ def list_contracts(
     status: Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    contragent_id: Optional[uuid.UUID] = Query(None),
 ):
-    result = get_contracts_page(cursor=cursor, limit=limit, status=status, resource_type=resource_type, q=q)
+    result = get_contracts_page(
+        cursor=cursor,
+        limit=limit,
+        status=status,
+        resource_type=resource_type,
+        q=q,
+        contragent_id=contragent_id,
+    )
     return 200, result
 
 
@@ -77,32 +87,35 @@ def create_contract(request: HttpRequest, body: ContractCreateRequestSchema):
 )
 @require_permission("write", "contracts")
 def update_contract(request: HttpRequest, contract_id: uuid.UUID, body: ContractUpdateSchema):
-    try:
-        contract = ContractRepository.get_by_id_for_update(contract_id)
-    except PermissionDenied:
-        return 404, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    with transaction.atomic():
+        try:
+            contract = ContractRepository.get_by_id_for_update(contract_id)
+        except PermissionDenied:
+            return 404, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
 
-    if contract.is_legal_hold:
-        return 403, make_error_response("LEGAL_HOLD", "Договор заблокирован юридическим удержанием.")
+        if contract.is_legal_hold:
+            return 403, make_error_response("LEGAL_HOLD", "Договор заблокирован юридическим удержанием.")
 
-    if contract.status != ContractStatus.DRAFT:
-        return 422, make_error_response(
-            "INVALID_STATUS",
-            f"Редактирование доступно только в статусе DRAFT. Текущий статус: {contract.status}.",
-        )
+        if contract.status != ContractStatus.DRAFT:
+            return 422, make_error_response(
+                "INVALID_STATUS",
+                f"Редактирование доступно только в статусе DRAFT. Текущий статус: {contract.status}.",
+            )
 
-    updates = {}
-    if body.title is not None:
-        updates["title"] = body.title
-    if body.total_amount is not None:
-        updates["total_amount"] = body.total_amount
+        updates = {}
+        if body.title is not None:
+            updates["title"] = body.title
+        if body.total_amount is not None:
+            updates["total_amount"] = body.total_amount
+        if body.contract_date is not None:
+            updates["contract_date"] = body.contract_date
 
-    if updates:
-        success = ContractRepository.atomic_compare_and_swap(contract, **updates)
-        if not success:
-            return 409, make_error_response("OCC_CONFLICT", "Коллизия одновременной модификации. Повторите запрос.")
+        if updates:
+            success = ContractRepository.atomic_compare_and_swap(contract, **updates)
+            if not success:
+                return 409, make_error_response("OCC_CONFLICT", "Коллизия одновременной модификации. Повторите запрос.")
 
-    return 200, get_contract_detail(contract_id)
+    return 200, get_contract_detail(contract_id)  # read after commit — outside atomic
 
 
 @router.post("/{contract_id}/activate/", response={200: ContractResponseSchema, 400: dict, 403: dict, 422: dict})
@@ -114,10 +127,12 @@ def activate_contract(request: HttpRequest, contract_id: uuid.UUID):
     except PermissionDenied:
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
     except ValidationError as exc:
-        return 422, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
+        return 422, make_error_response("BUSINESS_RULE_VIOLATION", exc.message)
 
 
-@router.post("/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict})
+@router.post(
+    "/{contract_id}/close/", response={200: ContractResponseSchema, 400: dict, 403: dict, 409: dict, 422: dict}
+)
 @require_permission("write", "contracts")
 def close_contract(request: HttpRequest, contract_id: uuid.UUID):
     from apps.common.tenancy.context_core import get_context
@@ -132,11 +147,18 @@ def close_contract(request: HttpRequest, contract_id: uuid.UUID):
         return 200, get_contract_detail(contract_id)
     except PermissionDenied:
         return 403, make_error_response("CONTRACT_NOT_FOUND", "Договор не найден.")
+    except ContractClosurePolicyViolation as exc:
+        return 422, make_error_response(
+            "CONTRACT_MISSING_REQUIRED_DOCUMENT",
+            exc.message,
+            detail=exc.closure_detail,
+        )
     except ValidationError as exc:
-        return 400, make_error_response("BUSINESS_RULE_VIOLATION", str(exc))
+        return 400, make_error_response("BUSINESS_RULE_VIOLATION", exc.message)
 
 
 # ── Contract Event Log ────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{contract_id}/events/",
@@ -154,6 +176,7 @@ def list_contract_events(request: HttpRequest, contract_id: uuid.UUID):
 
 
 # ── Attachments ───────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{contract_id}/attachments/",
@@ -186,6 +209,7 @@ def attach_file(request: HttpRequest, contract_id: uuid.UUID, body: AttachFileRe
             file_id=body.file_id,
             actor_id=actor_id,
             tenant_id=tenant_id,
+            attachment_type=body.attachment_type,
         )
         return 201, {"status": "attached"}
     except PermissionDenied as exc:

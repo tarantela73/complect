@@ -7,6 +7,7 @@ Tests for MatchingService reconciliation algorithm:
   - Precedence: strategy 1 wins; falls through only when no results
   - Edge cases: None amount, missing fields, bulk_update counters
 """
+
 from __future__ import annotations
 
 import uuid
@@ -23,6 +24,7 @@ from apps.payments.models.bank_statement_line import BankStatementLine, MatchSta
 from apps.payments.services.matching_service import MatchingService
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _tenant() -> uuid.UUID:
     tid = uuid.uuid4()
@@ -87,6 +89,7 @@ def _finder(
 
 # ── Strategy 1: exact doc_number ──────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestMatchingServiceStrategy1:
     def setup_method(self):
@@ -118,6 +121,7 @@ class TestMatchingServiceStrategy1:
 
 # ── Strategy 2: amount + date window ─────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestMatchingServiceStrategy2:
     def setup_method(self):
@@ -148,7 +152,8 @@ class TestMatchingServiceStrategy2:
     def test_skipped_when_no_transaction_date(self):
         tx = _dto()
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="",
             transaction_date=None,
         )
@@ -164,6 +169,7 @@ class TestMatchingServiceStrategy2:
 
 # ── Strategy 3: amount + INN ──────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestMatchingServiceStrategy3:
     def setup_method(self):
@@ -173,7 +179,8 @@ class TestMatchingServiceStrategy3:
     def test_single_hit_partial_60(self):
         tx = _dto()
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="",
             transaction_date=None,
         )
@@ -187,7 +194,8 @@ class TestMatchingServiceStrategy3:
 
     def test_multi_hits_ambiguous_40(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="",
             transaction_date=None,
         )
@@ -200,7 +208,8 @@ class TestMatchingServiceStrategy3:
 
     def test_skipped_when_no_inn(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="",
             transaction_date=None,
             counterparty_inn="",
@@ -216,6 +225,7 @@ class TestMatchingServiceStrategy3:
 
 # ── No signal → UNMATCHED ─────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestMatchingServiceUnmatched:
     def setup_method(self):
@@ -224,7 +234,8 @@ class TestMatchingServiceUnmatched:
 
     def test_no_signal_unmatched_0(self):
         line = _make_line(
-            self.stmt, self.tenant_id,
+            self.stmt,
+            self.tenant_id,
             doc_number="",
             transaction_date=None,
             counterparty_inn="",
@@ -250,6 +261,7 @@ class TestMatchingServiceUnmatched:
 
 # ── Precedence ────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestMatchingServicePrecedence:
     def setup_method(self):
@@ -261,11 +273,13 @@ class TestMatchingServicePrecedence:
         tx_date = _dto()
         tx_inn = _dto()
         line = _make_line(self.stmt, self.tenant_id)
-        service = MatchingService(_finder(
-            by_ref=[tx_ref],
-            by_date=[tx_date],
-            by_inn=[tx_inn],
-        ))
+        service = MatchingService(
+            _finder(
+                by_ref=[tx_ref],
+                by_date=[tx_date],
+                by_inn=[tx_inn],
+            )
+        )
         service.match_statement(self.stmt)
 
         refreshed = BankStatementLine.objects.get(id=line.id)
@@ -297,6 +311,7 @@ class TestMatchingServicePrecedence:
 
 
 # ── Counters ──────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestMatchingServiceCounters:

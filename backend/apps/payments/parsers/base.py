@@ -39,8 +39,7 @@ class ParsedStatement:
 class BankStatementParser(Protocol):
     parser_class: str
 
-    def can_parse(self, raw_text: str) -> bool:
-        ...
+    def can_parse(self, raw_text: str) -> bool: ...
 
     def parse(self, raw_text: str) -> ParsedStatement:
         """

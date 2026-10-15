@@ -189,3 +189,6 @@ CLAUDE.md
 .claudeignore
 
 
+
+# Local disposable proof and secrets stay outside source.
+.dev/
