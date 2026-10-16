@@ -23,6 +23,8 @@ def test_capture_baseline_records_daemon_and_canonical_fingerprints(monkeypatch)
             return SimpleNamespace(stdout="n1\n")
         if command[1:4] == ["volume", "ls", "-q"]:
             return SimpleNamespace(stdout="v1\n")
+        if command[1:5] == ["image", "ls", "-q", "--no-trunc"]:
+            return SimpleNamespace(stdout="img1\n")
         if command[1:3] == ["info", "--format"]:
             return SimpleNamespace(stdout="daemon-1\n")
         if command[1] == "inspect":
@@ -31,17 +33,20 @@ def test_capture_baseline_records_daemon_and_canonical_fingerprints(monkeypatch)
             return SimpleNamespace(stdout=json.dumps([fixture["network"]]))
         if command[1:3] == ["volume", "inspect"]:
             return SimpleNamespace(stdout=json.dumps([fixture["volume"]]))
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(stdout=json.dumps([{"Id": "img1", "RepoTags": ["complect:dev"], "RepoDigests": ["complect@sha256:1"]}]))
         raise AssertionError(command)
 
     baseline = resources.capture_baseline(run=run)
     assert baseline["daemon_id"] == "daemon-1"
     assert {item["id"] for item in baseline["resources"]} == {"c1", "n1", "v1"}
+    assert baseline["images"] == [{"id": "img1", "references": ["complect:dev", "complect@sha256:1"]}]
     assert "Env" not in json.dumps(baseline)
 
 
 def test_verify_allows_new_resources_but_reports_missing_or_changed(monkeypatch):
     monkeypatch.setattr(resources, "_docker_endpoint_is_local", lambda: None)
-    baseline = {"daemon_id": "daemon-1", "resources": [{"kind": "container", "id": "c1", "fingerprint": {"Id": "c1", "Image": "i1", "Mounts": []}, "labels": {"a": "1", "b": "2"}}]}
+    baseline = {"daemon_id": "daemon-1", "resources": [{"kind": "container", "id": "c1", "fingerprint": {"Id": "c1", "Image": "i1", "Mounts": []}, "labels": {"a": "1", "b": "2"}}], "images": []}
 
     def run(command, **_kwargs):
         if command[1:3] == ["info", "--format"]:
@@ -51,6 +56,8 @@ def test_verify_allows_new_resources_but_reports_missing_or_changed(monkeypatch)
         if command[1] == "inspect":
             return SimpleNamespace(stdout=json.dumps([{"Id": "c1", "Image": "i2", "Mounts": [], "Config": {"Labels": {"a": "1", "b": "2"}}}, {"Id": "new", "Image": "i", "Mounts": [], "Config": {"Labels": {}}}]))
         if command[1:4] == ["network", "ls", "-q"] or command[1:4] == ["volume", "ls", "-q"]:
+            return SimpleNamespace(stdout="")
+        if command[1:5] == ["image", "ls", "-q", "--no-trunc"]:
             return SimpleNamespace(stdout="")
         raise AssertionError(command)
 
@@ -89,5 +96,12 @@ def test_absence_proof_accepts_missing_recorded_resources(monkeypatch):
 def test_verify_rejects_missing_baseline_schema(monkeypatch):
     monkeypatch.setattr(resources, "_docker_endpoint_is_local", lambda: None)
     assert resources.verify_baseline({"daemon_id": "daemon-1"}, run=lambda *_args, **_kwargs: None) == [
+        "baseline schema invalid"
+    ]
+
+
+def test_verify_rejects_missing_baseline_images(monkeypatch):
+    monkeypatch.setattr(resources, "_docker_endpoint_is_local", lambda: None)
+    assert resources.verify_baseline({"daemon_id": "daemon-1", "resources": []}, run=lambda *_args, **_kwargs: None) == [
         "baseline schema invalid"
     ]
