@@ -1,0 +1,62 @@
+name: Infrastructure tests
+
+# Shared infrastructure can change through any domain; keep the gate unfiltered.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  infra:
+    name: infra
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      INFRA_TEST_BACKEND_IMAGE: complect-infra-ci:${{ github.run_id }}-${{ github.run_attempt }}
+      INFRA_TEST_QUALITY_IMAGE: complect-infra-quality:${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare evidence directory
+        run: mkdir -p "$RUNNER_TEMP/infra-ci"
+      - name: Build locked backend image
+        run: |
+          set -euo pipefail
+          docker build -f backend/Dockerfile.dev -t "$INFRA_TEST_BACKEND_IMAGE" backend \
+            2>&1 | tee "$RUNNER_TEMP/infra-ci/build.log"
+      - name: Build offline quality image
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg BASE_IMAGE="$INFRA_TEST_BACKEND_IMAGE" \
+            -f infra/Dockerfile.tests \
+            -t "$INFRA_TEST_QUALITY_IMAGE" . \
+            2>&1 | tee "$RUNNER_TEMP/infra-ci/quality-build.log"
+      - name: Run the local infrastructure gate
+        run: |
+          set -euo pipefail
+          make agent-infra-test \
+            INFRA_TEST_ARGS="--output $RUNNER_TEMP/infra-ci/test-results" \
+            2>&1 | tee "$RUNNER_TEMP/infra-ci/tests.log"
+      - name: Upload infrastructure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: infra-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/infra-ci
+          if-no-files-found: error
+          retention-days: 7

@@ -1,8 +1,8 @@
 # Перенос зависимостей исходного legacy133 на main
 
-Статус: предложение для согласования. Пользователь 16 октября запросил точный
-план до продолжения legacy. Перенос бизнес-кода и миграций не начат;
-legacy-стенды не запускались.
+Статус: пользователь 16 октября согласовал перенос зависимостей и четырёх
+миграций и вызвал implement. Выполняется реализация и проверка на отдельных
+ресурсах. Результаты приёмки записываются отдельно.
 
 Исходная задача: [infra reassessment](../specs/2026-10-16-retro-infra-reassessment.md).
 База: `20bb9fc0846a13e550f3023d47ddbf286bcbc65f` (`origin/main` на момент проверки).
@@ -136,27 +136,18 @@ DDD-boundary/OpenAPI проверки и полный Payments gate. Затем 
 пакета, cleanup own resources, сохранности общей Docker-среды и точного
 патча перед публикацией. Зелёный сбор тестов не заменяет runtime proof.
 
-## Текущий infra-черновик и отдельный обнаруженный пробел
+## Состояние реализации
 
-Черновик находится в managed worktree
+Кандидат находится в managed worktree
 `/home/sever/.codex/worktrees/infra-retro-candidate/Complect`, ветка
-`codex/infra-retro-candidate`. Workflow, legacy template и refusal driver
-не опубликованы. Реальные legacy-стенды не создавались.
+`codex/infra-retro-candidate`. Код пока не опубликован. Зависимости перенесены;
+выполняются реальные disposable-проверки. Прежние ошибки и их evidence
+сохраняются отдельно от успешных проверок.
 
-Выполнены Docker static checks и 68 pytest. Полный unittest discovery пока
-FAIL: существующий в main `MakeRootSelectionTests` требует отсутствующие
-Make targets `doctor`/`test-e2e` и checkout routing. Это отдельный baseline
-integration gap, не разрешение переносить весь локальный lifecycle/toolchain.
-Перед публикацией infra-кандидата требуется либо согласованный перенос
-реальных target entrypoints с зависимостями, либо отдельное согласованное
-изменение контракта этого теста. Пропуск теста ради зелёного gate не предлагается.
-
-## Решения для согласования
-
-1. Разрешить отдельный dependency-перенос перечисленных доменов и четырёх
-   миграций по inventory, с узкими изменениями существующих seams и no-DDL IAM.
-2. Отдельно определить объём восстановления локальных Make entrypoints;
-   его полный dependency inventory пока не установлен и не включён в 57 путей.
+Обнаруженный при подготовке MakeRootSelectionTests gap закрывается отдельно
+согласованным патчем маршрутизации ниже. Dependency-перенос и четыре миграции
+пользователь одобрил 16 октября через implement. Полный приёмочный статус
+определяется текущими receipts, включая exact133/399, четыре отказа и live CI.
 
 ## Последовательность после согласования
 
@@ -172,3 +163,44 @@ integration gap, не разрешение переносить весь лок�
    dependency + infra кандидат и выполнить focused/static/Payments проверки.
 6. Выполнить original133/399 и четыре real refusals, независимое review;
    предъявить патч, затем получить положительный/отрицательный CI и проверить cleanup.
+
+
+## Согласованное уточнение Make
+
+16 октября пользователь отдельно одобрил точный патч маршрутизации: DEV_ROOT
+передаётся существующему dev_environment helper для Compose, doctor, SDK и E2E;
+цель test-e2e зависит от generate-sdk. Проверяются dry-run и безопасный отказ;
+обычный dev-стек и frontend E2E не запускаются.
+
+
+## Согласованное уточнение Notifications
+
+16 октября пользователь отдельно одобрил новый
+`backend/apps/notifications/handlers/task_handlers.py` только с
+`TaskCompletedHandler` и регистрацию существующего `TaskCompletedEvent` в
+`handlers/__init__.py`. Исходный тест fanout требует этой подписки. Изменение
+проверяется через публичный NotificationsConsumer; consumer/retry/API/DDL
+не входят в этот патч.
+
+## Узкие места интеграции, выявленные при переносе
+
+Кроме исходного inventory57 потребовались file-pipeline transport и загрузка
+legacy Celery task, импорт primary-context в SRE service, существующий persons
+route через PII service, optional local provisioning параметры UserAdminService,
+IdentityCreatedEvent и локальная management command. Это связывание согласованных
+зависимостей с уже существующими публичными границами. Локальный stand явно
+задаёт PUBLIC_SITE_TENANT_ID; отсутствие значения по-прежнему закрывает вход.
+CommonConfig регистрирует существующие RBAC-модели. IAM creation учитывает
+реальные columns основной схемы; повторная вставка shadow columns запрещена.
+Перенос IAM DDL этим не разрешается. Фактический финальный список файлов и
+hashes фиксируется отдельно после исправления runtime-регрессий.
+
+
+## Совместимость с публичным входом main
+
+Тестовые фикстуры используют действующие username login и MFA setup/confirm,
+повторный login и MFA verify. Локальный provisioning и фикстуры создают legacy
+actor с настоящим tenant ID и canonical membership: токен базы main получает
+tenant из legacy actor. Публичный auth API сохраняет контракт базы main.
+Тесты проверяют actor tenant, отказ для настоящего foreign membership,
+сохранение исходной identity и rollback всей пачки при позднем сбое.

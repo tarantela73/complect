@@ -15,3 +15,15 @@ class IdentityMergeAuthorityChangedEvent:
     operation_id: uuid.UUID
     action_kind: str
     operation_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityCreatedEvent:
+    EVENT_TYPE: ClassVar[str] = "identity.created"
+
+    event_id: uuid.UUID
+    event_version: int
+    occurred_at: datetime
+    correlation_id: uuid.UUID
+    identity_id: uuid.UUID
+    tenant_id: uuid.UUID
