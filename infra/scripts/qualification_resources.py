@@ -43,6 +43,10 @@ def _ids(kind: str, run: Runner) -> list[str]:
     return str(stdout).split()
 
 
+def _image_ids(run: Runner) -> list[str]:
+    return _ids_from_command(["docker", "image", "ls", "-q", "--no-trunc"], run)
+
+
 def _inspect(kind: str, identifiers: list[str], run: Runner) -> list[dict[str, Any]]:
     if not identifiers:
         return []
@@ -72,6 +76,11 @@ def _resource_record(kind: str, resource: Mapping[str, Any]) -> dict[str, Any]:
     return {"kind": kind, "id": key, "fingerprint": identity, "labels": _labels(kind, resource)}
 
 
+def _image_record(resource: Mapping[str, Any]) -> dict[str, Any]:
+    references = sorted(set(resource.get("RepoTags") or ()) | set(resource.get("RepoDigests") or ()))
+    return {"id": resource["Id"], "references": references}
+
+
 def _daemon_id(run: Runner) -> str:
     command = ["docker", "info", "--format", "{{.ID}}"]
     try:
@@ -92,7 +101,8 @@ def capture_baseline(*, run: Runner = subprocess.run) -> dict[str, Any]:
     resources: list[dict[str, Any]] = []
     for kind in ("container", "network", "volume"):
         resources.extend(_resource_record(kind, item) for item in _inspect(kind, _ids(kind, run), run))
-    return {"daemon_id": _daemon_id(run), "resources": resources}
+    images = [_image_record(item) for item in _inspect("image", _image_ids(run), run)]
+    return {"daemon_id": _daemon_id(run), "resources": resources, "images": images}
 
 
 def verify_baseline(baseline: Mapping[str, Any], *, run: Runner = subprocess.run) -> list[str]:
@@ -101,6 +111,7 @@ def verify_baseline(baseline: Mapping[str, Any], *, run: Runner = subprocess.run
         not isinstance(baseline, Mapping)
         or not isinstance(baseline.get("daemon_id"), str)
         or not isinstance(baseline.get("resources"), list)
+        or not isinstance(baseline.get("images"), list)
     ):
         return ["baseline schema invalid"]
     errors: list[str] = []
@@ -108,7 +119,8 @@ def verify_baseline(baseline: Mapping[str, Any], *, run: Runner = subprocess.run
         _docker_endpoint_is_local()
         if _daemon_id(run) != baseline["daemon_id"]:
             errors.append("daemon identity changed")
-        current = capture_baseline(run=run)["resources"]
+        current_baseline = capture_baseline(run=run)
+        current = current_baseline["resources"]
     except Exception as exc:
         return [f"baseline verification failed: {type(exc).__name__}"]
     by_key = {(item["kind"], item["id"]): item for item in current}
@@ -119,6 +131,16 @@ def verify_baseline(baseline: Mapping[str, Any], *, run: Runner = subprocess.run
             errors.append(f"missing baseline resource: {key[0]}:{key[1]}")
         elif actual != expected:
             errors.append(f"baseline resource changed: {key[0]}:{key[1]}")
+    current_images = {item["id"]: set(item["references"]) for item in current_baseline["images"]}
+    for expected in baseline["images"]:
+        identifier = expected.get("id") if isinstance(expected, Mapping) else None
+        references = expected.get("references") if isinstance(expected, Mapping) else None
+        if not isinstance(identifier, str) or not isinstance(references, list):
+            errors.append("baseline image schema invalid")
+        elif identifier not in current_images:
+            errors.append(f"missing baseline image: {identifier}")
+        elif not set(references).issubset(current_images[identifier]):
+            errors.append(f"baseline image references changed: {identifier}")
     return errors
 
 

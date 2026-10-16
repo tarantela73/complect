@@ -199,6 +199,10 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
                 if stand._fingerprint('container', actual) != record['fingerprint'] or stand._labels('container', actual) != record['labels']:
                     raise ValueError('container identity changed before stop')
                 commands.run(['docker', 'stop', '--time', '5', actual['Id']], write=True, timeout=30)
+            image = receipt.get('image')
+            if image and any(item['id'] == image['id'] and not item['references'] for item in baseline.get('images', [])):
+                # Removing the last new tag could also delete a previously untagged image.
+                raise ValueError('stand image shares a previously untagged baseline identity')
             receipt = stand.cleanup(ownership)
             if receipt['cleanup'] != 'PASS':
                 raise ValueError('guarded stand cleanup blocked')
