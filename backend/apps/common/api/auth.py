@@ -9,6 +9,7 @@ from ninja.security import HttpBearer
 
 from apps.common.context.core import ContextCore, set_correlation_id, set_request_id, set_tenant_id, set_user_id
 from apps.common.contracts.auth_context import ValidatedAuthContext, get_auth_context_validator
+from apps.common.contracts.pii_read_context import PiiReadContext, set_pii_read_context
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +95,16 @@ class JWTAuth(HttpBearer):
         set_tenant_id(context.tenant_id)
         set_request_id(request_id)
         set_correlation_id(correlation_id)
+        set_pii_read_context(
+            PiiReadContext(
+                actor_type="user",
+                actor_ref=str(context.actor_id),
+                tenant_id=context.tenant_id,
+                reason_code="AUTHENTICATED_REQUEST",
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+        )
         request.jwt_user_id = context.actor_id
         request.jwt_tenant_id = context.tenant_id
         request._verified_authentication = _VerifiedRequestAuthentication(context, token, payload)

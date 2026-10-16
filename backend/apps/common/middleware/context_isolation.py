@@ -1,4 +1,5 @@
 from apps.common.context.guard import ContextGuard
+from apps.common.contracts.pii_read_context import clear_pii_read_context
 
 
 class ContextIsolationMiddleware:
@@ -21,5 +22,6 @@ class ContextIsolationMiddleware:
         finally:
             # 2. POST-CLEANUP: Намертво выжигаем ContextVar из потока при любом исходе запроса
             ContextGuard.hard_reset()
+            clear_pii_read_context()
 
             ContextGuard.hard_reset()

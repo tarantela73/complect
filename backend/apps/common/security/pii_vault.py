@@ -1,3 +1,4 @@
+import ast
 import os
 
 import structlog
@@ -8,6 +9,28 @@ logger = structlog.get_logger(__name__)
 
 
 class PiiEncryptionVault:
+    @staticmethod
+    def encode_for_text_field(ciphertext: bytes | str | memoryview) -> str:
+        if isinstance(ciphertext, memoryview):
+            ciphertext = ciphertext.tobytes()
+        if isinstance(ciphertext, str):
+            try:
+                if ciphertext.startswith("\\x"):
+                    bytes.fromhex(ciphertext[2:])
+                elif ciphertext.startswith(("b'", 'b"')):
+                    if not isinstance(ast.literal_eval(ciphertext), bytes):
+                        raise ValueError
+                elif ciphertext:
+                    raise ValueError
+            except (SyntaxError, ValueError):
+                raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext") from None
+            return ciphertext
+        if not isinstance(ciphertext, bytes):
+            raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext")
+        if not ciphertext:
+            return ""
+        return "\\x" + ciphertext.hex()
+
     """
     [ADR 0009] Высокозащищенный криптографический сейф персональных данных по 152-ФЗ.
     [ИСПРАВЛЕНО] Использует стандарт OpenPGP (AES-256) с принудительным солением и MDC [1].
@@ -55,21 +78,40 @@ class PiiEncryptionVault:
             return cursor.fetchone()[0]
 
     @classmethod
-    def decrypt_field(cls, cipher_bytes: bytes) -> str:
+    def decrypt_field(cls, cipher_bytes: bytes | str | memoryview | None) -> str:
         """[ИСПРАВЛЕНО] Безопасное дешифрование OpenPGP байт с проверкой целостности блока [1]."""
         if not cipher_bytes:
             return ""
+        if isinstance(cipher_bytes, memoryview):
+            cipher_bytes = cipher_bytes.tobytes()
+        elif isinstance(cipher_bytes, str):
+            if cipher_bytes.startswith("\\x"):
+                try:
+                    cipher_bytes = bytes.fromhex(cipher_bytes[2:])
+                except ValueError as exc:
+                    raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext") from exc
+            elif cipher_bytes.startswith("b'") or cipher_bytes.startswith('b"'):
+                try:
+                    parsed = ast.literal_eval(cipher_bytes)
+                except (SyntaxError, ValueError) as exc:
+                    raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext") from exc
+                if not isinstance(parsed, bytes):
+                    raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext")
+                cipher_bytes = parsed
+            else:
+                raise PermissionDenied("CRITICAL SECURITY FAILURE: invalid PII ciphertext")
 
+        if not cipher_bytes:
+            return ""
         key = cls._get_master_key_runtime()
         query = "SELECT pgp_sym_decrypt(%s, %s)"
 
-        with connection.cursor() as cursor:
-            try:
+        try:
+            with connection.cursor() as cursor:
                 cursor.execute(query, [cipher_bytes, key])
                 return cursor.fetchone()[0]
-            except Exception as exc:
-                logger.error(
-                    "PII DECRYPTION INTEGRITY FAILURE (MDC OR WRONG KEY)",
-                    error=str(exc),
-                )
-                return ""
+        except Exception:
+            logger.error(
+                "PII DECRYPTION INTEGRITY FAILURE (MDC OR WRONG KEY)",
+            )
+            raise PermissionDenied("PII_DECRYPTION_FAILED") from None

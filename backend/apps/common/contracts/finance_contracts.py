@@ -25,6 +25,23 @@ class FinanceReaderProtocol(Protocol):
     ) -> list[LastPaymentDTO]: ...
 
 
+_finance_reader: FinanceReaderProtocol | None = None
+
+
+def register_finance_reader(reader: FinanceReaderProtocol) -> None:
+    """Register the Finance-owned reader at the composition root."""
+    global _finance_reader
+    if _finance_reader is not None and _finance_reader is not reader:
+        raise RuntimeError("Finance reader already registered")
+    _finance_reader = reader
+
+
+def get_finance_reader() -> FinanceReaderProtocol:
+    if _finance_reader is None:
+        raise RuntimeError("FINANCE_READER_UNAVAILABLE")
+    return _finance_reader
+
+
 @dataclass(frozen=True, slots=True)
 class TxCandidateDTO:
     transaction_id: uuid.UUID

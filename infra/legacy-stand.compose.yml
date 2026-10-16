@@ -1,0 +1,221 @@
+# Disposable legacy stand.  It is selected explicitly by prepare_legacy_stand.
+# Keep this file port-free: the stand must not claim host listeners.
+x-app-environment: &app-environment
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  DJANGO_SETTINGS_MODULE: config.settings.local
+  ENVIRONMENT: local
+  IAM_IDENTITY_AUTH_MODE: "${IAM_IDENTITY_AUTH_MODE:-ENFORCE}"
+  IAM_LEGACY_AUTHORITY_CUTOFF: "${IAM_LEGACY_AUTHORITY_CUTOFF:-false}"
+  DEBUG: "true"
+  HOME: /tmp
+  POSTGRES_DB: complect_db
+  POSTGRES_USER: complect_app_local
+  POSTGRES_APP_RUNTIME_ROLE: complect_app_runtime
+  POSTGRES_APP_RUNTIME_LOGIN: complect_app_local
+  DATABASE_HOST: postgres_primary
+  DATABASE_REPLICA_HOST: postgres_replica
+  DATABASE_PASSWORD_FILE: /run/complect-secrets/app_postgres_password
+  DJANGO_SECRET_KEY_FILE: /run/complect-secrets/django_secret_key
+  EXPECTED_GATEWAY_TOKEN_FILE: /run/complect-secrets/app_gateway_token
+  POSTGRES_REPLICA_ENABLED: "true"
+  POSTGRES_REPLICA_MAX_LAG: "1.0"
+  IAM_DEFERRED_MERGE_EXECUTION_ENABLED: "false"
+  REDIS_DEFAULT_URL: redis://redis:6379/0
+  REDIS_CACHE_URL: redis://redis:6379/1
+  REDIS_CELERY_URL: redis://redis:6379/2
+  REDIS_STREAMS_URL: redis://redis:6379/3
+  REDIS_IDEMPOTENCY_URL: redis://redis:6379/4
+  CHANNEL_LAYER_URL: redis://redis:6379/5
+  CELERY_RESULT_BACKEND: redis://redis:6379/6
+  REDIS_AUDIT_URL: redis://redis:6379/7
+  DEV_STATE_DIR: /var/lib/complect-dev
+  PYTEST_ADDOPTS: -o cache_dir=/var/cache/complect/pytest
+  COVERAGE_FILE: /var/cache/complect/.coverage
+  MYPY_CACHE_DIR: /var/cache/complect/mypy
+  RUFF_CACHE_DIR: /var/cache/complect/ruff
+
+x-owned-labels: &owned-labels
+  complect.checkout_id: "${DEV_CHECKOUT_ID:-unconfigured}"
+
+x-app: &app
+  image: "${COMPOSE_PROJECT_NAME:-complect}_backend:dev"
+  init: true
+  user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+  working_dir: /app
+  environment: *app-environment
+  env_file:
+    - path: ./.dev/external.env
+      required: false
+      format: raw
+  volumes:
+    - ./backend:/app:z
+    - runtime_secrets:/run/complect-secrets:ro
+    - dev_state:/var/lib/complect-dev:ro
+    - backend_cache:/var/cache/complect
+  networks: [erp_network]
+  labels: *owned-labels
+
+networks:
+  erp_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "${COMPLECT_DOCKER_SUBNET:?Use the dev_environment.py helper or configure an explicit subnet}"
+    labels: *owned-labels
+
+volumes:
+  pg_primary_data: {labels: *owned-labels}
+  pg_replica_data: {labels: *owned-labels}
+  redisdata: {labels: *owned-labels}
+  s3data: {labels: *owned-labels}
+  runtime_secrets: {labels: *owned-labels}
+  dev_state: {labels: *owned-labels}
+  backend_cache: {labels: *owned-labels}
+
+services:
+  secrets_init:
+    profiles: [tools]
+    network_mode: none
+    image: python:3.12.13-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+    volumes:
+      - ./.dev/secrets:/source-secrets:ro,z
+      - ./infra/scripts:/opt/complect:ro,z
+      - runtime_secrets:/run/complect-secrets
+    command: [python, -B, /opt/complect/runtime_secrets.py, --postgres-uid, "${DEV_POSTGRES_UID:-999}", --postgres-gid, "${DEV_POSTGRES_GID:-999}", --kong-uid, "${DEV_KONG_UID:-1001}", --kong-gid, "${DEV_KONG_GID:-1001}", --minio-uid, "${DEV_MINIO_UID:-0}", --minio-gid, "${DEV_MINIO_GID:-0}", --app-uid, "${DEV_UID:-1000}", --app-gid, "${DEV_GID:-1000}"]
+    labels: *owned-labels
+
+  volume_init:
+    profiles: [tools]
+    network_mode: none
+    image: python:3.12.13-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+    volumes:
+      - ./infra/scripts:/opt/complect:ro,z
+      - dev_state:/owned/state
+      - backend_cache:/owned/backend
+    command: [python, -B, /opt/complect/volume_permissions.py, "${DEV_UID:-1000}", "${DEV_GID:-1000}", --volumes, state, backend]
+    labels: *owned-labels
+
+  postgres_primary:
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    environment:
+      POSTGRES_DB: complect_db
+      POSTGRES_USER: complect_migrator
+      POSTGRES_APP_RUNTIME_ROLE: complect_app_runtime
+      POSTGRES_PASSWORD_FILE: /run/complect-secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: [postgres, -c, wal_level=replica, -c, max_wal_senders=10, -c, max_replication_slots=10, -c, hot_standby=on]
+    volumes:
+      - ./infra/postgres/init/01_replication.sh:/docker-entrypoint-initdb.d/01_replication.sh:ro,z
+      - ./infra/postgres/init/02_pg_hba.sh:/docker-entrypoint-initdb.d/02_pg_hba.sh:ro,z
+      - ./infra/postgres/init/03_dev_extensions.sql:/docker-entrypoint-initdb.d/03_dev_extensions.sql:ro,z
+      - ./infra/postgres/init/04_runtime_role.sh:/docker-entrypoint-initdb.d/04_runtime_role.sh:ro,z
+      - pg_primary_data:/var/lib/postgresql/data
+      - runtime_secrets:/run/complect-secrets:ro
+    networks: [erp_network]
+    labels: *owned-labels
+    healthcheck:
+      test: [CMD, pg_isready, -t, "2", -h, localhost, -U, complect_migrator, -d, complect_db]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  postgres_replica:
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+      - runtime_secrets:/run/complect-secrets:ro
+      - ./infra/postgres/start_replica.sh:/opt/complect/start_replica.sh:ro,z
+    entrypoint: [/bin/bash, /opt/complect/start_replica.sh]
+    networks: [erp_network]
+    labels: *owned-labels
+    depends_on:
+      postgres_primary: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "test \"$$(psql -X -U complect_migrator -d complect_db -Atc 'SELECT pg_is_in_recovery()')\" = t"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.2-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
+    command: [redis-server, --appendonly, "yes"]
+    volumes: [redisdata:/data]
+    networks: [erp_network]
+    labels: *owned-labels
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    environment:
+      MINIO_ROOT_USER: complect_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/complect-secrets/minio_password
+    command: [server, /data, --console-address, ":9001"]
+    volumes: [s3data:/data, runtime_secrets:/run/complect-secrets:ro]
+    networks: [erp_network]
+    labels: *owned-labels
+    healthcheck:
+      test: [CMD, curl, -fsS, --connect-timeout, "1", --max-time, "2", http://localhost:9000/minio/health/live]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  s3_bootstrap:
+    profiles: [tools]
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    volumes: [runtime_secrets:/run/complect-secrets:ro]
+    networks: [erp_network]
+    labels: *owned-labels
+    entrypoint: [/bin/sh, -ec]
+    command: ['mc alias set local http://minio:9000 complect_root_user "$$(cat /run/complect-secrets/minio_password)" >/dev/null; mc mb --ignore-existing local/complect-quarantine; mc mb --ignore-existing local/complect-production']
+
+  migrate:
+    <<: *app
+    profiles: [tools]
+    environment:
+      <<: *app-environment
+      DEV_SCHEMA_MANAGEMENT: "1"
+      POSTGRES_USER: complect_migrator
+      DATABASE_PASSWORD_FILE: /run/complect-secrets/postgres_password
+    user: "${DEV_UID:-1000}:${DEV_POSTGRES_GID:-999}"
+    volumes:
+      - ./backend:/app:ro,z
+      - runtime_secrets:/run/complect-secrets:ro
+      - dev_state:/var/lib/complect-dev
+      - backend_cache:/var/cache/complect
+    command: [python, -B, -m, config.dev_database, apply]
+
+  backend:
+    <<: *app
+    command: [sh, -ec, 'python -B -m config.dev_database ready && exec granian --interface asginl --host 0.0.0.0 --port 8010 --workers 1 config.asgi:application']
+    depends_on:
+      postgres_primary: {condition: service_healthy}
+      postgres_replica: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, --silent, --show-error, --fail, --connect-timeout, "1", --max-time, "2", http://localhost:8010/health/]
+      interval: 5s
+      timeout: 3s
+      start_period: 20s
+      retries: 24
+
+  celery_worker:
+    <<: *app
+    command: [sh, -ec, 'python -B -m config.dev_database ready && exec celery -A config worker --loglevel=info -Q default,outbox,notifications,finance,files,retention,integration -c 4']
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -B, config/dev_process_health.py, worker]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  clamav:
+    profiles: [real-files]
+    image: clamav/clamav@sha256:f7954ca7ca13f0ebc301bb8a8b492a88db793192c48763a0b9a2ffb64dcf4bee
+    networks: [erp_network]
+    labels: *owned-labels
