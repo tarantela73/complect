@@ -7,7 +7,7 @@ from infra.scripts.dev_environment import Commands, DevError, configure
 
 
 def test_cleanup_configuration_allows_missing_credentials_but_keeps_identity_checks(tmp_path):
-    shutil.copy(Path.cwd() / ".env.dev.example", tmp_path / ".env.dev.example")
+    shutil.copy(Path(__file__).resolve().parents[3] / ".env.dev.example", tmp_path / ".env.dev.example")
     configure(tmp_path)
     shutil.rmtree(tmp_path / ".dev/secrets")
 
@@ -18,7 +18,7 @@ def test_cleanup_configuration_allows_missing_credentials_but_keeps_identity_che
 
 
 def test_default_configuration_still_requires_credentials(tmp_path):
-    shutil.copy(Path.cwd() / ".env.dev.example", tmp_path / ".env.dev.example")
+    shutil.copy(Path(__file__).resolve().parents[3] / ".env.dev.example", tmp_path / ".env.dev.example")
     configure(tmp_path)
     shutil.rmtree(tmp_path / ".dev/secrets")
 
@@ -27,7 +27,7 @@ def test_default_configuration_still_requires_credentials(tmp_path):
 
 
 def test_cleanup_configuration_rejects_symlink_private_state(tmp_path):
-    shutil.copy(Path.cwd() / '.env.dev.example', tmp_path / '.env.dev.example')
+    shutil.copy(Path(__file__).resolve().parents[3] / '.env.dev.example', tmp_path / '.env.dev.example')
     configure(tmp_path)
     shutil.rmtree(tmp_path / '.dev/secrets')
     (tmp_path / '.dev/secrets').symlink_to(tmp_path / 'missing')
