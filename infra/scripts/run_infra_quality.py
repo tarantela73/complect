@@ -23,6 +23,9 @@ DEFAULT_SCOPE = (
     "infra/scripts/evidence_bundle.py",
     "infra/scripts/prepare_legacy_stand.py",
     "infra/scripts/verify_legacy_preflight_refusals.py",
+    "infra/scripts/qualification_resources.py",
+    "infra/scripts/qualification_processes.py",
+    "infra/scripts/run_legacy_qualification.py",
 )
 RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_evidence_bundle.py",
@@ -34,6 +37,10 @@ RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_legacy_preflight.py",
     "infra/scripts/tests/test_legacy_preflight_contract.py",
     "infra/scripts/tests/test_legacy_preflight_refusals.py",
+    "infra/scripts/tests/test_legacy_qualification.py",
+    "infra/scripts/tests/test_legacy_regression_runtime_paths.py",
+    "infra/scripts/tests/test_qualification_resources.py",
+    "infra/scripts/tests/test_qualification_processes.py",
 )
 
 
