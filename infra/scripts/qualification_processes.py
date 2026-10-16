@@ -55,6 +55,9 @@ def _journal_path(directory: Path, name: str) -> Path:
         raise ValueError("invalid stage name")
     path = directory / "processes" / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    status = path.parent.lstat()
+    if path.parent.is_symlink() or status.st_uid != os.getuid() or status.st_mode & 0o077:
+        raise ValueError("unsafe process journal directory")
     return path
 
 

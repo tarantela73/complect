@@ -134,17 +134,20 @@ def _preserve_and_remove_private(directory: Path, state: dict[str, Any]) -> None
         raise ValueError('private directory replaced')
     control = private / 'control'
     evidence = directory / 'recovered-runtime'
-    for name in ('manifest.json', 'runtime.json', 'lifecycle.jsonl', 'target.json', 'privilege-probes.json'):
-        source = control / name
-        if source.is_symlink() or control.is_symlink():
-            raise ValueError('runtime evidence symlink refused')
-        if source.is_file():
-            evidence.mkdir(exist_ok=True, mode=0o700)
-            target = evidence / name
-            if not target.exists():
-                shutil.copyfile(source, target)
-                target.chmod(0o600)
-    shutil.rmtree(private)
+    try:
+        for name in ('manifest.json', 'runtime.json', 'lifecycle.jsonl', 'target.json', 'privilege-probes.json'):
+            source = control / name
+            if source.is_symlink() or control.is_symlink():
+                raise ValueError('runtime evidence symlink refused')
+            if source.is_file():
+                evidence.mkdir(exist_ok=True, mode=0o700)
+                target = evidence / name
+                if not target.exists():
+                    shutil.copyfile(source, target)
+                    target.chmod(0o600)
+    finally:
+        shutil.rmtree(private)
+
 
 
 def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
@@ -184,18 +187,27 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
             errors.extend(prove_attempt_absent(receipt))
             if errors:
                 return errors
-            secrets = Path(receipt['root']) / '.dev/secrets'
-            if secrets.is_symlink() or secrets.parent.is_symlink():
-                raise ValueError('stand secret directory symlink refused')
-            if secrets.exists():
-                shutil.rmtree(secrets)
         elif state.get('phase') not in ('frozen', 'baseline', 'snapshot'):
             # A prepare intent without a receipt cannot establish resource ownership.
             raise ValueError('prepare inventory missing')
-        _preserve_and_remove_private(directory, state)
         errors.extend(verify_baseline(baseline))
     except Exception as error:
         errors.append(type(error).__name__ + ': ' + str(error))
+    finally:
+        # Credential deletion has its own guards and does not depend on Docker cleanup.
+        try:
+            _preserve_and_remove_private(directory, state)
+        except Exception as error:
+            errors.append('private cleanup: ' + type(error).__name__)
+        secrets = directory / 'frozen/.dev/test-artifacts/stand/checkout/.dev/secrets'
+        try:
+            if any(p.is_symlink() for p in (secrets, *secrets.parents)):
+                raise ValueError('stand secret ancestor symlink refused')
+            if secrets.exists():
+                _private_identity(secrets)
+                shutil.rmtree(secrets)
+        except Exception as error:
+            errors.append('stand credentials cleanup: ' + type(error).__name__)
     return errors
 
 

@@ -43,3 +43,29 @@ def test_stop_work_terminates_owned_process_group(tmp_path):
     assert not thread.is_alive()
     assert result == [143]
     assert json.loads(journal.read_text())["state"] in {"stopped", "finished"}
+
+
+def test_symlinked_process_directory_is_refused_before_writing(tmp_path):
+    import pytest
+    external = tmp_path / 'external'
+    external.mkdir(mode=0o700)
+    attempt = tmp_path / 'attempt'
+    attempt.mkdir()
+    (attempt / 'processes').symlink_to(external, target_is_directory=True)
+    with pytest.raises(ValueError, match='unsafe process journal'):
+        run_stage(attempt, 'prepare', [sys.executable, '-c', 'pass'], Path.cwd())
+    assert list(external.iterdir()) == []
+
+
+def test_malformed_and_missing_process_journals_block_cleanup(tmp_path):
+    import pytest
+    process_dir = tmp_path / 'processes'
+    process_dir.mkdir(mode=0o700)
+    intent = process_dir / 'prepare.intent.json'
+    intent.write_text('{}')
+    with pytest.raises(RuntimeError, match='no process journal'):
+        stop_work(tmp_path)
+    journal = process_dir / 'prepare.json'
+    journal.write_text('{"state":"finished"}')
+    with pytest.raises(RuntimeError, match='malformed process identity'):
+        stop_work(tmp_path)
