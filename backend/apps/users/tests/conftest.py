@@ -13,6 +13,7 @@ from django.test import Client
 from django.test.client import MULTIPART_CONTENT
 from django.utils import timezone
 
+from apps.common.contracts.pii_read_context import PiiReadContext
 from apps.users.models import IdentityMergeOperation, RecoveryOperation, RecoveryToken, User
 from apps.users.security.credential_entrypoints import credential_entrypoint_manifest_digest
 from apps.users.security.reconciliation_approval import (
@@ -94,6 +95,18 @@ def identity(db):
         security_version=1,
         security_status=User.SecurityStatus.ACTIVE,
         identity_legal_hold=False,
+    )
+
+
+@pytest.fixture
+def pii_read_context(identity):
+    return PiiReadContext(
+        actor_type="operator",
+        actor_ref=f"test-actor:{identity.identity_id}",
+        tenant_id=uuid.uuid4(),
+        reason_code="TENANT_USER_LIST",
+        request_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
     )
 
 

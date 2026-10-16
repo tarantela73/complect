@@ -75,13 +75,22 @@ def create_user(
     email: str,
     full_name: str,
     roles: list[str],
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+    username: str | None = None,
+    operator_ref: str | None = None,
+    initial_password: str | None = None,
 ) -> tuple[User, str]:
     """
     Creates a new user within the tenant with a generated temporary password.
     Returns (user, temp_password) — caller is responsible for delivering
     the temp_password to the new user securely (email or admin copy).
     """
+    if actor_id is None or operator_ref is not None or initial_password is not None:
+        from apps.users.services.local_files_provisioning import require_local_operator
+
+        require_local_operator(operator_ref)
+        if actor_id is not None:
+            raise ValidationError("LOCAL_OPERATOR_ACTOR_CONFLICT")
     if is_reserved_merge_email(email):
         raise ValidationError({"email": "RESERVED_IDENTITY_EMAIL"}, code="RESERVED_IDENTITY_EMAIL")
     if User.objects.filter(email=email).exists():
@@ -100,11 +109,11 @@ def create_user(
                 code="UNKNOWN_ROLE",
             ) from None
 
-    temp_password = _generate_temp_password()
+    temp_password = initial_password or _generate_temp_password()
 
     with transaction.atomic():
         user = User(
-            username=email,
+            username=username or email,
             email=email,
             first_name=full_name,
             tenant_id=tenant_id,

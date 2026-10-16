@@ -348,3 +348,46 @@ class TestNotificationsApi:
         )
         assert len(page2.results) == 2
         assert page2.next_cursor is None
+
+
+@pytest.mark.django_db(transaction=True)
+class TestNotificationsConsumerDeferredCallbacks:
+    @pytest.mark.django_db(transaction=True)
+    def test_fanout_callbacks_keep_each_recipient(
+        self,
+        django_capture_on_commit_callbacks,
+    ) -> None:
+        from apps.common.events.tasks import TaskCompletedEvent
+
+        tenant_id = uuid.uuid4()
+        creator_id = uuid.uuid4()
+        assignee_id = uuid.uuid4()
+        payload = {
+            "creator_id": str(creator_id),
+            "assigned_to_id": str(assignee_id),
+            "task_title": "Проверка захвата callback",
+            "correlation_id": str(uuid.uuid4()),
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "event_version": 1,
+        }
+
+        with (
+            patch("apps.notifications.consumer.notifications_consumer.push_notification_ws") as push_ws,
+            patch("apps.notifications.consumer.notifications_consumer.send_notification_email_task"),
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            NotificationsConsumer().process(
+                _make_stream_event(TaskCompletedEvent.EVENT_TYPE, payload, tenant_id=tenant_id)
+            )
+
+        recipients = set(
+            InAppNotification.objects.filter(tenant_id=tenant_id).values_list("user_id", flat=True)
+        )
+        assert recipients == {creator_id, assignee_id}
+        delivered = {(call.args[0], call.args[2]) for call in push_ws.call_args_list}
+        expected = set(
+            InAppNotification.objects.filter(tenant_id=tenant_id).values_list("user_id", "id")
+        )
+        assert delivered == expected
+        assert push_ws.call_count == 2

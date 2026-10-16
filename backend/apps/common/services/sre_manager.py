@@ -1,7 +1,7 @@
 import structlog
 from django.conf import settings
 
-from apps.common.tenancy.context import set_force_primary_db
+from apps.common.context.core import set_force_primary_db
 
 logger = structlog.get_logger(__name__)
 

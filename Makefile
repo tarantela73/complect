@@ -1,4 +1,5 @@
-COMPOSE=docker compose -f docker-compose.dev.yml
+DEV_ROOT ?= $(CURDIR)
+COMPOSE=python3 -B infra/scripts/dev_environment.py compose --root "$(DEV_ROOT)"
 
 # ============================================
 # CORE LIFECYCLE
@@ -38,6 +39,22 @@ beat-logs:
 
 postgres-logs:
 	$(COMPOSE) logs -f --tail=200 postgres_primary
+
+agent-infra-test:
+	python3 -B infra/scripts/run_infra_tests.py all $(INFRA_TEST_ARGS)
+
+agent-infra-image:
+	docker build -f backend/Dockerfile.dev -t "$${INFRA_TEST_BACKEND_IMAGE:-complect_backend:dev}" backend
+	docker build --build-arg BASE_IMAGE="$${INFRA_TEST_BACKEND_IMAGE:-complect_backend:dev}" -t "$${INFRA_TEST_QUALITY_IMAGE:-complect-infra-quality:dev}" -f infra/Dockerfile.tests .
+
+legacy-stand-prepare:
+	python3 -B -m infra.scripts.prepare_legacy_stand prepare $(LEGACY_STAND_ARGS)
+
+legacy-stand-cleanup:
+	python3 -B -m infra.scripts.prepare_legacy_stand cleanup $(LEGACY_STAND_ARGS)
+
+legacy-stand-test:
+	python3 -B -m infra.scripts.run_legacy_regressions $(LEGACY_STAND_ARGS)
 
 # ============================================
 # DJANGO
@@ -107,16 +124,13 @@ tsc:
 	$(COMPOSE) exec frontend sh -c "cd /app && npx tsc --noEmit"
 
 generate-sdk:
-	docker compose -f docker-compose.dev.yml exec backend python -c "\
-import os, json; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local');\
-import django; django.setup();\
-from config.urls import api; print(json.dumps(api.get_openapi_schema()))" \
-	> /tmp/openapi.json
-	docker cp /tmp/openapi.json complect_frontend_dev:/tmp/openapi.json
-	$(COMPOSE) exec frontend npx openapi-typescript /tmp/openapi.json -o src/shared/api/generated/schema.d.ts
+	python3 -B infra/scripts/dev_environment.py sdk --root "$(DEV_ROOT)"
 
-test-e2e:
-	cd frontend/e2e && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npm install --silent && PLAYWRIGHT_BROWSERS_PATH=/home/sever/.cache/ms-playwright npx playwright test
+test-e2e: generate-sdk
+	python3 -B infra/scripts/dev_environment.py e2e --root "$(DEV_ROOT)"
+
+doctor:
+	python3 -B infra/scripts/dev_environment.py doctor --root "$(DEV_ROOT)"
 
 # ============================================
 # QUALITY

@@ -17,6 +17,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 DEBUG = _env_bool("DEBUG", default=True)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+PUBLIC_SITE_TENANT_ID = os.getenv("PUBLIC_SITE_TENANT_ID")
 
 IAM_DEFERRED_MERGE_EXECUTION_ENABLED = _env_bool(
     "IAM_DEFERRED_MERGE_EXECUTION_ENABLED",

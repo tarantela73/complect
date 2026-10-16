@@ -161,6 +161,7 @@ CELERY_IMPORTS = (
     "apps.contracts.tasks.consumer",
     "apps.finance.tasks.consumer",
     "apps.files.tasks.consumer",
+    "apps.files.tasks.legacy_document_compat",
     "apps.files.tasks.policy_evaluator",
     "apps.files.tasks.recovery_scanner",
     "apps.notifications.consumer.notifications_consumer",
