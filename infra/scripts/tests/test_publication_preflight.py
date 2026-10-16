@@ -52,6 +52,12 @@ class PublicationPreflightTests(unittest.TestCase):
                 result = preflight(root, remote="origin", head="missing", target="main", requirements={}, receipts=[])
             self.assertEqual(result["status"], "BLOCKED_STAND")
 
+    def test_pr_head_behind(self):
+        self._run(test_existing_pr_head_behind_local_is_blocked)
+
+    def test_pr_unknown_head(self):
+        self._run(test_existing_pr_unknown_head_is_blocked)
+
 
 def git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
@@ -127,7 +133,7 @@ def test_preflight_rejects_unknown_base(tmp_path):
 
 def test_public_cli_is_read_only(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    completed = subprocess.run([sys.executable, "-m", "infra.scripts.publication_preflight", "--repository", str(tmp_path), "--head", "missing"], capture_output=True, text=True)
+    completed = subprocess.run([sys.executable, "-m", "infra.scripts.publication_preflight", "--repository", str(tmp_path), "--head", "missing", "--target", "main"], capture_output=True, text=True)
     assert completed.returncode != 0
     assert json.loads(completed.stdout)["status"] == "BLOCKED_STAND"
 
@@ -152,9 +158,9 @@ def test_existing_pr_reads_live_base_and_reports_remote_head(tmp_path):
     subprocess.run(["git", "-C", str(tmp_path), "remote", "add", "origin", str(remote_path)], check=True)
     subprocess.run(["git", "-C", str(tmp_path), "push", "-q", "origin", f"{head}:refs/heads/main"], check=True)
     result = preflight(tmp_path, remote="origin", head=head, pr="17", requirements=None, receipts=None,
-                       gh_resolver=lambda _root, _pr: {"baseRefName": "main", "baseRefOid": head, "headRefOid": "0" * 40})
+                       gh_resolver=lambda _root, _pr: {"baseRefName": "main", "baseRefOid": head, "headRefOid": head})
     assert result["status"] == "BLOCKED_STAND"
-    assert result["pr_head"] == "0" * 40
+    assert result["pr_head"] == head
     assert "REQUIREMENTS_REQUIRED" in result["errors"]
 
 
@@ -203,3 +209,19 @@ def test_ls_remote_timeout_returns_blocked_result(tmp_path, monkeypatch):
     result = preflight(tmp_path, remote="origin", head="missing", target="main", requirements={}, receipts=[])
     assert result["status"] == "BLOCKED_STAND"
     assert any("GIT_INPUT_INVALID" in error for error in result["errors"])
+
+
+def test_existing_pr_head_behind_local_is_blocked(tmp_path):
+    old, remote, requirements, receipt = complete_setup(tmp_path)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-qm", "future"], check=True)
+    future = git(tmp_path, "rev-parse", "HEAD")
+    result = preflight(tmp_path, remote="origin", head=old, pr="17", requirements=requirements, receipts=[receipt], gh_resolver=lambda _root, _pr: {"baseRefName": "main", "baseRefOid": old, "headRefOid": future})
+    assert result["status"] == "BLOCKED_STAND"
+    assert "PR_HEAD_NOT_ANCESTOR" in result["errors"]
+
+
+def test_existing_pr_unknown_head_is_blocked(tmp_path):
+    old, remote, requirements, receipt = complete_setup(tmp_path)
+    result = preflight(tmp_path, remote="origin", head=old, pr="17", requirements=requirements, receipts=[receipt], gh_resolver=lambda _root, _pr: {"baseRefName": "main", "baseRefOid": old, "headRefOid": "f" * 40})
+    assert result["status"] == "BLOCKED_STAND"
+    assert "PR_HEAD_NOT_ANCESTOR" in result["errors"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -61,6 +62,7 @@ def _wait_for_inventory(path: Path, process: subprocess.Popen[str], timeout: flo
 
 
 def _recovery(attempt: Path, output: Path, name: str) -> tuple[int, dict[str, Any]]:
+    before = set(attempt.glob("recovery-*.json"))
     completed = _run(
         [sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "recover", "--directory", str(attempt)],
         check=False,
@@ -69,10 +71,20 @@ def _recovery(attempt: Path, output: Path, name: str) -> tuple[int, dict[str, An
         env={**os.environ, "PYTHONPATH": str(attempt / "frozen")},
     )
     (output / f"{name}.stdout").write_text(completed.stdout, encoding="utf-8")
-    receipts = sorted(attempt.glob("recovery-*.json"), key=lambda item: item.stat().st_mtime_ns)
-    if not receipts:
+    receipts = set(attempt.glob("recovery-*.json")) - before
+    if len(receipts) != 1:
         raise RuntimeError(f"recovery produced no receipt: {completed.stdout}")
-    return completed.returncode, json.loads(receipts[-1].read_text())
+    receipt = receipts.pop()
+    _write_json(output / f"{name}.artifact.json", {"path": receipt.name, "sha256":hashlib.sha256(receipt.read_bytes()).hexdigest()})
+    return completed.returncode, json.loads(receipt.read_text())
+
+
+def _scenario_fields(attempt: Path, output: Path, **operations: str) -> dict[str, Any]:
+    state = json.loads((attempt / "attempt.json").read_text())
+    identity_path = attempt / "identity.json"
+    identity = json.loads(identity_path.read_text()) if identity_path.exists() else {}
+    return {"attempt":str(attempt), "source_tree":state["source_tree"], "attempt_id":identity.get("attempt_id"),
+            "recovery_artifacts":{key:json.loads((output / f"{name}.artifact.json").read_text()) for key,name in operations.items()}}
 
 
 def _owned_resources(receipt: dict[str, Any]) -> list[tuple[str, str]]:
@@ -191,7 +203,7 @@ def run(output: Path, image: str) -> dict[str, Any]:
                 receipt = json.loads(ownership.read_text())
                 _assert_owned_absent(receipt)
                 return {"status": "PASS", "early_failure": True, "mode": early_mode,
-                        "source_commit": qualification_result["source_commit"], "initial": qualification_result}
+                        "source_commit": qualification_result["source_commit"], "initial": qualification_result, **_scenario_fields(attempt,output)}
             if process_exit == 0 or qualification_result.get("status") != "BLOCKED_STAND":
                 raise AssertionError(f"early inventory fault was not retained: {process_exit}, {qualification_result}")
             if qualification_result.get("cleanup") != "BLOCKED_STAND":
@@ -236,7 +248,8 @@ def run(output: Path, image: str) -> dict[str, Any]:
             _assert_owned_absent(receipt)
             return {"status": "PASS", "early_failure": True, "initial": qualification_result,
                     "mode": early_mode, "source_commit": qualification_result["source_commit"],
-                    "blocked_recovery": blocked, "recovery": recovered, "repeat": repeated}
+                    "blocked_recovery": blocked, "recovery": recovered, "repeat": repeated,
+                    **_scenario_fields(attempt,output,recovery="early-recovery",repeat="early-recovery-repeat")}
         receipt = _wait_for_inventory(ownership, process)
         networks = [item["id"] for item in receipt["resources"] if item["kind"] == "network"]
         if not networks:
@@ -294,7 +307,7 @@ def run(output: Path, image: str) -> dict[str, Any]:
             raise AssertionError("recovery changed foreign container")
         if any(volume_after.get(key) != foreign_volume_before.get(key) for key in ("Name", "CreatedAt", "Driver", "Options", "Labels")):
             raise AssertionError("recovery changed foreign volume")
-        return {"status": "PASS", "source_commit": source_commit, "initial": qualification_result, "missing_journal": missing, "blocked": blocked, "recovery": recovered, "repeat": repeated, "foreign_container": foreign_container, "foreign_volume": foreign_volume}
+        return {"status": "PASS", "source_commit": source_commit, "initial": qualification_result, "missing_journal": missing, "blocked": blocked, "recovery": recovered, "repeat": repeated, "foreign_container": foreign_container, "foreign_volume": foreign_volume, **_scenario_fields(attempt,output,recovery="recovery-pass",repeat="recovery-repeat")}
     finally:
         if process.poll() is None:
             process.send_signal(signal.SIGTERM)

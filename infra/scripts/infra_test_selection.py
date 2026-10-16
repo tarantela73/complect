@@ -25,6 +25,7 @@ PYTEST_FILES: tuple[str, ...] = (
 
 PAYMENTS_UNITTEST_NAMES: tuple[str, ...] = (
     "infra.scripts.tests.test_attempt_identity",
+    "infra.scripts.tests.test_gate_source_proof",
     "infra.scripts.tests.test_delivery_evidence",
     "infra.scripts.tests.test_publication_preflight",
     "infra.scripts.tests.test_dev_image_identity.ImageIdentityTests",

@@ -295,7 +295,15 @@ class DeliveryEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
             source, sha = AttemptIdentityTests().source(root)
-            (source / "infra/scripts/sample.py").write_text("value = 1\n")
+            from infra.scripts.tests.test_attempt_identity import git
+
+            (source / "infra/scripts/sample.py").write_text('value: int = "bad"\n')
+            git(source, "add", ".")
+            git(source, "commit", "-qm", "known baseline diagnostic")
+            sha = git(source, "rev-parse", "HEAD")
+            (source / "infra/scripts/sample.py").write_text(
+                '# header\nvalue: int = "bad"\n'
+            )
             output = root / "gate"
 
             def save(name, value):
@@ -364,7 +372,9 @@ class DeliveryEvidenceTests(unittest.TestCase):
                         "source_sha256": hashlib.sha256(
                             (source / "infra/scripts/sample.py").read_bytes()
                         ).hexdigest(),
-                        "baseline_sha256": None,
+                        "baseline_sha256": inputs["baseline_inventory"][
+                            "infra/scripts/sample.py"
+                        ]["sha256"],
                         "status": "PASS",
                         "checks": {
                             tool: {
@@ -376,6 +386,27 @@ class DeliveryEvidenceTests(unittest.TestCase):
                             for tool in ("ruff", "mypy")
                         },
                     }
+                },
+            }
+            row = report["files"]["infra/scripts/sample.py"]
+            row["status"] = "FAIL_BASELINE"
+            row["baseline"] = "MATCHED"
+            diagnostic = 'error: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]'
+            row["checks"]["mypy"].update(
+                exit=1, diagnostics=["infra/scripts/sample.py:2: " + diagnostic]
+            )
+            row["baseline_checks"] = {
+                "ruff": {
+                    "command": ["ruff"],
+                    "exit": 0,
+                    "diagnostics": [],
+                    "stderr": "",
+                },
+                "mypy": {
+                    "command": ["mypy"],
+                    "exit": 1,
+                    "diagnostics": ["infra/scripts/sample.py:1: " + diagnostic],
+                    "stderr": "",
                 },
             }
             save("coverage/coverage.json", report)
@@ -456,19 +487,71 @@ class DeliveryEvidenceTests(unittest.TestCase):
                     }
                 ],
             }
+            from infra.scripts.gate_source_proof import capture, finish
+
+            before = capture(source, output, "sources-before.json")
+            names = [
+                "quality/result.json",
+                "unittest/result.json",
+                "unittest/manifest.json",
+                "pytest/result.json",
+                "pytest/manifest.json",
+                "coverage/result.json",
+                "coverage/coverage.json",
+                "coverage/input/input.json",
+                "coverage/after/input.json",
+                "recovery/result.json",
+                "delivery/selection.json",
+                "delivery/payments/result.json",
+                "payments-context/run-fixture/context.json",
+            ]
+            finish(
+                root=source,
+                output=output,
+                before=before["snapshot"],
+                gate_exit=0,
+                artifacts={n: output / n for n in names},
+            )
             result = accept_receipts(req, [gate])
             self.assertEqual(result["status"], "PASS", result)
-            # A baseline label without the original source and tool diagnostics is insufficient.
-            report["files"]["infra/scripts/sample.py"]["status"] = "FAIL_BASELINE"
-            report["files"]["infra/scripts/sample.py"]["baseline"] = "MATCHED"
-            save("coverage/coverage.json", report)
+            proof_path = output / "source-proof.json"
+            intact_proof = proof_path.read_bytes()
+            changed = json.loads(intact_proof)
+            changed["artifacts"].pop("pytest/manifest.json")
+            proof_path.write_text(json.dumps(changed))
             self.assertEqual(accept_receipts(req, [gate])["status"], "BLOCKED_STAND")
-            report["files"]["infra/scripts/sample.py"]["status"] = "PASS"
+            proof_path.write_bytes(intact_proof)
+
+            def reseal():
+                finish(
+                    root=source,
+                    output=output,
+                    before=before["snapshot"],
+                    gate_exit=0,
+                    artifacts={n: output / n for n in names},
+                )
+
+            # Even a hash-bound MATCHED label cannot replace the original diagnostics.
+            original_baseline = row.pop("baseline_checks")
+            save("coverage/coverage.json", report)
+            reseal()
+            self.assertEqual(accept_receipts(req, [gate])["status"], "BLOCKED_STAND")
+            row["baseline_checks"] = original_baseline
+            row["checks"]["mypy"]["diagnostics"] = [
+                "infra/scripts/sample.py:2: error: another regression  [assignment]"
+            ]
+            save("coverage/coverage.json", report)
+            reseal()
+            self.assertEqual(accept_receipts(req, [gate])["status"], "BLOCKED_STAND")
+            row["checks"]["mypy"]["diagnostics"] = [
+                "infra/scripts/sample.py:2: " + diagnostic
+            ]
             save("coverage/coverage.json", report)
             unit = output / "unittest/manifest.json"
             bad = json.loads(unit.read_text())
             bad["skipped"] = 1
             unit.write_text(json.dumps(bad))
+            reseal()
             self.assertEqual(accept_receipts(req, [gate])["status"], "BLOCKED_STAND")
 
     def test_scope_exclusion_requires_parent_reason_without_fake_receipt(self):
@@ -489,3 +572,99 @@ class DeliveryEvidenceTests(unittest.TestCase):
         self.assertEqual(result["receipts"][0]["status"], "NOT_APPLICABLE")
         req["checks"][0].pop("scope_reason")
         self.assertEqual(accept_receipts(req, [])["status"], "BLOCKED_STAND")
+
+    def test_negative_scenario_recovery_cannot_mix_attempts_of_same_commit(self):
+        from infra.scripts.tests.test_attempt_identity import AttemptIdentityTests, git
+        from infra.scripts.run_legacy_qualification import freeze_source, write_record
+
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source, sha = AttemptIdentityTests().source(root)
+            tree = git(source, "rev-parse", "HEAD^{tree}")
+            first = root / "first"
+            second = root / "second"
+            for attempt in (first, second):
+                freeze_source(source, sha, attempt)
+                payload = {
+                    "version": 1,
+                    "source_commit": sha,
+                    "source_tree": tree,
+                    "status": "BLOCKED_STAND",
+                    "exit": 23,
+                    "primary_exit": 23,
+                    "tests": "NOT_PASS",
+                    "cleanup": "BLOCKED_STAND",
+                    "cleanup_errors": ["guard"],
+                }
+                write_record(attempt / "qualification.json", payload)
+                for number in (1, 2):
+                    write_record(
+                        attempt / f"recovery-{number}.json",
+                        {
+                            "version": 1,
+                            "operation": "cleanup-only",
+                            "status": "PASS",
+                            "errors": [],
+                            "source_commit": sha,
+                            "original_verdict_unchanged": True,
+                        },
+                    )
+
+            def scenario(attempt):
+                identity = json.loads((attempt / "identity.json").read_text())
+                value = {
+                    "status": "PASS",
+                    "source_commit": sha,
+                    "source_tree": tree,
+                    "attempt_id": identity["attempt_id"],
+                    "initial": payload,
+                    "recovery_artifacts": {},
+                }
+                for key, number in (("recovery", 1), ("repeat", 2)):
+                    file = attempt / f"recovery-{number}.json"
+                    value[key] = json.loads(file.read_text())
+                    value["recovery_artifacts"][key] = {
+                        "path": file.name,
+                        "sha256": hashlib.sha256(file.read_bytes()).hexdigest(),
+                    }
+                return value
+
+            proof = root / "scenario.json"
+            proof.write_text(json.dumps(scenario(first)))
+            req = {
+                "version": 1,
+                "source": {"source_commit": sha, "source_tree": tree},
+                "checks": [
+                    {
+                        "id": "negative",
+                        "producer": "legacy",
+                        "attempt": str(first),
+                        "execution": {
+                            "kind": "committed",
+                            "command": "legacy-recovery-scenario",
+                        },
+                        "expected_product": {
+                            "status": "BLOCKED_STAND",
+                            "primary_exit": 23,
+                        },
+                        "artifacts": {"scenario": {"path": str(proof)}},
+                    }
+                ],
+            }
+            result = accept_receipts(req, [first / "qualification.json"])
+            self.assertEqual(result["status"], "PASS", result)
+            self.assertEqual(result["receipts"][0]["status"], "BLOCKED_STAND")
+            proof.write_text(json.dumps(scenario(second)))
+            self.assertEqual(
+                accept_receipts(req, [first / "qualification.json"])["status"],
+                "BLOCKED_STAND",
+            )
+            value = scenario(first)
+            value["recovery_artifacts"]["repeat"] = value["recovery_artifacts"][
+                "recovery"
+            ]
+            proof.write_text(json.dumps(value))
+            self.assertEqual(
+                accept_receipts(req, [first / "qualification.json"])["status"],
+                "BLOCKED_STAND",
+            )
