@@ -1,71 +1,113 @@
+"""Known legacy transport facade, with durable quarantine before acknowledgement."""
+
+from __future__ import annotations
+
 import uuid
+from typing import Any, Protocol, cast
 
-import clamd
 import structlog
-from backend.apps.contracts.models.models import CommonDocument, DocumentStage
-from celery import shared_task
-from django.conf import settings
-from django.db import transaction
+from celery import Task, shared_task
+from celery.exceptions import Ignore, Reject
+from celery.worker import state as worker_state
+from celery.worker.request import Request
 
-from apps.common.repository.sre_engine import EnterpriseSreRepository
-from apps.common.tasks import BaseEnterpriseTask
+from apps.common.contracts.legacy_document_contracts import (
+    RecoveryPersistenceError,
+    get_legacy_compatibility_service,
+)
+from apps.common.services.legacy_recovery_parking import TASK_NAME, park
 
 logger = structlog.get_logger(__name__)
 
 
-class FilePipelineService:
-    """[ИСПРАВЛЕНО - ПУНКТ 11] Полная FSM-оркестрация асинхронного конвейера."""
+class WorkerShutdownState(Protocol):
+    # Celery initializes this public control flag to None and later assigns
+    # an exit code. Its inferred vendor type incorrectly fixes it to None.
+    should_stop: int | None
 
+
+class LegacyCompatibilityRequest(Request):
+    """A dual durability outage parks the delivery and stops this worker."""
+
+    def on_failure(self, exc_info: Any, send_failed_event: bool = True, return_ok: bool = False) -> None:
+        exc = exc_info.exception
+        exc = getattr(exc, "exc", exc)
+        if isinstance(exc, Reject) and exc.args and exc.args[0] == "LEGACY_RECOVERY_PERSISTENCE_UNAVAILABLE":
+            # Signal the parent worker before putting the message back. It must
+            # be restarted explicitly after persistence health is restored.
+            cast(WorkerShutdownState, worker_state).should_stop = 78
+        super().on_failure(exc_info, send_failed_event=send_failed_event, return_ok=return_ok)
+
+
+class LegacyCompatibilityTask(Task):
+    abstract = True
+    Request = LegacyCompatibilityRequest
+
+
+class FilePipelineService:
     @classmethod
     def initialize_upload_pipeline(cls, doc_id: uuid.UUID) -> None:
-        """Точка входа: инициирует перевод в карантин."""
-        with transaction.atomic():
-            doc = EnterpriseSreRepository.get_by_id(CommonDocument, doc_id)
-            if doc.stage != DocumentStage.UPLOADED:
-                raise ValueError("Невалидный статус старта конвейера.")
-
-            EnterpriseSreRepository.atomic_cas_update(doc, stage=DocumentStage.QUARANTINE)
-            transaction.on_commit(lambda: run_antivirus_scan_task.delay(str(doc.id)))
+        get_legacy_compatibility_service().submit(doc_id)
 
 
-@shared_task(base=BaseEnterpriseTask, bind=True, queue="antivirus")
-def run_antivirus_scan_task(self, doc_id: str) -> None:
-    """Стриминг байт в ClamAV. При падении ретраится 5 раз, затем падает в Postgres DLQ."""
-    doc_uuid = uuid.UUID(doc_id)
-    doc = CommonDocument.objects.get(id=doc_uuid)
+def _park_recovery_envelope(task: Any, cause: Exception) -> None:
+    args, kwargs = tuple(task.request.args or ()), dict(task.request.kwargs or {})
+    doc_id = str(args[0]) if len(args) == 1 else str(kwargs.get("doc_id", ""))
+    park(str(task.request.id), doc_id, args, kwargs, dict(task.request.headers or {}), str(cause))
 
-    # Принудительно выставляем стейт сканирования через репозиторий
-    doc.stage = DocumentStage.VIRUS_SCANNING
-    doc.save()
 
-    cd = clamd.ClamdNetworkChild(host=settings.CLAMAV_HOST, port=settings.CLAMAV_PORT)
+@shared_task(
+    bind=True,
+    base=LegacyCompatibilityTask,
+    name=TASK_NAME,
+    queue="files",
+    acks_late=True,
+    acks_on_failure_or_timeout=False,
+    reject_on_worker_lost=True,
+    track_started=True,
+)
+def run_antivirus_scan_task(self: Any, *args: object, **kwargs: object) -> str:
+    original_args, original_kwargs = tuple(self.request.args or args), dict(self.request.kwargs or kwargs)
+    valid_positional = len(original_args) == 1 and not original_kwargs
+    valid_keyword = not original_args and set(original_kwargs) == {"doc_id"}
+    doc_id = original_args[0] if valid_positional else original_kwargs.get("doc_id")
     try:
-        s3_stream = settings.S3_CLIENT.get_object(Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key)["Body"]
-        scan_result = cd.instream(s3_stream)
-
-        if scan_result and scan_result["stream"] == "FOUND":
-            doc.stage = DocumentStage.FAILED
-            doc.meta_json["virus_detected"] = True
-            doc.save()
-            logger.error("ANTIVIRUS CONTOUR: Обнаружена угроза!", file_id=doc_id)
-            return
-
-        # Зеленый свет: переводим в статус processing для OCR и тяжелой аналитики
-        doc.stage = DocumentStage.PROCESSING
-        doc.save()
-
-        # Эвакуация из карантинного бакета в продуктовый
-        settings.S3_CLIENT.copy_object(
-            Bucket=settings.S3_PRODUCTION_BUCKET,
-            Key=doc.s3_key,
-            CopySource={"Bucket": settings.S3_QUARANTINE_BUCKET, "Key": doc.s3_key},
+        if not (valid_positional or valid_keyword) or not isinstance(doc_id, str):
+            raise RecoveryPersistenceError("LEGACY_ENVELOPE_SHAPE_UNSUPPORTED")
+        uuid.UUID(doc_id)
+        headers = self.request.headers or {}
+        metadata = {
+            key: headers[key]
+            for key in (
+                "compat_tenant",
+                "compat_token",
+                "correlation_id",
+                "causal_root_id",
+            )
+            if key in headers
+        }
+        return get_legacy_compatibility_service().run(
+            doc_id,
+            str(self.request.id),
+            original_args,
+            original_kwargs,
+            metadata,
         )
-        settings.S3_CLIENT.delete_object(Bucket=settings.S3_QUARANTINE_BUCKET, Key=doc.s3_key)
-
-        # Конвейер завершен -> Финализируем готовность документа
-        doc.stage = DocumentStage.READY
-        doc.save()
-
-    except Exception as exc:
-        # Экспоненциальный управляемый бэкофф с джиттером [Пункт 9]
-        raise self.retry(exc=exc, countdown=2**self.request.retries * 15) from exc
+    except Ignore as exc:
+        try:
+            self.update_state(state="LEGACY_RECOVERY_REQUIRED", meta={"code": str(exc)})
+        except Exception:
+            logger.error("LEGACY_RESULT_BACKEND_UNAVAILABLE")
+        raise
+    except (RecoveryPersistenceError, ValueError) as exc:
+        try:
+            _park_recovery_envelope(self, exc)
+        except Exception as park_exc:
+            logger.error("BLOCKED_DOUBLE_DURABILITY_FAILURE", error=park_exc.__class__.__name__)
+            raise Reject("LEGACY_RECOVERY_PERSISTENCE_UNAVAILABLE", requeue=True) from park_exc
+        try:
+            self.update_state(state="LEGACY_UNRESOLVED", meta={"code": "LEGACY_RECOVERY_PARKED"})
+        except Exception:
+            logger.error("LEGACY_RESULT_BACKEND_UNAVAILABLE")
+        # Ignore does ACK a late-ack task. It is used only after durable transport storage.
+        raise Ignore("LEGACY_RECOVERY_PARKED") from exc

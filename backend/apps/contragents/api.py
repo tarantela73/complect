@@ -7,6 +7,7 @@ from django.db import transaction
 from django.http import HttpRequest
 from ninja import Query, Router
 
+from apps.common.api.auth import verified_request_context
 from apps.common.api.errors import make_error_response
 from apps.common.api.permissions import require_permission
 from apps.common.cache.dashboard_cache import invalidate_dashboard
@@ -16,7 +17,6 @@ from apps.contragents.policies.validation_matrix import ContragentValidationPoli
 from apps.contragents.queries.contragent_queries import (
     get_contragent_detail,
     get_contragents_page,
-    get_person_profiles,
 )
 from apps.contragents.schemas.contragent_dto import (
     ContragentCreateRequest,
@@ -26,6 +26,7 @@ from apps.contragents.schemas.contragent_dto import (
     PersonCreateRequest,
     PersonListResponse,
 )
+from apps.contragents.services.person_profile_read_service import PersonProfileReadService
 from apps.contragents.services.registration import ContragentRegistrationService
 
 router = Router(tags=["contragents"])
@@ -142,7 +143,15 @@ def delete_contragent(request: HttpRequest, contragent_id: uuid.UUID):
 def list_persons(request: HttpRequest, contragent_id: uuid.UUID):
     if get_contragent_detail(contragent_id) is None:
         return 404, make_error_response("CONTRAGENT_NOT_FOUND", "Контрагент не найден.")
-    profiles = get_person_profiles(contragent_id)
+    trusted_context = verified_request_context(request)
+    if trusted_context is None:
+        return 403, make_error_response("UNTRUSTED_AUTH_CONTEXT", "Контекст авторизации не подтверждён.")
+    try:
+        profiles = PersonProfileReadService.read(contragent_id, request=request)
+    except (PermissionDenied, PermissionError):
+        return 403, make_error_response("PII_READ_DENIED", "Доступ к данным отклонён.")
+    except RuntimeError:
+        return 403, make_error_response("PII_AUDIT_UNAVAILABLE", "Чтение данных временно недоступно.")
     return 200, {"results": profiles, "count": len(profiles)}
 
 

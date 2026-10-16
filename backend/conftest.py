@@ -71,29 +71,18 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture
 def ciphertext_table(request):
-    """Only table provisioning uses lifecycle authority; roundtrip stays runtime."""
+    """Provision only approved fixtures through the external lifecycle session."""
     @contextmanager
     def provision(name):
         if name not in {"old_person_ciphertext", "pii_legacy_text"}:
             raise ValueError("unknown ciphertext fixture")
-        if os.environ.get("PYTEST_LIFECYCLE_SOCKET"):
-            client = request.getfixturevalue("pytest_lifecycle")
-            from test_support.pytest_lifecycle import _state
-            state = _state(request.config)
-            try:
-                client.request("fixture_prepare", fixture=name)
-            except Exception:
-                state.failed = True
-                raise
-            try:
-                yield
-            finally:
-                try:
-                    client.request("fixture_cleanup", fixture=name)
-                except Exception:
-                    state.failed = True
-                    raise
-        else:
-            from test_support.pytest_lifecycle import LifecycleError
+        from test_support.pytest_lifecycle import LifecycleError, _state
+        if not os.environ.get("PYTEST_LIFECYCLE_SOCKET"):
             raise LifecycleError("ciphertext fixtures require the external disposable lifecycle runner")
+        client = request.getfixturevalue("pytest_lifecycle")
+        state = _state(request.config)
+        if state is None:
+            raise LifecycleError("ciphertext fixture requires a prepared lifecycle session")
+        with state.fixture(name, client):
+            yield
     return provision

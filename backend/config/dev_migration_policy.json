@@ -73,7 +73,11 @@
     "users.0003_identity_expand": "b67ab86082dff98c35238d872c2a85134764932e942c16fef2e38e3b9e7644ff",
     "users.0003a_identity_audit_fence": "c3ef581d7e6cf8486e19d0fb1657beef2f30e1ec42d441958e98103b812c3eeb",
     "users.0003b_cleanup_admission_expand": "b2cdcb849cab7259ac3e7bd39e25520d716d7702dac8ebddc7f2a7d345438931",
-    "users.0003b1_cleanup_admission_indexes": "45946cef3f3d26896320cc132d52cb42b962b8ec4171a86d8aa4b4d1c889c991"
+    "users.0003b1_cleanup_admission_indexes": "45946cef3f3d26896320cc132d52cb42b962b8ec4171a86d8aa4b4d1c889c991",
+    "common.0028_legacy_task_recovery": "e95899fe47bb19b45d23bc0984868f4bd1f254f3efc569fb608f26ecd4ec0a4d",
+    "contracts.0010_runtime_admission_policy": "b7cc9f8299a6e41c32538431ee771be623da9b7ed259928e65d4664ccbf95b4e",
+    "contracts.0011_legacy_document_links": "74cfec90d156e51a142135c494f3860cec67011ada3a8c8d84e6e391c85c9550",
+    "contracts.0012_attachment_runtime_admission": "321cf151f5cc634cabc586eda1e748782a83f2e7a9ee1142cc44ae6dc563da37"
   },
   "bootstrap_only": [
     "users.0003_identity_expand",

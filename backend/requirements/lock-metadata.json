@@ -3,9 +3,9 @@
   "python_platform": "x86_64-unknown-linux-gnu",
   "schema_version": 1,
   "sha256": {
-    "base.lock": "48c308f3dbab2b685a880ab22f01de1c30df56a1c5bb54f809b0839a1eaa4d9a",
-    "base.txt": "875d0e64b30db8c45bf0debf7c01c45ef006852de87b976127f2131d67f993dd",
-    "dev.lock": "79046deb10d3658e907838e83433505743abe3429c54e83be21d25a7a73b2432",
+    "base.lock": "ae4e5c259919c8ca48d435c69ee2702cc19f741be581289134f0230b70cbdd35",
+    "base.txt": "3d0cd7323e0a3ee47047598e62abba40a2d35067ffa5575a6f158964433077f8",
+    "dev.lock": "b3777c2498074946251aecbed03a80421cdff9d345e1f73040b3f74046a4babf",
     "dev.txt": "c320251bf916b8631e04b9f07562360e377a592ba28b1cd917c4af573fe9f797",
     "lock.py": "099ec1ef27524496bb996f00ee3e44dee8e116a289976e3a286910517b9ab3e3"
   },

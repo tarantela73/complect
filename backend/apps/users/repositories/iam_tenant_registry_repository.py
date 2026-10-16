@@ -12,6 +12,7 @@ class IamTenantRegistryRepository:
         source_code: str,
         *,
         using: str = "default",
+        apps_registry=None,
     ) -> IamTenantRegistryEntry:
         if not source_code or len(source_code) > 32:
             raise ValueError("source_code must contain 1..32 characters")
@@ -24,4 +25,7 @@ class IamTenantRegistryRepository:
                 """,
                 [tenant_id, source_code],
             )
-        return IamTenantRegistryEntry.objects.using(using).select_for_update().get(tenant_id=tenant_id)
+        model = IamTenantRegistryEntry if apps_registry is None else apps_registry.get_model(
+            "users", "IamTenantRegistryEntry"
+        )
+        return model.objects.using(using).select_for_update().get(tenant_id=tenant_id)
