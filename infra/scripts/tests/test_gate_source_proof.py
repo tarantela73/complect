@@ -76,4 +76,3 @@ class GateSourceProofTests(unittest.TestCase):
             status, code = gate_source_proof.finish(root=root, output=output,
                                                     before=before["snapshot"], gate_exit=0, artifacts={})
             self.assertEqual((status, code), ("FAIL", 2))
-
