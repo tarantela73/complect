@@ -105,6 +105,8 @@ def run(output: Path, image: str) -> dict[str, Any]:
     os.environ.setdefault("BUILDX_CONFIG", str(buildx_config))
     source = output / "source"
     attempt = output / "attempt"
+    early_failure = os.environ.get("COMPLECT_EARLY_INVENTORY_FAILURE") == "1"
+    early_mode = os.environ.get("COMPLECT_EARLY_MODE", "blocked")
     _run(["git", "clone", "--quiet", "--no-hardlinks", str(root), str(source)])
     release = output / "release"
     runner = source / "infra/scripts/run_legacy_regressions.py"
@@ -121,16 +123,39 @@ def run(output: Path, image: str) -> dict[str, Any]:
         encoding="utf-8",
     )
     preparer = source / "infra/scripts/prepare_legacy_stand.py"
+    preparer_source = preparer.read_text(encoding="utf-8")
+    inventory_call = "    _inventory(commands, receipt)\n"
+    if early_failure:
+        # Kill the prepare supervisor after real Docker resources have been
+        # created, before the first complete ownership inventory. This is a
+        # host-driven fault injection in the disposable checkout; production
+        # code keeps its public CLI unchanged.
+        inventory_call = "    os.kill(os.getpid(), signal.SIGKILL)\n"
+        if early_mode in {"blocked", "tamper"}:
+            preparer_source = preparer_source.replace(
+            "import hashlib\n",
+            "import hashlib\nimport os\n",
+            1,
+            ).replace(
+            "def cleanup(receipt_path: Path) -> dict[str, Any]:\n",
+            "def cleanup(receipt_path: Path) -> dict[str, Any]:\n"
+            "    if os.environ.get('COMPLECT_EARLY_INVENTORY_FAILURE') == '1':\n"
+            "        marker = receipt_path.parent / 'early-cleanup-failed'\n"
+            "        if not marker.exists():\n"
+            "            marker.write_text('remove cause before recovery')\n"
+            "            raise RuntimeError('injected early deletion failure')\n",
+            1,
+            )
     preparer.write_text(
-        preparer.read_text(encoding="utf-8").replace(
+        preparer_source.replace(
             "    commands = stand_commands(checkout, receipt)\n",
             "    commands = stand_commands(checkout, receipt)\n"
             "    internal_network = f'recovery-{identifier.hex}'\n"
             "    subnet = f'10.251.{identifier.int % 240}.0/28'\n"
             "    commands.run(['docker', 'network', 'create', '--internal', '--label', f'com.docker.compose.project={commands.project}', '--label', f'complect.checkout_id={receipt[\"checkout_id\"]}', '--subnet', subnet, internal_network], write=True)\n"
             "    commands.run(['docker', 'volume', 'create', '--label', f'com.docker.compose.project={commands.project}', '--label', f'complect.checkout_id={receipt[\"checkout_id\"]}', f'{commands.project}_recovery_data'], write=True)\n"
-            "    _inventory(commands, receipt)\n"
-            "    receipt['status'] = 'PASS'\n"
+            + inventory_call
+            + "    receipt['status'] = 'PASS'\n"
             "    _write(path, receipt)\n"
             "    return receipt\n",
         ),
@@ -154,6 +179,64 @@ def run(output: Path, image: str) -> dict[str, Any]:
     try:
         ownership = attempt / "frozen/.dev/test-artifacts/stand/ownership.json"
         _wait_for(ownership, process)
+        if early_failure:
+            process_exit = process.wait(timeout=900)
+            qualification_result = json.loads((attempt / "qualification.json").read_text())
+            if early_mode == "success":
+                if process_exit == 0 or qualification_result.get("cleanup") != "PASS":
+                    raise AssertionError(f"early successful cleanup failed: {process_exit}, {qualification_result}")
+                credentials = attempt / "frozen/.dev/test-artifacts/stand/checkout/.dev/secrets"
+                if credentials.exists() or (attempt / "private").exists():
+                    raise AssertionError("credentials survived successful early cleanup")
+                receipt = json.loads(ownership.read_text())
+                _assert_owned_absent(receipt)
+                return {"status": "PASS", "early_failure": True, "mode": early_mode,
+                        "source_commit": qualification_result["source_commit"], "initial": qualification_result}
+            if process_exit == 0 or qualification_result.get("status") != "BLOCKED_STAND":
+                raise AssertionError(f"early inventory fault was not retained: {process_exit}, {qualification_result}")
+            if qualification_result.get("cleanup") != "BLOCKED_STAND":
+                raise AssertionError(f"early deletion failure was not retained: {qualification_result}")
+            original = (attempt / "qualification.json").read_bytes()
+            credentials = attempt / "frozen/.dev/test-artifacts/stand/checkout/.dev/secrets"
+            if credentials.exists() or (attempt / "private").exists():
+                raise AssertionError("credentials survived early-fault cleanup")
+            process_journal = attempt / "processes/prepare.json"
+            process_journal_before = process_journal.read_bytes()
+            tampered_record = None
+            if early_mode == "tamper":
+                receipt_value = json.loads(ownership.read_text())
+                tampered_record = next(item for item in receipt_value["resources"] if item["kind"] != "image")
+                original_fingerprint = tampered_record["fingerprint"]
+                tampered_record["fingerprint"] = {**original_fingerprint, "tampered": True}
+                ownership.write_text(json.dumps(receipt_value, indent=2) + "\n")
+                tamper_exit, tamper_result = _recovery(attempt, output, "early-recovery-tampered")
+                if tamper_exit != 2 or tamper_result["status"] != "BLOCKED_STAND":
+                    raise AssertionError(f"tampered ownership was not blocked: {tamper_result}")
+                receipt_value["resources"] = json.loads(ownership.read_text())["resources"]
+                for item in receipt_value["resources"]:
+                    if item["kind"] == tampered_record["kind"] and item["id"] == tampered_record["id"]:
+                        item["fingerprint"] = original_fingerprint
+                ownership.write_text(json.dumps(receipt_value, indent=2) + "\n")
+            process_journal.unlink()
+            blocked_exit, blocked = _recovery(attempt, output, "early-recovery-blocked")
+            if blocked_exit != 2 or blocked["status"] != "BLOCKED_STAND":
+                raise AssertionError(f"early-fault recovery ignored missing journal: {blocked}")
+            process_journal.write_bytes(process_journal_before)
+            recovered_exit, recovered = _recovery(attempt, output, "early-recovery")
+            if recovered_exit != 0 or recovered["status"] != "PASS":
+                raise AssertionError(f"early-fault recovery did not pass: {recovered}")
+            repeat_exit, repeated = _recovery(attempt, output, "early-recovery-repeat")
+            if repeat_exit != 0 or repeated["status"] != "PASS":
+                raise AssertionError(f"early-fault repeat recovery did not pass: {repeated}")
+            if (attempt / "qualification.json").read_bytes() != original:
+                raise AssertionError("early-fault recovery changed original verdict")
+            receipt = json.loads(ownership.read_text())
+            if receipt.get("inventory_complete") is not True:
+                raise AssertionError("recovery did not complete the partial inventory")
+            _assert_owned_absent(receipt)
+            return {"status": "PASS", "early_failure": True, "initial": qualification_result,
+                    "mode": early_mode, "source_commit": qualification_result["source_commit"],
+                    "blocked_recovery": blocked, "recovery": recovered, "repeat": repeated}
         receipt = _wait_for_inventory(ownership, process)
         networks = [item["id"] for item in receipt["resources"] if item["kind"] == "network"]
         if not networks:
