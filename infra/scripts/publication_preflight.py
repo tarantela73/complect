@@ -94,13 +94,13 @@ def repository_identity(repository: Path, remote: str) -> str:
 def pr_metadata(repository: Path, pr: str, *, remote: str = "origin", gh_runner=subprocess.run) -> dict[str, Any]:
     repo = repository_identity(repository, remote)
     completed = gh_runner(
-        ["gh", "pr", "view", pr, "--repo", repo, "--json", "baseRefName,baseRefOid,headRefOid"],
+        ["gh", "pr", "view", pr, "--repo", repo, "--json", "baseRefName,baseRefOid,headRefOid,url"],
         cwd=repository, capture_output=True, text=True, check=False, timeout=30,
     )
     if completed.returncode:
         raise ValueError("existing PR metadata unavailable")
     value = json.loads(completed.stdout)
-    if not isinstance(value, dict) or not all(isinstance(value.get(key), str) and value[key] for key in ("baseRefName", "baseRefOid", "headRefOid")):
+    if not isinstance(value, dict) or not all(isinstance(value.get(key), str) and value[key] for key in ("baseRefName", "baseRefOid", "headRefOid", "url")):
         raise ValueError("existing PR metadata incomplete")
     return value
 
@@ -137,6 +137,8 @@ def preflight(
     base_tree: str | None = None
     pr_head: str | None = None
     try:
+        if bool(pr) == bool(target):
+            raise ValueError("exactly one of target or pr is required")
         top = Path(git(repository, "rev-parse", "--show-toplevel")).resolve()
         if top != repository:
             errors.append("REPOSITORY_MISMATCH")
@@ -149,6 +151,14 @@ def preflight(
             if actual_base != metadata["baseRefOid"]:
                 errors.append("PR_BASE_MISMATCH")
             pr_head = metadata["headRefOid"]
+            try:
+                if not subprocess.run(["git", "-C", str(repository), "merge-base", "--is-ancestor", pr_head, actual_head], capture_output=True, timeout=30, check=False).returncode == 0:
+                    errors.append("PR_HEAD_NOT_ANCESTOR")
+            except (OSError, subprocess.SubprocessError):
+                errors.append("PR_HEAD_NOT_ANCESTOR")
+            pr_url = metadata.get("url")
+            if pr_url and repository_identity(repository, remote) not in str(pr_url):
+                errors.append("PR_REPOSITORY_MISMATCH")
         else:
             if not target:
                 raise ValueError("target branch required for new PR")
@@ -223,8 +233,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repository", type=Path, default=Path.cwd())
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--head", required=True)
-    parser.add_argument("--target", help="remote branch used when --base is omitted")
-    parser.add_argument("--pr", help="existing PR number or URL")
+    boundary = parser.add_mutually_exclusive_group(required=True)
+    boundary.add_argument("--target", help="remote branch used for a new PR")
+    boundary.add_argument("--pr", help="existing PR number or URL")
     parser.add_argument("--requirements", type=Path)
     parser.add_argument("--receipt", type=Path, action="append", default=[])
     args = parser.parse_args(argv)

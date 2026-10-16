@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from infra.scripts.docker_ownership import OwnershipMismatch, OwnershipProof  # noqa: E402  # root is inserted for direct CLI mode
+from infra.scripts import gate_source_proof  # noqa: E402
 
 
 def _docker_endpoint_is_local() -> None:
@@ -213,6 +214,9 @@ def run(
 ) -> int:
     if mode == "all":
         statuses: dict[str, int] = {}
+        source_before: dict[str, Any] | None = None
+        if base is not None:
+            source_before = gate_source_proof.capture(ROOT, output, "sources-before.json")
         try:
             statuses["quality"] = run_quality(image=quality_image, output=output / "quality")
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -243,14 +247,54 @@ def run(
             statuses["recovery"] = run_recovery(image=image, output=output / "recovery")
             statuses["delivery"] = run_delivery(base=base, image=image, output=output / "delivery")
         output.mkdir(parents=True, exist_ok=True)
+        primary_exit = next((code for code in statuses.values() if code), 0)
+        if source_before is not None:
+            candidates = {
+                "quality/result.json": output / "quality/result.json",
+                "unittest/result.json": output / "unittest/result.json",
+                "unittest/manifest.json": output / "unittest/manifest.json",
+                "pytest/result.json": output / "pytest/result.json",
+                "pytest/manifest.json": output / "pytest/manifest.json",
+                "coverage/result.json": output / "coverage/result.json",
+                "coverage/coverage.json": output / "coverage/coverage.json",
+                "coverage/input/input.json": output / "coverage/input/input.json",
+                "coverage/after/input.json": output / "coverage/after/input.json",
+                "payments-context/result.json": output / "payments-context/result.json",
+                "recovery/result.json": output / "recovery/result.json",
+                "delivery/selection.json": output / "delivery/selection.json",
+                "delivery/payments/result.json": output / "delivery/payments/result.json",
+            }
+            required = {name for name, path in candidates.items()
+                        if name not in {"delivery/payments/result.json", "payments-context/result.json"}}
+            if (output / "delivery/selection.json").is_file():
+                selection = json.loads((output / "delivery/selection.json").read_text())
+                if "test-payments-gate" in selection.get("required_gates", []):
+                    required.add("delivery/payments/result.json")
+            context_files = sorted((output / "payments-context").glob("run-*/context.json"))
+            if len(context_files) == 1:
+                name = str(context_files[0].relative_to(output))
+                candidates[name] = context_files[0]
+                required.add(name)
+            elif primary_exit == 0:
+                primary_exit = 2
+            artifacts = {name: path for name, path in candidates.items() if path.is_file()}
+            missing = sorted(name for name in required if name not in artifacts)
+            if missing and primary_exit == 0:
+                primary_exit = 2
+            _, proof_exit = gate_source_proof.finish(
+                root=ROOT, output=output, before=source_before["snapshot"], gate_exit=primary_exit,
+                artifacts=artifacts,
+            )
+            if proof_exit and not primary_exit:
+                primary_exit = proof_exit
         (output / "result.json").write_text(
             json.dumps(
-                {"status": "PASS" if all(code == 0 for code in statuses.values()) else "FAIL", "phases": statuses},
+                {"status": "PASS" if primary_exit == 0 else "FAIL", "phases": statuses},
                 indent=2,
             )
             + "\n"
         )
-        return next((code for code in statuses.values() if code), 0)
+        return primary_exit
     _docker_endpoint_is_local()
     run_id = f"infra-test-{uuid.uuid4().hex}"
     output.mkdir(parents=True, exist_ok=True)

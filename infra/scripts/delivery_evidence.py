@@ -271,6 +271,56 @@ def _coverage(directory: Path, check: Mapping[str, Any]) -> str:
 
 def _infra_gate(payload: dict[str, Any], path: Path, check: Mapping[str, Any]) -> None:
     from infra.scripts.infra_test_selection import required_gates
+    from infra.scripts.gate_source_proof import verify, SNAPSHOT_FIELDS
+
+    proof = verify(path.parent)
+    mandatory = {
+        "quality/result.json",
+        "unittest/result.json",
+        "unittest/manifest.json",
+        "pytest/result.json",
+        "pytest/manifest.json",
+        "coverage/result.json",
+        "coverage/coverage.json",
+        "coverage/input/input.json",
+        "coverage/after/input.json",
+        "recovery/result.json",
+        "delivery/selection.json",
+    }
+    _, declared_selection = artifact(check, "selection")
+    require(
+        Path(check["artifacts"]["selection"]["path"]).absolute()
+        == (path.parent / "delivery/selection.json").absolute(),
+        "full gate selection path mismatch",
+    )
+    if "test-payments-gate" in declared_selection.get("required_gates", []):
+        mandatory.add("delivery/payments/result.json")
+    contexts = list((path.parent / "payments-context").glob("run-*/context.json"))
+    require(len(contexts) == 1, "source proof context missing or ambiguous")
+    mandatory.add(str(contexts[0].relative_to(path.parent)))
+    require(
+        set(proof["artifacts"]) == mandatory,
+        "source proof artifact grid incomplete or unexpected",
+    )
+    snapshot_reference = check.get("source_snapshot")
+    if snapshot_reference is not None:
+        require(
+            isinstance(snapshot_reference, dict)
+            and isinstance(snapshot_reference.get("path"), str)
+            and sha(snapshot_reference.get("sha256")),
+            "parent source snapshot reference malformed",
+        )
+        snapshot_path = Path(snapshot_reference["path"])
+        parent_snapshot = _json(snapshot_path)
+        require(
+            hashlib.sha256(snapshot_path.read_bytes()).hexdigest()
+            == snapshot_reference["sha256"]
+            and all(
+                parent_snapshot.get(k) == proof["source_before"].get(k)
+                for k in SNAPSHOT_FIELDS
+            ),
+            "source proof differs from parent snapshot",
+        )
 
     phases = {
         "quality",
@@ -373,7 +423,10 @@ def _infrastructure(
             "image": payload["image"],
         }
     else:
-        _infra_gate(payload, path, check)
+        full_check = dict(check)
+        if "snapshot" in source:
+            full_check["source_snapshot"] = source["snapshot"]
+        _infra_gate(payload, path, full_check)
         execution = {"kind": "docker", "command": "make agent-infra-test"}
     _, selection = artifact(check, "selection")
     require(
@@ -490,11 +543,41 @@ def _legacy(
         require(
             scenario.get("status") == "PASS"
             and scenario.get("initial") == payload
-            and scenario.get("source_commit") == payload["source_commit"],
+            and scenario.get("source_commit") == payload["source_commit"]
+            and scenario.get("source_tree") == payload["source_tree"]
+            and scenario.get("attempt_id") == view["attempt_id"],
             "negative scenario evidence missing",
         )
+        references = scenario.get("recovery_artifacts", {})
+        seen_records: set[str] = set()
         for name in ("recovery", "repeat"):
+            ref = references.get(name, {})
+            relative = ref.get("path", "")
+            require(
+                isinstance(relative, str)
+                and Path(relative).parent == Path(".")
+                and relative.startswith("recovery-")
+                and relative.endswith(".json")
+                and relative not in seen_records,
+                "recovery artifact missing, unsafe or repeated",
+            )
+            seen_records.add(relative)
+            record_path = directory / relative
+            bound = view["artifacts"].get(relative, {})
+            digest = hashlib.sha256(record_path.read_bytes()).hexdigest()
+            require(
+                ref.get("sha256") == digest
+                and bound.get("sha256") == digest
+                and bound.get("attempt_id") == view["attempt_id"]
+                and bound.get("source_tree") == payload["source_tree"]
+                and bound.get("stage") == "recovery",
+                "recovery artifact belongs to another attempt",
+            )
             recovered = scenario.get(name, {})
+            require(
+                recovered == _json(record_path),
+                "recovery scenario differs from bound receipt",
+            )
             require(
                 recovered.get("status") == "PASS"
                 and recovered.get("operation") == "cleanup-only"

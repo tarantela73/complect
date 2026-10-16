@@ -17,6 +17,7 @@ DEFAULT_SCOPE = (
     "infra/scripts/run_infra_quality.py",
     "infra/scripts/run_infra_tests.py",
     "infra/scripts/attempt_identity.py",
+    "infra/scripts/gate_source_proof.py",
     "infra/scripts/delivery_evidence.py",
     "infra/scripts/publication_preflight.py",
     "infra/scripts/run_legacy_regressions.py",
@@ -32,6 +33,7 @@ DEFAULT_SCOPE = (
 )
 RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_attempt_identity.py",
+    "infra/scripts/tests/test_gate_source_proof.py",
     "infra/scripts/tests/test_delivery_evidence.py",
     "infra/scripts/tests/test_publication_preflight.py",
     "infra/scripts/tests/test_legacy_early_failure_cli.py",
