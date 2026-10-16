@@ -1,0 +1,511 @@
+{
+  "format": "complect-legacy-dependency-plan-v1",
+  "baseline_sha": "20bb9fc0846a13e550f3023d47ddbf286bcbc65f",
+  "source_head": "6ac57d3a5043ab76df0316cac17aac86e4f9bd90",
+  "source_checkout": "/home/sever/projects/Complect",
+  "manifest_sha256": "f4600543966ef528f2ad20dfb13af72e571f420257a100991f69dd570b075992",
+  "manifest_nodes": 133,
+  "phase_contract": 399,
+  "scope": "read-only dependency planning; file hashes identify source material, not approval to copy full blobs",
+  "files": [
+    {
+      "path": "backend/apps/common/api/auth.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "verified_request_context",
+        "JWTAuth.authenticate",
+        "set_pii_read_context"
+      ],
+      "source_sha256": "0255d8d7cbc2d67e4324a9bad34913a2489440127cf03fa01024bdc838976e06",
+      "baseline_status": "different",
+      "baseline_sha256": "73ab462aeef65c208e4a629486ca6e490b56d04260304c30ace18623f2e2a7c7"
+    },
+    {
+      "path": "backend/apps/common/apps.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "CommonConfig.ready",
+        "apps.common.models.legacy_task_recovery"
+      ],
+      "source_sha256": "0580757df53a4032cb6d15b33202f32474e69732a75ac2083f941d354b4a9ee5",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/contracts/auth_context.py",
+      "group": "required_integration_hunk",
+      "symbols": [
+        "get_auth_rollout_mode"
+      ],
+      "source_sha256": "ca5a7c0927752f77e0e9b973fc7d0b75c0358c85a4498913afcb287342895473",
+      "baseline_status": "different",
+      "baseline_sha256": "323821bbd964514344e574dfbaf41eccf646850a1923e99ea73ff9df99ca816b"
+    },
+    {
+      "path": "backend/apps/common/contracts/file_service_protocol.py",
+      "group": "required_integration_hunk",
+      "symbols": [
+        "register_file_service"
+      ],
+      "source_sha256": "a21d3c8a35888c8574da67900245f5d615328f98a9b15c329070c2db6d2e2b14",
+      "baseline_status": "different",
+      "baseline_sha256": "2e8db78463e5009615b63b00ae53781d4420e28bba508e3b02d17a35d2377eb0"
+    },
+    {
+      "path": "backend/apps/common/contracts/finance_contracts.py",
+      "group": "required_integration_hunk",
+      "symbols": [
+        "register_finance_reader"
+      ],
+      "source_sha256": "6883b72c3f72d6b54c24fc522e53f392077121829e9a44646a595919afa68bbe",
+      "baseline_status": "different",
+      "baseline_sha256": "8b9b23392d133e34b5494bea1951a53643f75f581f2875d013d0430de3199f37"
+    },
+    {
+      "path": "backend/apps/common/contracts/legacy_document_contracts.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "06498c359ab94b97b072f2282e487bdce6a84764a480d2fa5e408eccba0ef5f6",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/contracts/pii_read_context.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "4567ecbef109472a9b333297e14c1e75b89205cb2256168aceeebf1376098792",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/middleware/context_isolation.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "clear_pii_read_context"
+      ],
+      "source_sha256": "ed4f66e5ab14e71e955176c55b3a376352cca5b9c86f15db4740600a6cd2ad1b",
+      "baseline_status": "different",
+      "baseline_sha256": "0285897b71e3512af4f86b902cc57e4f05dd094757e73e9c70f082117cdd9f27"
+    },
+    {
+      "path": "backend/apps/common/migrations/0028_legacy_task_recovery.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "e95899fe47bb19b45d23bc0984868f4bd1f254f3efc569fb608f26ecd4ec0a4d",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/models/legacy_task_recovery.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "57be5270c4121ca8d83dfc20cffeb374ed9808dde57cd2e855f92d14e41966e4",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/repositories/legacy_task_recovery_repository.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "9322512a63d2ec56384aad37cdf90bb60b2f2ccde6c3809ea0ba0f1e157497ef",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/repositories/local_rbac_repository.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "08e95a9d226a5c41629402a60fc76e9b68c6ee69624d696583f22ccbfcd9704b",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/security/audit.py",
+      "group": "required_integration_hunk",
+      "symbols": [],
+      "source_sha256": "4e35e9355413a65e78a4e870d190aa7aa3069cd941ce81476c13fad7748989df",
+      "baseline_status": "different",
+      "baseline_sha256": "36b82982bf412652e0e5714784f76e4d1332cb8ece85d68dcf27b9bee78cd922"
+    },
+    {
+      "path": "backend/apps/common/security/pii_vault.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "PiiEncryptionVault.encrypt_field",
+        "PiiEncryptionVault.decrypt_field"
+      ],
+      "source_sha256": "c201fbcf29708ad0c9b276e9ac5be2be15dbaeff752da505305dfbf78afeaa03",
+      "baseline_status": "different",
+      "baseline_sha256": "7fbc8c93b33f837117b1291ca2cefc07ed318187c94f29de46dfe3e42b978d30"
+    },
+    {
+      "path": "backend/apps/common/services/file_pipeline/clamav_result.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "b655488e05d2902c6555e15e0f14d30e33d2f79e7b910d4d31cee65926c74232",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/services/legacy_recovery_parking.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "8ee7d4f9bf6bc34feec01f4f63e9a2fe1f8d068901d079046281fcb916f0530b",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/services/local_rbac_service.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "248cf6a7a01b27ca511e0c1d14239d2d016c8f1bdced7ccdacd18d858ebec1a3",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/tests/legacy_compat_fixtures.py",
+      "group": "supporting_test_support",
+      "symbols": [
+        "legacy_authenticated_request",
+        "legacy_export"
+      ],
+      "source_sha256": "9e1c5aa200cb8aad1d867566619a9f5e1e9cab4f2d872a1f4ba56b5c974f0a72",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/tests/test_legacy_clamav_result.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "bf2ccc6b2564c32c2b5c47af1e862103f9b5b16e6d3ca0d57bc47c07221b42f1",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/tests/test_legacy_compatibility_worker.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "e26ec19944597359f12e8785362d57f02a2380b4c1ed07845307076a6655d299",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/tests/test_legacy_task_recovery.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "384f580139b76dd6ea030605894887ef66de03eeaa567a7551e091379887e896",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/common/tests/test_sync_redis_metrics.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "1c178de45b738264f911390d0f3bb4e06f8580378fe691cb32558caed1a18195",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/events/legacy_document_mapping.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "b114bce733190bb7ea95489c04781809865834fc1c3ef24c693df58faad14c92",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/migrations/0010_runtime_admission_policy.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "b7cc9f8299a6e41c32538431ee771be623da9b7ed259928e65d4664ccbf95b4e",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/migrations/0011_legacy_document_links.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "74cfec90d156e51a142135c494f3860cec67011ada3a8c8d84e6e391c85c9550",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/migrations/0012_attachment_runtime_admission.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "321cf151f5cc634cabc586eda1e748782a83f2e7a9ee1142cc44ae6dc563da37",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/models/__init__.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "LegacyDocumentLink",
+        "LegacyDocumentMappingState"
+      ],
+      "source_sha256": "0876fa1d22375bfa6d5f70e317c2fc9e02ed01e221b4008602ce3de7a93dcfca",
+      "baseline_status": "different",
+      "baseline_sha256": "915f9544e3f35d9797633a301c1cdb44fe045d24733494bd5f999b7fc042b5a8"
+    },
+    {
+      "path": "backend/apps/contracts/models/legacy_document_link.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "fe4b8503926665a873d15357e99ca6e7890889f8d145821c8e64f9e6f97061c7",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/repositories/legacy_document_link_repository.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "2467a8358f6c06e6d3b861e39f980b4797ada59d5eccc9fc396379992afbc3aa",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/services/legacy_document_mapping_service.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "fa6005810e3d1011beed0bbce92debd37abcc8bb32f500ba3d57d23b482045db",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contracts/tests/test_legacy_document_mapping.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "e0e6f4cf683b8d2b4fa61f9f005530816aed285950217460309759e6e253f400",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contragents/queries/contragent_queries.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "get_person_profile_ids",
+        "get_person_profile_rows"
+      ],
+      "source_sha256": "f2a7e0e545a7c4cda2c173d552f23b0ae5130f652c14afc2d25a50ba08ade4c9",
+      "baseline_status": "different",
+      "baseline_sha256": "cf6a2787a87e1f5fc99dc1755e8bd9a152f9e1dee2d4a4a87fb663f5cb9a2cbf"
+    },
+    {
+      "path": "backend/apps/contragents/schemas/person_dto.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "PersonResponseSchema"
+      ],
+      "source_sha256": "4cc67e145f073c64309ad59cc65e23631209eb4c8c4fbbb1609613cf72d59bf6",
+      "baseline_status": "different",
+      "baseline_sha256": "f8fcd9b6f7c194fe0ff6e5d9101e01c8c0d83dbe890a1c0003806dc5bd22b4c7"
+    },
+    {
+      "path": "backend/apps/contragents/services/person_profile_read_service.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "8d0393b4cbee7ffa052a0a74e7346c61dcaaeb96b1a410c359628d344995ee9b",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contragents/tests/test_person_profile_audit_regression.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "ad7cef621f0fcadc3a2090507c7f277b9b503b2a1e1b8c4e22f942bb47863c30",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contragents/tests/test_person_profile_existing_contracts.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "5a460301833a2e0ef3d14575f7f45a474e87c2572cf076d67d08507f538303d9",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/contragents/tests/test_person_profile_read_policy.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "5f8f9b701ccceaef77732b8586aba1de65cc599c4a01fffc658bb53322b8b17c",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/files/apps.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "FilesConfig.ready"
+      ],
+      "source_sha256": "6eb24a4a1ea9dfcb16df06ba013f71d7f4978943eec9b1c18b0032260bd2434c",
+      "baseline_status": "different",
+      "baseline_sha256": "0119c9dab8d774adf4ae7e30868cdecff6d6dd775b45cbef1656bae3025bbdc3"
+    },
+    {
+      "path": "backend/apps/files/repositories/legacy_file_proof_adapter.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "2cdd21cb857b031ce6d9fe118dcd50aa9fea2c1154c88328ff691a77d6c5661e",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/files/services/legacy_document_compatibility_service.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "cac39f5e187eabbbdcc8856d55b527536f73f9c29c1799df5d19be33c83f2f5b",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/files/services/legacy_document_scan_adapter.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "1cac338994851f09743075fb7cd807bb4f8d7d52be5f879e254241c149aaebb0",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/files/tasks/legacy_document_compat.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "68cb267499fac7c0758fc4159e405a499d1dae39042a61794023fce1a049cc9a",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/files/tests/test_legacy_document_scan.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "a1a40e4e76fe99e10689a96147215699948fef255bf1f9082cc981b3430cd34e",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/integration/pkk_client.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "ef32d599a1bddc7a216ca62203f46f6371de722e6e74a99179c9fb3aa719baf9",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/integration/tests/test_pkk_client.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "4ec32940d61b29e8166f2a83aaaab163e0895b332c44403aa432abc9dc57dc98",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/users/management/commands/create_test_users.py",
+      "group": "required_integration_hunk",
+      "symbols": [],
+      "source_sha256": "9b7ee4213f12c5c6dce30afe0289aa1a2ef98db0d6711b9eac603cc84f73e231",
+      "baseline_status": "different",
+      "baseline_sha256": "5d5e34d028961f9802986eeb335804fc6f336bd6b789ad3d79c2422e1903920d"
+    },
+    {
+      "path": "backend/apps/users/repositories/iam_tenant_registry_repository.py",
+      "group": "required_integration_hunk",
+      "symbols": [],
+      "source_sha256": "f75aa97cce58113917e5338430e31c0eabf9a53b0d76720640959b8b24191016",
+      "baseline_status": "different",
+      "baseline_sha256": "0d0aa5b12ec6ac8aab07a040e7b0ae5aff398173c9b15eedd26f3c35af0e0b18"
+    },
+    {
+      "path": "backend/apps/users/repositories/identity_creation_repository.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "3b93e48de6e481aeb3c864214e4b65b716cf8813529ad174d6a98555c1df9e62",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/users/repositories/membership_repository.py",
+      "group": "required_integration_hunk",
+      "symbols": [],
+      "source_sha256": "f8978684f759202bbb341690e53794c77539149239a91494e09a60dc809374c5",
+      "baseline_status": "different",
+      "baseline_sha256": "a633e693eedabb2c50b1c90dc78405ac9a4e0df99ccf11ce6290817230242ea8"
+    },
+    {
+      "path": "backend/apps/users/services/local_files_provisioning.py",
+      "group": "production_closure",
+      "symbols": [],
+      "source_sha256": "6211c8d9661ff822291764a226603e9296576f45894a32534c023d3b33a5a213",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/users/tests/conftest.py",
+      "group": "supporting_test_support",
+      "symbols": [
+        "pii_read_context"
+      ],
+      "source_sha256": "541e06f037d6fc04862802fdedd1c0a93d117aebf16357f4e3a42ef17ea601c3",
+      "baseline_status": "different",
+      "baseline_sha256": "d3401ac9ec4d4f72fbc02152a983060519db845710101f49317e13c352fc97dd"
+    },
+    {
+      "path": "backend/apps/users/tests/iam_factories.py",
+      "group": "supporting_test_support",
+      "symbols": [
+        "make_membership",
+        "make_compat_user",
+        "make_fixture_access_token"
+      ],
+      "source_sha256": "fcb4f54e92a3d0875385ab30dbb87eba5ad253bafea7297291b169b1b12d8b2c",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/users/tests/test_create_test_users_command.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "ddb92b63e5f099e64dc809d97049428028fc0cbb034294842f930abbc36a2c01",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/apps/users/tests/test_local_files_provisioning.py",
+      "group": "manifest_test",
+      "symbols": [],
+      "source_sha256": "f7e9ecdfe1ff097750823ddbf11a906ce99ba0b767a585cf7a85089fc0d922ab",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/config/dev_migration_policy.json",
+      "group": "required_integration_hunk",
+      "symbols": [],
+      "source_sha256": "d63651ba0768ef142a5ce2acd44f5211fa6b9e3c53a9ae397f91df533a81385e",
+      "baseline_status": "different",
+      "baseline_sha256": "b97bec2b32f53cf52aec615c3de131c611d2b8d47b04eb9ce00504e10ef7eaab"
+    },
+    {
+      "path": "backend/config/legacy_document_compatibility.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "register_contract_read_providers",
+        "register_legacy_document_compatibility"
+      ],
+      "source_sha256": "b7b52515c4e92638adeec30d3abf87ab644cb581a64682868e55976e7e8b90ac",
+      "baseline_status": "absent",
+      "baseline_sha256": null
+    },
+    {
+      "path": "backend/conftest.py",
+      "group": "existing_integration_seams",
+      "symbols": [
+        "ciphertext_table",
+        "pytest_lifecycle"
+      ],
+      "source_sha256": "caee8d6a17d9756aabd96e8a0f290926e6821d554a8f04cc4205aa716d2a3619",
+      "baseline_status": "different",
+      "baseline_sha256": "f754bfb1cdcf00639c2a2a0dfbb602b0f35c1036abea1c1094dc841f2fb32bd7"
+    }
+  ]
+}
