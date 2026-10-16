@@ -119,8 +119,12 @@ def verify_baseline(baseline: Mapping[str, Any], *, run: Runner = subprocess.run
         _docker_endpoint_is_local()
         if _daemon_id(run) != baseline["daemon_id"]:
             errors.append("daemon identity changed")
-        current_baseline = capture_baseline(run=run)
-        current = current_baseline["resources"]
+        current: list[dict[str, Any]] = []
+        for kind in ("container", "network", "volume"):
+            identifiers = [item["id"] for item in baseline["resources"] if item["kind"] == kind]
+            current.extend(_resource_record(kind, item) for item in _inspect(kind, identifiers, run))
+        image_ids = [item["id"] for item in baseline["images"]]
+        current_baseline = {"images": [_image_record(item) for item in _inspect("image", image_ids, run)]}
     except Exception as exc:
         return [f"baseline verification failed: {type(exc).__name__}"]
     by_key = {(item["kind"], item["id"]): item for item in current}

@@ -80,7 +80,7 @@ def freeze_source(root: Path, commit: str, directory: Path) -> dict[str, Any]:
     if (frozen / '.git/objects/info/alternates').exists():
         raise ValueError('shared Git objects refused')
     state = {'version': 1, 'directory': str(directory), 'source_commit': commit,
-             'source_tree': git(frozen, 'rev-parse', 'HEAD^{tree}'), 'phase': 'frozen'}
+             'source_tree': git(frozen, 'rev-parse', 'HEAD^{tree}'), 'phase': 'frozen', 'stages': []}
     write_record(directory / 'attempt.json', state)
     return state
 
@@ -168,6 +168,13 @@ def _preserve_and_remove_private(directory: Path, state: dict[str, Any]) -> None
 
 
 
+def image_removal_allowed(baseline: dict[str, Any], image: dict[str, Any]) -> bool:
+    """Admit removal only of a new tag that cannot delete a baseline image."""
+    return not any(item['id'] == image['id'] and
+                   (not item['references'] or image['reference'] in item['references'])
+                   for item in baseline['images'])
+
+
 def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
     """Quiesce host work and daemon containers before guarded full cleanup."""
     import shutil
@@ -178,6 +185,12 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
 
     errors: list[str] = []
     try:
+        stages = state.get('stages')
+        if not isinstance(stages, list) or any(name not in ('prepare', 'test') for name in stages):
+            raise ValueError('stage journal list invalid')
+        for name in stages:
+            if not (directory / 'processes' / (name + '.json')).is_file() or not (directory / 'processes' / (name + '.intent.json')).is_file():
+                raise ValueError('stage journal missing: ' + name)
         stop_work(directory)
         baseline = read_record(directory / 'baseline.json')
         baseline_errors = verify_baseline(baseline)
@@ -187,7 +200,7 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
         ownership = directory / 'frozen/.dev/test-artifacts/stand/ownership.json'
         if ownership.exists():
             receipt = stand.recover_inventory(ownership)
-            commands = stand.stand_commands(Path(receipt['root']), receipt)
+            commands = stand.stand_commands(Path(receipt['root']), receipt, require_credentials=False)
             # Inventory includes detached lifecycle/oneshot containers left by killed clients.
             for record in receipt['resources']:
                 if record['kind'] != 'container':
@@ -200,9 +213,9 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
                     raise ValueError('container identity changed before stop')
                 commands.run(['docker', 'stop', '--time', '5', actual['Id']], write=True, timeout=30)
             image = receipt.get('image')
-            if image and any(item['id'] == image['id'] and not item['references'] for item in baseline.get('images', [])):
+            if image and not image_removal_allowed(baseline, image):
                 # Removing the last new tag could also delete a previously untagged image.
-                raise ValueError('stand image shares a previously untagged baseline identity')
+                raise ValueError('stand image removal would touch baseline identity/reference')
             receipt = stand.cleanup(ownership)
             if receipt['cleanup'] != 'PASS':
                 raise ValueError('guarded stand cleanup blocked')
@@ -282,6 +295,7 @@ def execute(directory: Path) -> int:
             patch.write_text(git(ROOT, 'show', '--format=fuller', '--binary', state['source_commit']) + '\n')
             stand_directory = ROOT / '.dev/test-artifacts/stand'
             state['phase'] = 'prepare'
+            state['stages'].append('prepare')
             write_record(directory / 'attempt.json', state)
             primary_exit = run_stage(directory, 'prepare', [sys.executable, '-B', '-m', 'infra.scripts.prepare_legacy_stand',
                 'prepare', '--source-root', str(ROOT), '--snapshot', str(snapshot), '--directory', str(stand_directory)], ROOT)
@@ -289,6 +303,7 @@ def execute(directory: Path) -> int:
                 raise RuntimeError('prepare failed; see processes/prepare.log')
             receipt = read_record(stand_directory / 'ownership.json')
             state['phase'] = 'test'
+            state['stages'].append('test')
             write_record(directory / 'attempt.json', state)
             primary_exit = run_stage(directory, 'test', [sys.executable, '-B', '-m', 'infra.scripts.run_legacy_regressions',
                 '--root', str(stand_directory / 'checkout'), '--ownership', str(stand_directory / 'ownership.json'),
