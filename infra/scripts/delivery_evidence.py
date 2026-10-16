@@ -540,6 +540,25 @@ def _legacy(
             "expected product failure mismatch",
         )
         _, scenario = artifact(check, "scenario")
+        case = check.get("scenario_case")
+        if case is not None:
+            cases: Any = scenario.get("matrix")
+            require(
+                case in ("success", "blocked", "tamper")
+                and scenario.get("status") == "PASS"
+                and isinstance(cases, dict)
+                and set(cases) == {"success", "blocked", "tamper"}
+                and all(
+                    isinstance(value, dict) and value.get("status") == "PASS"
+                    for value in cases.values()
+                ),
+                "early scenario matrix missing or unknown case",
+            )
+            scenario = cases[case]
+            require(
+                scenario.get("mode") == case and scenario.get("early_failure") is True,
+                "early case identity mismatch",
+            )
         require(
             scenario.get("status") == "PASS"
             and scenario.get("initial") == payload
@@ -548,9 +567,18 @@ def _legacy(
             and scenario.get("attempt_id") == view["attempt_id"],
             "negative scenario evidence missing",
         )
+        if case == "success":
+            require(
+                payload.get("status") == "FAIL"
+                and payload.get("cleanup") == "PASS"
+                and payload.get("cleanup_errors") == []
+                and payload.get("primary_exit") == 137
+                and expected.get("cleanup") == "PASS",
+                "successful early cleanup proof incomplete",
+            )
         references = scenario.get("recovery_artifacts", {})
         seen_records: set[str] = set()
-        for name in ("recovery", "repeat"):
+        for name in () if case == "success" else ("recovery", "repeat"):
             ref = references.get(name, {})
             relative = ref.get("path", "")
             require(

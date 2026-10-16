@@ -668,3 +668,80 @@ class DeliveryEvidenceTests(unittest.TestCase):
                 accept_receipts(req, [first / "qualification.json"])["status"],
                 "BLOCKED_STAND",
             )
+
+    def test_real_early_matrix_selects_success_without_inventing_recovery(self):
+        from infra.scripts.tests.test_attempt_identity import AttemptIdentityTests, git
+        from infra.scripts.run_legacy_qualification import freeze_source, write_record
+
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source, sha = AttemptIdentityTests().source(root)
+            tree = git(source, "rev-parse", "HEAD^{tree}")
+            attempt = root / "attempt"
+            freeze_source(source, sha, attempt)
+            product = {
+                "version": 1,
+                "source_commit": sha,
+                "source_tree": tree,
+                "status": "FAIL",
+                "exit": 137,
+                "primary_exit": 137,
+                "tests": "NOT_PASS",
+                "cleanup": "PASS",
+                "cleanup_errors": [],
+            }
+            write_record(attempt / "qualification.json", product)
+            identity = json.loads((attempt / "identity.json").read_text())
+            case = {
+                "status": "PASS",
+                "early_failure": True,
+                "mode": "success",
+                "initial": product,
+                "source_commit": sha,
+                "source_tree": tree,
+                "attempt_id": identity["attempt_id"],
+                "recovery_artifacts": {},
+            }
+            matrix = root / "matrix.json"
+            matrix.write_text(
+                json.dumps(
+                    {
+                        "status": "PASS",
+                        "matrix": {
+                            "success": case,
+                            "blocked": {"status": "PASS"},
+                            "tamper": {"status": "PASS"},
+                        },
+                    }
+                )
+            )
+            req = {
+                "version": 1,
+                "source": {"source_commit": sha, "source_tree": tree},
+                "checks": [
+                    {
+                        "id": "early-success",
+                        "producer": "legacy",
+                        "scenario_case": "success",
+                        "attempt": str(attempt),
+                        "expected_product": {
+                            "status": "FAIL",
+                            "primary_exit": 137,
+                            "cleanup": "PASS",
+                        },
+                        "execution": {
+                            "kind": "committed",
+                            "command": "legacy-recovery-scenario",
+                        },
+                        "artifacts": {"scenario": {"path": str(matrix)}},
+                    }
+                ],
+            }
+            result = accept_receipts(req, [attempt / "qualification.json"])
+            self.assertEqual(result["status"], "PASS", result)
+            self.assertEqual(result["receipts"][0]["status"], "FAIL")
+            req["checks"][0]["scenario_case"] = "unknown"
+            self.assertEqual(
+                accept_receipts(req, [attempt / "qualification.json"])["status"],
+                "BLOCKED_STAND",
+            )

@@ -143,12 +143,9 @@ def run(output: Path, image: str) -> dict[str, Any]:
         # host-driven fault injection in the disposable checkout; production
         # code keeps its public CLI unchanged.
         inventory_call = "    os.kill(os.getpid(), signal.SIGKILL)\n"
+        preparer_source = preparer_source.replace("import hashlib\n", "import hashlib\nimport os\n", 1)
         if early_mode in {"blocked", "tamper"}:
             preparer_source = preparer_source.replace(
-            "import hashlib\n",
-            "import hashlib\nimport os\n",
-            1,
-            ).replace(
             "def cleanup(receipt_path: Path) -> dict[str, Any]:\n",
             "def cleanup(receipt_path: Path) -> dict[str, Any]:\n"
             "    if os.environ.get('COMPLECT_EARLY_INVENTORY_FAILURE') == '1':\n"
@@ -194,8 +191,10 @@ def run(output: Path, image: str) -> dict[str, Any]:
         if early_failure:
             process_exit = process.wait(timeout=900)
             qualification_result = json.loads((attempt / "qualification.json").read_text())
+            if process_exit != 137 or qualification_result.get("primary_exit") != 137:
+                raise AssertionError(f"early fault did not execute intended SIGKILL: {process_exit}, {qualification_result}")
             if early_mode == "success":
-                if process_exit == 0 or qualification_result.get("cleanup") != "PASS":
+                if qualification_result.get("status") != "FAIL" or qualification_result.get("cleanup") != "PASS":
                     raise AssertionError(f"early successful cleanup failed: {process_exit}, {qualification_result}")
                 credentials = attempt / "frozen/.dev/test-artifacts/stand/checkout/.dev/secrets"
                 if credentials.exists() or (attempt / "private").exists():
