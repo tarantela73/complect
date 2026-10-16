@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -55,9 +56,54 @@ class CoverageCliTests(unittest.TestCase):
         self._finish_change()
         result = self._run("--base", self.base, "--report", str(self.repo / "report.json"))
         receipt = json.loads((self.repo / "report.json").read_text())
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, json.dumps(receipt, ensure_ascii=False))
         self.assertEqual(receipt["status"], "PASS")
         self.assertEqual(receipt["files"]["infra/scripts/example.py"]["status"], "FAIL_BASELINE")
+
+    def test_unchanged_error_after_inserted_lines_matches_real_baseline(self) -> None:
+        self._write("infra/scripts/example.py", "# inserted before old code\n\nvalue: int = 'bad'\n")
+        result = self._run("--base", self.base, "--report", str(self.repo / "report.json"))
+        receipt = json.loads((self.repo / "report.json").read_text())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(receipt["files"]["infra/scripts/example.py"]["status"], "FAIL_BASELINE")
+
+    def test_identical_message_on_changed_source_line_is_new_error(self) -> None:
+        self._write("infra/scripts/example.py", "other: int = 'bad'\n")
+        result = self._run("--base", self.base, "--report", str(self.repo / "report.json"))
+        receipt = json.loads((self.repo / "report.json").read_text())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(receipt["files"]["infra/scripts/example.py"]["status"], "FAIL")
+
+    def test_ruff_and_mypy_locations_shift_together_without_new_errors(self) -> None:
+        self._write("infra/scripts/example.py", "import os\nvalue: int = 'bad'\n")
+        self._git("add", ".")
+        self._git("commit", "-qm", "baseline with unused import")
+        base = self._git("rev-parse", "HEAD").strip()
+        self._write("infra/scripts/example.py", "# harmless insertion\nimport os\nvalue: int = 'bad'\n")
+        result = self._run("--base", base, "--report", str(self.repo / "report.json"))
+        receipt = json.loads((self.repo / "report.json").read_text())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        file_report = receipt["files"]["infra/scripts/example.py"]
+        self.assertEqual(file_report["status"], "FAIL_BASELINE")
+        self.assertEqual(file_report["checks"]["ruff"]["exit"], 1)
+        self.assertEqual(file_report["checks"]["mypy"]["exit"], 1)
+
+    def test_equal_size_and_mtime_sources_produce_fresh_diagnostic_locations(self) -> None:
+        path = self.repo / "infra/scripts/new.py"
+        self._write("infra/scripts/new.py", "\nvalue: int = 'bad'\n")
+        original = path.stat()
+        first = self._run("--base", self.base, "--report", str(self.repo / "report.json"))
+        self.assertEqual(first.returncode, 1)
+        self._write("infra/scripts/new.py", "value: int = 'bad'\n\n")
+        os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
+        self.assertEqual(path.stat().st_size, original.st_size)
+        self.assertEqual(path.stat().st_mtime_ns, original.st_mtime_ns)
+        result = self._run("--base", self.base, "--report", str(self.repo / "report.json"))
+        self.assertEqual(result.returncode, 1)
+        receipt = json.loads((self.repo / "report.json").read_text())
+        diagnostics = receipt["files"]["infra/scripts/new.py"]["checks"]["mypy"]["diagnostics"]
+        self.assertEqual(len(diagnostics), 1)
+        self.assertIn("infra/scripts/new.py:1: error:", diagnostics[0])
 
     def test_same_count_different_diagnostic_blocks(self) -> None:
         self._write("infra/scripts/example.py", "value: str = 1\n# changed\n")

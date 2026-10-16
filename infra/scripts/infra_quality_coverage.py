@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import difflib
 import hashlib
 import json
 import re
@@ -148,10 +149,11 @@ def validate(root: Path, payload: Any) -> None:
 
 
 def check_file(root: Path, path: str, *, shadows: list[str], source: bytes | None = None) -> dict[str, Any]:
+    # Shadow/base comparisons must not reuse size/mtime-only cached diagnostics.
     commands = {
         "ruff": ["ruff", "check", "--no-cache", "--output-format", "json", "--stdin-filename", path, "-"],
         "mypy": ["mypy", "--config-file", "infra/mypy.ini", "--ignore-missing-imports", "--explicit-package-bases",
-                 "--cache-dir", "/tmp/infra-coverage-mypy", "--no-error-summary", "--show-error-codes", *shadows, path],
+                 "--cache-dir", "/tmp/infra-coverage-mypy", "--no-incremental", "--no-error-summary", "--show-error-codes", *shadows, path],
     }
     checks = {}
     for tool, command in commands.items():
@@ -176,6 +178,46 @@ def check_file(root: Path, path: str, *, shadows: list[str], source: bytes | Non
         checks[tool] = {"command": command, "exit": completed.returncode, "stdout": stdout,
                         "stderr": stderr, "diagnostics": diagnostics}
     return checks
+
+
+def baseline_locations(previous: bytes, current: bytes) -> dict[int, int]:
+    """Map only byte-identical source lines; changed lines never inherit an error."""
+    old_lines, new_lines = previous.splitlines(keepends=True), current.splitlines(keepends=True)
+    mapping = {}
+    for block in difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_matching_blocks():
+        for offset in range(block.size):
+            mapping[block.b + offset + 1] = block.a + offset + 1
+        if block.size and block.a + block.size == len(old_lines) and block.b + block.size == len(new_lines):
+            mapping[len(new_lines) + 1] = len(old_lines) + 1
+    return mapping
+
+
+def mapped_diagnostics(tool: str, diagnostics: list[Any], path: str, mapping: dict[int, int]) -> list[Any] | None:
+    """Retain diagnostic text/code/columns and remap proven unchanged locations."""
+    def remap(value: Any) -> Any:
+        if isinstance(value, list):
+            return [remap(item) for item in value]
+        if isinstance(value, dict):
+            return {key: mapping[item] if key in {"row", "noqa_row"} and isinstance(item, int) else remap(item)
+                    for key, item in value.items()}
+        return value
+
+    try:
+        if tool == "ruff":
+            return remap(diagnostics)
+        result = []
+        for line in diagnostics:
+            match = re.match(r"^(.+?):([0-9]+)(:[0-9]+)?: (.*)$", line)
+            if match and match[1] == path:
+                result.append(f"{path}:{mapping[int(match[2])]}{match[3] or ''}: {match[4]}")
+            elif match:
+                # A diagnostic outside this checked file has no proven source mapping.
+                return None
+            else:
+                result.append(line)
+        return sorted(result)
+    except KeyError:
+        return None
 
 
 def run(*, base: str | None, report: Path, coverage_input: Path | None = None, root: Path = ROOT) -> int:
@@ -220,7 +262,12 @@ def run(*, base: str | None, report: Path, coverage_input: Path | None = None, r
                 if result["status"] == "FAIL" and path in payload["baseline_sources"]:
                     previous = check_file(root, path, shadows=shadows, source=base64.b64decode(payload["baseline_sources"][path], validate=True))
                     result["baseline_checks"] = previous
-                    matched = all(checks[tool]["exit"] == previous[tool]["exit"] and checks[tool]["diagnostics"] == previous[tool]["diagnostics"]
+                    mapping = baseline_locations(base64.b64decode(payload["baseline_sources"][path], validate=True),
+                                                 (root / path).read_bytes())
+                    comparison = {tool: mapped_diagnostics(tool, checks[tool]["diagnostics"], path, mapping) for tool in checks}
+                    result["baseline_mapped_diagnostics"] = comparison
+                    matched = all(checks[tool]["exit"] == previous[tool]["exit"] and comparison[tool] is not None
+                                  and comparison[tool] == previous[tool]["diagnostics"]
                                   and checks[tool]["stderr"] == previous[tool]["stderr"] for tool in checks)
                     result["baseline"] = "MATCHED" if matched else "CHANGED_DIAGNOSTICS"
                     if matched:
