@@ -65,3 +65,23 @@ def test_primary_exit_survives_blocked_cleanup():
     assert result['exit'] == 2
     assert result['status'] == 'BLOCKED_STAND'
     assert qualification_result(primary_exit=0, tests_passed=True, cleanup_errors=[])['status'] == 'PASS'
+
+
+def test_recovery_removes_private_credentials_even_when_docker_proof_is_blocked(tmp_path, monkeypatch):
+    from infra.scripts import run_legacy_qualification as qualification
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    state = freeze_source(root, sha, attempt)
+    private = attempt / 'private'
+    private.mkdir(mode=0o700)
+    (private / 'owner-secrets').mkdir(mode=0o700)
+    (private / 'owner-secrets/db_password').write_text('synthetic-secret')
+    st = private.stat()
+    state['private_identity'] = {'device': st.st_dev, 'inode': st.st_ino}
+    qualification.write_record(attempt / 'attempt.json', state)
+    qualification.write_record(attempt / 'baseline.json', {})
+    qualification.write_record(attempt / 'qualification.json', {'status': 'BLOCKED_STAND'})
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    assert qualification.recover(attempt) == 2
+    assert not private.exists()
+    assert json.loads((attempt / 'qualification.json').read_text()) == {'status': 'BLOCKED_STAND'}
