@@ -288,3 +288,35 @@ def test_mount_order_canonicalization_preserves_every_fingerprint_field(
     assert stand.report["phases"]["cleanup"]["errors"] == [
         {"id": "owned-container", "error": "cleanup image/mount mismatch"}
     ]
+
+
+def test_infra_container_receives_offline_git_tools_without_owner_access(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from infra.scripts import run_infra_tests
+
+    stand = _stand(tmp_path)
+    stand.network = 'none'
+    stand.args.backend_image = 'test-backend'
+    stand.private = tmp_path / 'private'
+    stand.control = tmp_path / 'control'
+    stand.state = tmp_path / 'state'
+    commands = []
+
+    def create(suffix, image, options, command):
+        commands.append(options)
+        return 'test-runtime'
+
+    monkeypatch.setattr(stand, 'create', create)
+    monkeypatch.setattr(stand, 'docker', lambda *a, **k: SimpleNamespace(returncode=0, stdout='', stderr=''))
+    monkeypatch.setattr(stand, 'inspect', lambda *a: {'State': {'ExitCode': 0}})
+    monkeypatch.setattr(run_infra_tests, '_tool_mounts', lambda: [
+        ('/tools/git', '/usr/local/bin/git'), ('/tools/git-upload-pack', '/usr/local/bin/git-upload-pack'),
+        ('/tools/docker', '/usr/local/bin/docker')])
+
+    stand.backend('infra-test', 'runtime', ['-c', 'pass'], infra_tools=True)
+    assert '/tools/git:/usr/local/bin/git:ro' in commands[0]
+    assert '/tools/git-upload-pack:/usr/local/bin/git-upload-pack:ro' in commands[0]
+    assert not any('docker.sock' in arg or '/secrets/owner' in arg or '/tools/docker:' in arg for arg in commands[0])
+    assert str(stand.state) + ':/state:ro,z' in commands[0]
+    stand.backend('application-test', 'runtime', ['-c', 'pass'])
+    assert not any('/tools/' in arg for arg in commands[1])

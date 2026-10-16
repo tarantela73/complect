@@ -328,7 +328,7 @@ class Stand:
         )
         self.docker("start", redis)
 
-    def backend(self, suffix, role, command, detached=False):
+    def backend(self, suffix, role, command, detached=False, *, infra_tools=False):
         options = [
             "--network",
             self.network,
@@ -367,6 +367,16 @@ class Stand:
             options[options.index(f"{self.state}:/state:z")] = (
                 f"{self.state}:/state:ro,z"
             )
+        if infra_tools:
+            # The shared infra selection creates local Git fixtures. Expose only
+            # these offline binaries, never a daemon socket or extra credentials.
+            if __package__:
+                from .run_infra_tests import _tool_mounts
+            else:
+                from run_infra_tests import _tool_mounts
+            for host_path, target in _tool_mounts():
+                if Path(target).name.startswith("git"):
+                    options.extend(["-v", f"{host_path}:{target}:ro"])
         identifier = self.create(
             suffix, self.args.backend_image, options, ["-B", *command]
         )
@@ -509,6 +519,7 @@ class Stand:
                 "--manifest",
                 "/control/" + phase + "-manifest.json",
             ],
+            infra_tools=True,
         )
         path = self.control / (phase + "-manifest.json")
         manifest = json.loads(path.read_text())
