@@ -391,8 +391,17 @@ def main() -> int:
         type=Path,
         help="Require the current working tree to match an explicit snapshot manifest",
     )
+    parser.add_argument(
+        "--snapshot-summary",
+        action="store_true",
+        help="Print only snapshot status, path and SHA-256 (requires --record-snapshot)",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
+    if args.snapshot_summary and args.snapshot is None:
+        parser.error("--snapshot-summary requires --record-snapshot")
+    if args.snapshot_summary and args.verify_snapshot is not None:
+        parser.error("--snapshot-summary cannot be combined with --verify-snapshot")
     if args.verify_snapshot is not None:
         manifest_path = args.verify_snapshot if args.verify_snapshot.is_absolute() else root / args.verify_snapshot
         errors = verify_working_tree_snapshot(root, manifest_path)
@@ -402,14 +411,18 @@ def main() -> int:
         print(json.dumps({"status": "PASS", "snapshot": str(manifest_path)}, ensure_ascii=False))
         return 0
     if args.snapshot is not None:
+        destination = args.snapshot if args.snapshot.is_absolute() else root / args.snapshot
         try:
             manifest = working_tree_snapshot(root)
-            destination = args.snapshot if args.snapshot.is_absolute() else root / args.snapshot
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+            digest = hashlib.sha256(destination.read_bytes()).hexdigest()
         except (OSError, subprocess.CalledProcessError, ValueError) as error:
             print(f"snapshot failed: {error}")
             return 1
+        if args.snapshot_summary:
+            print(json.dumps({"status": "PASS", "path": str(destination), "sha256": digest}, ensure_ascii=False))
+            return 0
         print(json.dumps(manifest, ensure_ascii=False, indent=2))
         return 0
     if args.record:

@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import uuid
@@ -208,6 +209,7 @@ def run(
     output: Path,
     scope: str = "gate",
     quality_image: str = DEFAULT_QUALITY_IMAGE,
+    base: str | None = None,
 ) -> int:
     if mode == "all":
         statuses: dict[str, int] = {}
@@ -235,6 +237,11 @@ def run(
                     json.dumps({"mode": selected, "status": "BLOCKED_STAND", "error": str(exc)}, indent=2) + "\n"
                 )
                 statuses[selected] = 2
+        if base is not None:
+            statuses["coverage"] = run_coverage(base=base, image=quality_image, output=output / "coverage")
+            statuses["payments_context"] = run_payments_context(image=image, output=output / "payments-context")
+            statuses["recovery"] = run_recovery(image=image, output=output / "recovery")
+            statuses["delivery"] = run_delivery(base=base, image=image, output=output / "delivery")
         output.mkdir(parents=True, exist_ok=True)
         (output / "result.json").write_text(
             json.dumps(
@@ -243,7 +250,7 @@ def run(
             )
             + "\n"
         )
-        return max(statuses.values())
+        return next((code for code in statuses.values() if code), 0)
     _docker_endpoint_is_local()
     run_id = f"infra-test-{uuid.uuid4().hex}"
     output.mkdir(parents=True, exist_ok=True)
@@ -318,15 +325,130 @@ def run(
     return exit_code
 
 
+def run_coverage(*, base: str, image: str, output: Path) -> int:
+    """Prepare complete Git inputs on the host and run checks in the offline image."""
+    from infra.scripts.infra_quality_coverage import prepare_input
+
+    _docker_endpoint_is_local()
+    output.mkdir(parents=True, exist_ok=True)
+    prepare_input(base=base, output=output / "input")
+    expected = (output / "input/input.json").read_bytes()
+    execution = output / "execution"
+    execution.mkdir(exist_ok=True)
+    command = build_quality_command(image=image, output=execution)
+    command[-1:-1] = ["--entrypoint", "python", "-v", f"{output.resolve() / 'input'}:/coverage-input:ro"]
+    command.extend(["-B", "-m", "infra.scripts.infra_quality_coverage",
+                    "--coverage-input", "/coverage-input/input.json", "--report", "/evidence/coverage.json"])
+    completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=1800, check=False)
+    (output / "command.log").write_text(completed.stdout + completed.stderr)
+    prepare_input(base=base, output=output / "after")
+    unchanged = expected == (output / "after/input.json").read_bytes()
+    receipt_path = execution / "coverage.json"
+    receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+    if receipt_path.is_file():
+        shutil.copyfile(receipt_path, output / "coverage.json")
+    code = completed.returncode
+    if not unchanged or receipt.get("status") != "PASS":
+        code = code or 2
+    (output / "result.json").write_text(json.dumps({
+        "version": 1, "command": command, "exit": code, "sources_unchanged": unchanged,
+        "status": "PASS" if not code else "FAIL", "report": "coverage.json",
+    }, indent=2) + "\n")
+    return code
+
+
+def run_recovery(*, image: str, output: Path) -> int:
+    """Run the real cleanup-only CLI scenario on the host with guarded resources."""
+    destination = output / ("run-" + uuid.uuid4().hex)
+    output.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_recovery_cli.py"),
+               "--image", image, "--output", str(destination)]
+    completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    (output / "command.log").write_text(completed.stdout + completed.stderr)
+    receipt_path = destination / "result.json"
+    receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+    code = completed.returncode
+    if receipt.get("status") != "PASS":
+        code = code or 2
+    (output / "result.json").write_text(json.dumps({"status": "PASS" if not code else "FAIL",
+        "exit": code, "command": command, "report": str(receipt_path)}, indent=2) + "\n")
+    return code
+
+
+def run_payments_context(*, image: str, output: Path) -> int:
+    """Run the existing Payments adapter in its offline context-only mode."""
+    output.mkdir(parents=True, exist_ok=True)
+    destination = output / ("run-" + uuid.uuid4().hex)
+    completed = subprocess.run(
+        [sys.executable, "-B", str(ROOT / "infra/scripts/run_payments_gate.py"),
+         "--infra-only", "--backend-image", image, "--output", str(destination)],
+        cwd=ROOT, capture_output=True, text=True, timeout=1800, check=False,
+    )
+    (output / "command.log").write_text(completed.stdout + completed.stderr)
+    if completed.returncode:
+        return completed.returncode
+    receipt = json.loads((destination / "context.json").read_text())
+    return 0 if receipt.get("status") == "PASS" and receipt.get("cleanup") == "PASS" else 2
+
+
+def changed_paths(base: str) -> tuple[str, list[str]]:
+    """Resolve one explicit comparison and include staged, unstaged and new files."""
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(ROOT), *args], text=True,
+                              capture_output=True, check=True).stdout
+    resolved = git("rev-parse", "--verify", "--end-of-options", base + "^{commit}").strip()
+    changed = git("diff", "--name-only", "--no-renames", "-z", resolved, "--").split("\0")
+    changed += git("ls-files", "--others", "--exclude-standard", "-z").split("\0")
+    return resolved, sorted(set(path for path in changed if path))
+
+
+def run_delivery(*, base: str, image: str, output: Path) -> int:
+    """Select full host consumers after the fast Infrastructure gate; never recurse."""
+    from infra.scripts.infra_test_selection import required_gates
+    from infra.scripts.run_payments_gate import Stand
+
+    resolved, paths = changed_paths(base)
+    gates = required_gates(paths)
+    output.mkdir(parents=True, exist_ok=True)
+    source_before = Stand.source_identity()
+    results = []
+    code = 0
+    if "test-payments-gate" in gates:
+        destination = output / "payments"
+        arguments = ["--backend-image", image, "--output", str(destination),
+                     "--postgres-image", os.environ.get("PAYMENTS_POSTGRES_IMAGE", "postgis/postgis:16-3.4"),
+                     "--redis-image", os.environ.get("PAYMENTS_REDIS_IMAGE", "redis:7.2-alpine")]
+        command = ["make", "test-payments-gate", "PAYMENTS_GATE_ARGS=" + shlex.join(arguments)]
+        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        (output / "payments.log").write_text(completed.stdout + completed.stderr)
+        code = completed.returncode
+        receipt = json.loads((destination / "result.json").read_text()) if (destination / "result.json").is_file() else {}
+        if not code and receipt.get("status") != "PASS":
+            code = 2
+        results.append({"gate": "test-payments-gate", "command": command, "exit": code,
+                        "status": receipt.get("status", "BLOCKED_STAND")})
+    unchanged = source_before == Stand.source_identity()
+    if not unchanged:
+        code = code or 2
+    (output / "selection.json").write_text(json.dumps({
+        "version": 1, "comparison_base": resolved, "changed_paths": paths,
+        "required_gates": gates, "infrastructure": "executed-by-caller",
+        "results": results, "source_identity": source_before, "sources_unchanged": unchanged,
+        "status": "PASS" if not code else "FAIL",
+    }, indent=2) + "\n")
+    return code
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("all", "pytest", "unittest"), default="all", nargs="?")
     parser.add_argument("--backend-image", default=os.environ.get("INFRA_TEST_BACKEND_IMAGE", DEFAULT_IMAGE))
     parser.add_argument("--quality-image", default=os.environ.get("INFRA_TEST_QUALITY_IMAGE", DEFAULT_QUALITY_IMAGE))
     parser.add_argument("--output", type=Path, default=ROOT / ".dev/test-artifacts/infra-tests")
+    parser.add_argument("--base", default="HEAD", help="Comparison commit for local acceptance, including working-tree changes")
     args = parser.parse_args(argv)
     try:
-        return run(args.mode, image=args.backend_image, quality_image=args.quality_image, output=args.output)
+        return run(args.mode, image=args.backend_image, quality_image=args.quality_image, output=args.output, base=args.base if args.mode == "all" else None)
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "result.json").write_text(
