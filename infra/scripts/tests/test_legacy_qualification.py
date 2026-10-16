@@ -100,3 +100,26 @@ def test_recovery_rejects_symlink_lock_before_cleanup(tmp_path, monkeypatch):
         qualification.recover(attempt)
     assert external.read_text() == 'preserved'
     assert not list(attempt.glob('recovery-*.json'))
+
+
+def test_image_removal_preserves_existing_ids_and_references():
+    from infra.scripts.run_legacy_qualification import image_removal_allowed
+    baseline = {'images': [{'id': 'shared', 'references': ['old:tag']}, {'id': 'untagged', 'references': []}]}
+    assert not image_removal_allowed(baseline, {'id': 'shared', 'reference': 'old:tag'})
+    assert image_removal_allowed(baseline, {'id': 'shared', 'reference': 'attempt:new'})
+    assert not image_removal_allowed(baseline, {'id': 'untagged', 'reference': 'attempt:new'})
+    assert image_removal_allowed(baseline, {'id': 'new-image', 'reference': 'attempt:new'})
+
+
+def test_recovery_blocks_when_declared_stage_journal_is_missing(tmp_path, monkeypatch):
+    from infra.scripts import run_legacy_qualification as qualification
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    state = freeze_source(root, sha, attempt)
+    state['stages'] = ['prepare']
+    state['phase'] = 'prepare'
+    qualification.write_record(attempt / 'attempt.json', state)
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    assert qualification.recover(attempt) == 2
+    result = json.loads(next(attempt.glob('recovery-*.json')).read_text())
+    assert any('stage journal missing' in error for error in result['errors'])

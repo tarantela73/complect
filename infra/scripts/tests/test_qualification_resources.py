@@ -105,3 +105,19 @@ def test_verify_rejects_missing_baseline_images(monkeypatch):
     assert resources.verify_baseline({"daemon_id": "daemon-1", "resources": []}, run=lambda *_args, **_kwargs: None) == [
         "baseline schema invalid"
     ]
+
+
+def test_verify_inspects_only_baseline_ids_not_transient_new_resources(monkeypatch):
+    monkeypatch.setattr(resources, '_docker_endpoint_is_local', lambda: None)
+    baseline = {'daemon_id': 'daemon-1', 'resources': [
+        {'kind': 'container', 'id': 'stable', 'fingerprint': {'Id': 'stable', 'Image': 'image', 'Mounts': []}, 'labels': {}}
+    ], 'images': []}
+
+    def run(command, **_kwargs):
+        if command[1:3] == ['info', '--format']:
+            return SimpleNamespace(stdout='daemon-1')
+        if command[1:] == ['inspect', 'stable']:
+            return SimpleNamespace(stdout=json.dumps([{'Id': 'stable', 'Image': 'image', 'Mounts': [], 'Config': {'Labels': {}}}]))
+        raise AssertionError('must not enumerate transient new resources')
+
+    assert resources.verify_baseline(baseline, run=run) == []

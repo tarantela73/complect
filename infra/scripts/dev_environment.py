@@ -159,9 +159,16 @@ def parse_env(path: Path, allowed: set[str]) -> dict[str, str]:
     return result
 
 
-def local_configuration(root: Path) -> dict[str, str]:
+def local_configuration(root: Path, *, require_credentials: bool = True) -> dict[str, str]:
     for relative in (".dev", ".dev/secrets"):
         path = root / relative
+        if (
+            relative == ".dev/secrets"
+            and not require_credentials
+            and not path.exists()
+            and not path.is_symlink()
+        ):
+            continue
         info = path.lstat()
         if (
             not stat.S_ISDIR(info.st_mode)
@@ -194,16 +201,17 @@ def local_configuration(root: Path) -> dict[str, str]:
         )
     if values.get("IAM_DEFERRED_MERGE_EXECUTION_ENABLED", "false") != "false":
         raise DevError("IAM_DEFERRED_MERGE_EXECUTION_ENABLED must remain false")
-    for name in SECRET_NAMES:
-        path = root / ".dev/secrets" / name
-        if (
-            path.is_symlink()
-            or not path.is_file()
-            or path.stat().st_mode & 0o077
-            or path.stat().st_uid != os.getuid()
-            or path.stat().st_size < 32
-        ):
-            raise DevError(f"Missing or unsafe local secret file: {name}")
+    if require_credentials:
+        for name in SECRET_NAMES:
+            path = root / ".dev/secrets" / name
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or path.stat().st_mode & 0o077
+                or path.stat().st_uid != os.getuid()
+                or path.stat().st_size < 32
+            ):
+                raise DevError(f"Missing or unsafe local secret file: {name}")
     for name, keys in (
         ("external.env", {"DADATA_API_KEY"}),
         ("e2e.env", {"E2E_USERNAME", "E2E_PASSWORD", "E2E_TOTP_SECRET", "E2E_TOTP_URI", "E2E_TENANT_ID"}),
@@ -295,11 +303,11 @@ def prerequisites() -> None:
 
 
 class Commands:
-    def __init__(self, root: Path, *, read_only: bool = False):
+    def __init__(self, root: Path, *, read_only: bool = False, require_credentials: bool = True):
         self.root = root
         self.read_only = read_only
         self.ownership = OwnershipProof(self._inspect_resources)
-        self.values = local_configuration(root)
+        self.values = local_configuration(root) if require_credentials else local_configuration(root, require_credentials=False)
         self.project = self.values["COMPOSE_PROJECT_NAME"]
         self.environment = dict(os.environ)
         for name in (

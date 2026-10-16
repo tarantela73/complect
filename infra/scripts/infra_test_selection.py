@@ -16,6 +16,7 @@ PYTEST_FILES: tuple[str, ...] = (
     "infra/scripts/tests/test_resource_ownership_compatibility.py",
     "infra/scripts/tests/test_legacy_phase_contract.py",
     "infra/scripts/tests/test_legacy_qualification.py",
+    "infra/scripts/tests/test_legacy_cleanup_configuration.py",
     "infra/scripts/tests/test_legacy_regression_runtime_paths.py",
     "infra/scripts/tests/test_qualification_resources.py",
     "infra/scripts/tests/test_qualification_processes.py",

@@ -38,6 +38,7 @@ RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_legacy_preflight_contract.py",
     "infra/scripts/tests/test_legacy_preflight_refusals.py",
     "infra/scripts/tests/test_legacy_qualification.py",
+    "infra/scripts/tests/test_legacy_cleanup_configuration.py",
     "infra/scripts/tests/test_legacy_regression_runtime_paths.py",
     "infra/scripts/tests/test_qualification_resources.py",
     "infra/scripts/tests/test_qualification_processes.py",
