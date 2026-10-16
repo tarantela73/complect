@@ -8,6 +8,7 @@ from __future__ import annotations
 
 
 PYTEST_FILES: tuple[str, ...] = (
+    "infra/scripts/tests/test_infra_context.py",
     "infra/scripts/tests/test_pytest_lifecycle.py",
     "infra/scripts/tests/test_lifecycle_database.py",
     "infra/scripts/tests/test_payments_replica.py",
@@ -42,3 +43,19 @@ def payments_unittest_names() -> list[str]:
     """Return the unittest classes included in the Payments infra gate."""
 
     return list(PAYMENTS_UNITTEST_NAMES)
+
+
+def required_gates(changed_paths: list[str]) -> list[str]:
+    """Select existing host gates; unknown infra tests fail toward more coverage."""
+    from pathlib import PurePosixPath
+
+    gates = ["agent-infra-test"]
+    needs_payments = False
+    for path in changed_paths:
+        parsed = PurePosixPath(path)
+        if not path or parsed.is_absolute() or ".." in parsed.parts:
+            raise ValueError("unsafe changed path")
+        if (path.startswith("infra/scripts/") or path.startswith("backend/test_support/")
+                or path in {"Makefile", "infra/Dockerfile.tests", "backend/Dockerfile.dev"}):
+            needs_payments = True
+    return gates + (["test-payments-gate"] if needs_payments else [])
