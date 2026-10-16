@@ -110,7 +110,14 @@ def _tool_mounts() -> list[tuple[str, str]]:
     """Expose only offline test tooling; never expose the Docker socket."""
 
     mounts: list[tuple[str, str]] = []
-    for name in ("docker", "make"):
+    for name in (
+        "docker",
+        "make",
+        "git",
+        "git-upload-pack",
+        "git-receive-pack",
+        "git-upload-archive",
+    ):
         path = shutil.which(name)
         if path:
             mounts.append((path, f"/usr/local/bin/{name}"))
