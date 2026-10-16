@@ -85,3 +85,18 @@ def test_recovery_removes_private_credentials_even_when_docker_proof_is_blocked(
     assert qualification.recover(attempt) == 2
     assert not private.exists()
     assert json.loads((attempt / 'qualification.json').read_text()) == {'status': 'BLOCKED_STAND'}
+
+
+def test_recovery_rejects_symlink_lock_before_cleanup(tmp_path, monkeypatch):
+    from infra.scripts import run_legacy_qualification as qualification
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    freeze_source(root, sha, attempt)
+    external = tmp_path / 'external-lock'
+    external.write_text('preserved')
+    (attempt / 'attempt.lock').symlink_to(external)
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    with pytest.raises((ValueError, OSError)):
+        qualification.recover(attempt)
+    assert external.read_text() == 'preserved'
+    assert not list(attempt.glob('recovery-*.json'))

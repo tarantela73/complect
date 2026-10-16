@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import re
 import subprocess
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -115,6 +117,22 @@ def validate_attempt(directory: Path) -> dict[str, Any]:
     return state
 
 
+@contextlib.contextmanager
+def attempt_lock(directory: Path):
+    """Lock only a regular private file owned by this user, without symlinks."""
+    import fcntl
+
+    fd = os.open(directory / 'attempt.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_nlink != 1:
+            raise ValueError('unsafe attempt lock')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(fd)
+
+
 def _private_identity(path: Path) -> dict[str, int]:
     if path.is_symlink():
         raise ValueError('private path symlink refused')
@@ -218,7 +236,6 @@ class QualificationInterrupted(BaseException):
 
 def execute(directory: Path) -> int:
     """Execute the complete positive contract from this frozen source."""
-    import fcntl
     import signal
 
     from infra.scripts import agent_harness
@@ -229,8 +246,7 @@ def execute(directory: Path) -> int:
     state = validate_attempt(directory)
     if ROOT != directory / 'frozen' or state['phase'] != 'frozen':
         raise ValueError('frozen execution identity mismatch')
-    with (directory / 'attempt.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with attempt_lock(directory):
         private = directory / 'private'
         private.mkdir(mode=0o700)
         state['private_identity'] = _private_identity(private)
@@ -311,14 +327,12 @@ def execute(directory: Path) -> int:
 
 def recover(directory: Path) -> int:
     """Cleanup only, with an append-only recovery result and unchanged run verdict."""
-    import fcntl
     import uuid
 
     state = validate_attempt(directory)
     if ROOT != directory / 'frozen':
         raise ValueError('frozen recovery identity mismatch')
-    with (directory / 'attempt.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with attempt_lock(directory):
         errors = _clean_attempt(directory, state)
         result = {'version': 1, 'operation': 'cleanup-only', 'status': 'BLOCKED_STAND' if errors else 'PASS',
                   'errors': errors, 'source_commit': state['source_commit'], 'original_verdict_unchanged': True}
