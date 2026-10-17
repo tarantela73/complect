@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,7 +19,7 @@ class PaymentsCiWorkflowTests(unittest.TestCase):
     def test_every_main_pull_request_executes_full_local_gate(self):
         workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(workflow["on"]["pull_request"], {"branches": ["main"]})
-        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertEqual(workflow["permissions"], {"contents": "read", "actions": "read"})
         job = workflow["jobs"]["payments"]
         self.assertNotIn("if", job)
         self.assertNotIn("continue-on-error", job)
@@ -27,6 +28,10 @@ class PaymentsCiWorkflowTests(unittest.TestCase):
         gates = [command for command in commands if "make test-payments-gate" in command]
         self.assertEqual(len(gates), 1)
         self.assertIn("set -euo pipefail", gates[0])
+        self.assertIn("-m infra.scripts.ci_gate_producer", gates[0])
+        self.assertIn("--artifact gate=gate/result.json", gates[0])
+        adapter_step = next(step for step in job["steps"] if "-m infra.scripts.ci_gate_producer" in step.get("run", ""))
+        self.assertEqual(adapter_step["env"]["GH_TOKEN"], "${{ github.token }}")
         self.assertNotIn("--scope stand", gates[0])
         self.assertTrue(any("backend/Dockerfile.dev" in command for command in commands))
         self.assertTrue(any("docker pull" in command for command in commands))
@@ -51,6 +56,17 @@ class PaymentsCiWorkflowTests(unittest.TestCase):
                 binary = directory / "make"
                 binary.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\"\nprintf 'observed-gate-result\\n'\nexit "+str(status)+"\n")
                 binary.chmod(0o700)
+                wrapper = directory / "python3"
+                wrapper.write_text(
+                    "#!" + sys.executable + "\n"
+                    "import pathlib,subprocess,sys\n"
+                    "args=sys.argv[1:]; assert args[:3]==['-B','-m','infra.scripts.ci_gate_producer']\n"
+                    "output=pathlib.Path(args[args.index('--output')+1]); output.mkdir(parents=True)\n"
+                    "log=output/'run'/'command.log'; log.parent.mkdir()\n"
+                    "with log.open('wb') as stream: result=subprocess.run(args[args.index('--')+1:],stdout=stream,stderr=subprocess.STDOUT)\n"
+                    "sys.exit(result.returncode)\n"
+                )
+                wrapper.chmod(0o700)
                 result = subprocess.run(["bash", "-c", command], cwd=ROOT,
                     env={"PATH": str(directory)+os.pathsep+os.defpath,
                          "RUNNER_TEMP": temporary, "PAYMENTS_FAULT": fault,
@@ -59,7 +75,7 @@ class PaymentsCiWorkflowTests(unittest.TestCase):
                          "PAYMENTS_REDIS_IMAGE": "redis:synthetic"},
                     capture_output=True, text=True, timeout=10, check=False)
                 self.assertEqual(result.returncode, status, result.stderr)
-                log = (directory / "payments-ci/tests.log").read_text()
+                log = (directory / "payments-ci/producer/run/command.log").read_text()
                 self.assertIn("observed-gate-result", log)
                 self.assertIn("test-payments-gate", log)
                 self.assertEqual("--fault prepare" in log, fault == "prepare")
