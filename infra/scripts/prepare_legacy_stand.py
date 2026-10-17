@@ -38,9 +38,9 @@ def _write(path: Path, value: Any) -> None:
     path.chmod(0o600)
 
 
-def stand_commands(checkout: Path, registered: dict[str, Any]) -> Commands:
+def stand_commands(checkout: Path, registered: dict[str, Any], *, require_credentials: bool = True) -> Commands:
     """Use the checkout-local legacy template and its recorded override."""
-    commands = Commands(checkout)
+    commands = Commands(checkout) if require_credentials else Commands(checkout, require_credentials=False)
     template = checkout / "infra/legacy-stand.compose.yml"
     recorded_template = registered["compose_template"]
     if template != Path(recorded_template["path"]) or template.is_symlink():
@@ -168,7 +168,7 @@ def cleanup(receipt_path: Path) -> dict[str, Any]:
     checkout = Path(receipt["root"])
     if checkout != receipt_path.resolve().parent / "checkout" or checkout.is_symlink():
         raise ValueError("stand receipt/root mismatch")
-    commands = stand_commands(checkout, receipt)
+    commands = stand_commands(checkout, receipt, require_credentials=False)
     if commands.project != receipt["project"] or commands.values["DEV_CHECKOUT_ID"] != receipt["checkout_id"]:
         raise ValueError("stand configuration identity mismatch")
     errors = [{"error": receipt["inventory_error"]}] if receipt.get("inventory_error") else []
@@ -230,7 +230,7 @@ def recover_inventory(receipt_path: Path) -> dict[str, Any]:
     checkout = Path(receipt["root"])
     if checkout != receipt_path.resolve().parent / "checkout" or checkout.is_symlink():
         raise ValueError("stand receipt/root mismatch")
-    commands = stand_commands(checkout, receipt)
+    commands = stand_commands(checkout, receipt, require_credentials=False)
     if commands.project != receipt["project"] or commands.values["DEV_CHECKOUT_ID"] != receipt["checkout_id"]:
         raise ValueError("stand configuration identity mismatch")
     receipt["inventory_complete"] = False

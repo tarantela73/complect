@@ -47,6 +47,12 @@ agent-infra-image:
 	docker build -f backend/Dockerfile.dev -t "$${INFRA_TEST_BACKEND_IMAGE:-complect_backend:dev}" backend
 	docker build --build-arg BASE_IMAGE="$${INFRA_TEST_BACKEND_IMAGE:-complect_backend:dev}" -t "$${INFRA_TEST_QUALITY_IMAGE:-complect-infra-quality:dev}" -f infra/Dockerfile.tests .
 
+legacy-stand-qualify:
+	python3 -B -m infra.scripts.run_legacy_qualification run --source-commit "$(SOURCE_COMMIT)" --directory "$(DIRECTORY)"
+
+legacy-stand-recover:
+	python3 -B -m infra.scripts.run_legacy_qualification recover --directory "$(DIRECTORY)"
+
 legacy-stand-prepare:
 	python3 -B -m infra.scripts.prepare_legacy_stand prepare $(LEGACY_STAND_ARGS)
 
