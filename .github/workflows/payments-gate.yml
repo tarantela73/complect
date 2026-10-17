@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: payments-gate-${{ github.ref }}
@@ -52,14 +53,19 @@ jobs:
           docker pull "$PAYMENTS_POSTGRES_IMAGE" 2>&1 | tee "$RUNNER_TEMP/payments-ci/postgres-image.log"
           docker pull "$PAYMENTS_REDIS_IMAGE" 2>&1 | tee "$RUNNER_TEMP/payments-ci/redis-image.log"
       - name: Run the full local Payments gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           fault_args=""
           if [ "$PAYMENTS_FAULT" = prepare ]; then
             fault_args="--fault prepare"
           fi
-          make test-payments-gate \
-            PAYMENTS_GATE_ARGS="--backend-image $PAYMENTS_BACKEND_IMAGE --postgres-image $PAYMENTS_POSTGRES_IMAGE --redis-image $PAYMENTS_REDIS_IMAGE --output $RUNNER_TEMP/payments-ci/gate $fault_args" \
+          python3 -B -m infra.scripts.ci_gate_producer \
+            --output "$RUNNER_TEMP/payments-ci/producer" \
+            --artifact gate=gate/result.json \
+            -- make test-payments-gate \
+            PAYMENTS_GATE_ARGS="--backend-image $PAYMENTS_BACKEND_IMAGE --postgres-image $PAYMENTS_POSTGRES_IMAGE --redis-image $PAYMENTS_REDIS_IMAGE --output $RUNNER_TEMP/payments-ci/producer/gate $fault_args" \
             2>&1 | tee "$RUNNER_TEMP/payments-ci/tests.log"
       - name: Upload Payments evidence
         if: always()
