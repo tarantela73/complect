@@ -27,6 +27,7 @@ class InfraCiWorkflowTests(unittest.TestCase):
         self.assertEqual(len(gate), 1)
         self.assertIn("set -euo pipefail", gate[0])
         self.assertIn("-m infra.scripts.ci_gate_producer", gate[0])
+        self.assertIn("--profile ci_gate_producer", gate[0])
         self.assertIn("--artifact gate=gate/result.json", gate[0])
         adapter_step = next(step for step in job["steps"] if "-m infra.scripts.ci_gate_producer" in step.get("run", ""))
         self.assertEqual(adapter_step["env"]["GH_TOKEN"], "${{ github.token }}")

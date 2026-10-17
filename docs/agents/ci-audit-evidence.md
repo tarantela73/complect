@@ -30,7 +30,7 @@ python3 -B -m infra.scripts.ci_audit_evidence \
 
 ## Независимый список требований
 
-Координатор задаёт требования до проверки пакета. Список нельзя получать фильтрацией найденных jobs. JSON имеет `format: complect-ci-audit-requirements-v1` и непустой `jobs`. Каждый элемент содержит:
+Координатор задаёт требования до проверки пакета. Список нельзя получать фильтрацией найденных jobs. JSON имеет `format: complect-ci-audit-requirements-v1` и непустой `jobs`. Для новых Infrastructure/Payments добавляется `profile: ci_gate_producer`; тогда каждый job обязан перечислить `receipt`, `runner_receipt`, `command_log` и `gate`, а report обязан повторить этот профиль. Без profile сохраняется generic v1 для исторических пакетов. Каждый элемент содержит:
 
 | Поле | Значение |
 | --- | --- |
