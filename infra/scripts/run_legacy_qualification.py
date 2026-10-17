@@ -365,6 +365,12 @@ def recover(directory: Path) -> int:
         raise ValueError('frozen recovery identity mismatch')
     with attempt_lock(directory):
         errors = _clean_attempt(directory, state)
+        if not errors:
+            try:
+                from infra.scripts.attempt_identity import bind_runtime_artifacts
+                bind_runtime_artifacts(directory)
+            except Exception as error:
+                errors.append('artifact binding: ' + type(error).__name__ + ': ' + str(error))
         result = {'version': 1, 'operation': 'cleanup-only', 'status': 'BLOCKED_STAND' if errors else 'PASS',
                   'errors': errors, 'source_commit': state['source_commit'], 'original_verdict_unchanged': True}
         write_record(directory / ('recovery-' + uuid.uuid4().hex + '.json'), result)
