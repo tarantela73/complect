@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WORKFLOW = ROOT / ".github/workflows/infra-tests.yml"
 # Keep this list explicit: the infra tree contains legacy probes with their own
 # environments, while these modules are the local gate's implementation seam.
-DEFAULT_SCOPE = (
+DEFAULT_SCOPE: tuple[str, ...] = (
     "infra/scripts/run_infra_quality.py",
     "infra/scripts/run_infra_tests.py",
     "infra/scripts/attempt_identity.py",
@@ -40,7 +40,7 @@ DEFAULT_SCOPE = (
     "infra/scripts/qualification_processes.py",
     "infra/scripts/run_legacy_qualification.py",
 )
-RUFF_SCOPE = DEFAULT_SCOPE + (
+RUFF_SCOPE: tuple[str, ...] = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_attempt_identity.py",
     "infra/scripts/tests/test_gate_source_proof.py",
     "infra/scripts/tests/test_delivery_evidence.py",
