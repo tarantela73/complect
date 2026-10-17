@@ -96,6 +96,9 @@ def summary_view(result: dict[str, Any], artifact: Path, *, attempt: str, stage:
     error = cleaned.get("primary_error") or cleaned.get("errors") or cleaned.get("cleanup_errors") or cleaned.get("reason")
     detail = json.dumps(error, ensure_ascii=False, indent=2) if error is not None else ""
     header = {"attempt": attempt, "stage": stage, "status": result.get("status", "UNKNOWN"), "exit": exit_code}
+    for key in ("diagnostic_counts", "diagnostic_artifacts"):
+        if key in cleaned:
+            header[key] = cleaned[key]
     digest = hashlib.sha256(full.encode()).hexdigest()
     metadata = json.dumps({**header, "artifact": str(artifact.absolute()), "sha256": digest}, ensure_ascii=False)
     if _redact(metadata, secrets) != metadata:

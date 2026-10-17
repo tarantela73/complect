@@ -12,7 +12,7 @@ import stat
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 PROTOCOL = 'infra/qualification-protocol.json'
@@ -56,7 +56,7 @@ def git(root: Path, *arguments: str) -> str:
     return subprocess.check_output(['git', '-C', str(root), *arguments], text=True, stderr=subprocess.PIPE).strip()
 
 
-def freeze_source(root: Path, commit: str, directory: Path) -> dict[str, Any]:
+def freeze_source(root: Path, commit: str, directory: Path, *, preparation_log: Path | None = None, redact_env: Sequence[str] = ()) -> dict[str, Any]:
     """Freeze a supported full commit without shared Git objects or dirty files."""
     if not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('full commit SHA required')
@@ -77,7 +77,15 @@ def freeze_source(root: Path, commit: str, directory: Path) -> dict[str, Any]:
         raise ValueError('unsupported qualification commit') from error
     directory.mkdir(parents=True, mode=0o700)
     frozen = directory / 'frozen'
-    subprocess.run(['git', 'clone', '--quiet', '--no-hardlinks', '--no-checkout', str(root), str(frozen)], check=True)
+    command = ['git', 'clone', '--quiet', '--no-hardlinks', '--no-checkout', str(root), str(frozen)]
+    if preparation_log is None:
+        subprocess.run(command, check=True)
+    else:
+        from infra.scripts.diagnostic_output import present, secret_values
+        completed = subprocess.run(command, capture_output=True, check=False)
+        present((completed.stdout + completed.stderr).decode('utf-8'), preparation_log,
+                header={'stage': 'freeze', 'exit': completed.returncode}, secrets=secret_values(redact_env))
+        completed.check_returncode()
     git(frozen, 'checkout', '--quiet', '--detach', commit)
     if (frozen / '.git/objects/info/alternates').exists():
         raise ValueError('shared Git objects refused')
@@ -250,6 +258,12 @@ def _clean_attempt(directory: Path, state: dict[str, Any]) -> list[str]:
                 shutil.rmtree(secrets)
         except Exception as error:
             errors.append('stand credentials cleanup: ' + type(error).__name__)
+    if state.get('host_environment') is not None:
+        from infra.scripts.docker_host_environment import cleanup_host_environment
+        cleanup_errors = cleanup_host_environment(directory / 'host-private', state['host_environment'])
+        errors.extend(cleanup_errors)
+    elif (directory / 'host-private').exists() or (directory / 'host-private').is_symlink():
+        errors.append('host environment ownership missing')
     return errors
 
 
@@ -258,7 +272,7 @@ class QualificationInterrupted(BaseException):
         self.signum = signum
 
 
-def execute(directory: Path) -> int:
+def execute(directory: Path, *, summary_output: Path | None = None, redact_env: Sequence[str] = ()) -> int:
     """Execute the complete positive contract from this frozen source."""
     import signal
 
@@ -266,6 +280,7 @@ def execute(directory: Path) -> int:
     from infra.scripts.legacy_phase_contract import validate_legacy_phases
     from infra.scripts.qualification_processes import run_stage
     from infra.scripts.qualification_resources import capture_baseline
+    from infra.scripts.docker_host_environment import HostPreparationError, prepare_host_environment
 
     state = validate_attempt(directory)
     if ROOT != directory / 'frozen' or state['phase'] != 'frozen':
@@ -282,6 +297,7 @@ def execute(directory: Path) -> int:
         tests_passed = False
         cleanup_errors: list[str] = []
         handlers = {}
+        host_scope = contextlib.ExitStack()
 
         def interrupted(signum, _frame):
             raise QualificationInterrupted(signum)
@@ -292,6 +308,17 @@ def execute(directory: Path) -> int:
             write_record(directory / 'baseline.json', capture_baseline())
             state['phase'] = 'baseline'
             write_record(directory / 'attempt.json', state)
+            try:
+                host = prepare_host_environment(directory / 'host-private')
+            except HostPreparationError as error:
+                cleanup_errors.extend(error.cleanup_errors)
+                state['host_environment_prepare_cleanup_errors'] = list(error.cleanup_errors)
+                state['host_environment'] = error.record
+                write_record(directory / 'attempt.json', state)
+                raise
+            state['host_environment'] = host.record
+            write_record(directory / 'attempt.json', state)
+            host_scope.enter_context(host.activated())
             snapshot = directory / 'snapshot.json'
             write_record(snapshot, agent_harness.working_tree_snapshot(ROOT))
             state['snapshot_sha256'] = hashlib.sha256(snapshot.read_bytes()).hexdigest()
@@ -333,13 +360,16 @@ def execute(directory: Path) -> int:
             primary_exit = primary_exit or (int(error.code) if isinstance(error, SystemExit) and isinstance(error.code, int) else 2)
             primary_error = type(error).__name__ + ': ' + str(error)
         finally:
+            # Restore caller configuration before any cleanup or evidence write.
+            # This keeps restoration alive even when finalization itself fails.
+            host_scope.close()
             # A second signal must not interrupt the bounded cleanup transaction.
             for signum in handlers:
                 signal.signal(signum, signal.SIG_IGN)
             state['primary_exit'] = primary_exit
             state['primary_error'] = primary_error
             write_record(directory / 'attempt.json', state)
-            cleanup_errors = _clean_attempt(directory, state)
+            cleanup_errors.extend(_clean_attempt(directory, state))
             try:
                 from infra.scripts.attempt_identity import bind_runtime_artifacts
                 bind_runtime_artifacts(directory)
@@ -352,11 +382,10 @@ def execute(directory: Path) -> int:
             write_record(directory / 'attempt.json', state)
             for signum, handler in handlers.items():
                 signal.signal(signum, handler)
-        print(json.dumps(result), flush=True)
-        return int(result['exit'])
+        return _console(result, directory, 'run', int(result['exit']), summary_output, redact_env)
 
 
-def recover(directory: Path) -> int:
+def recover(directory: Path, *, summary_output: Path | None = None, redact_env: Sequence[str] = ()) -> int:
     """Cleanup only, with an append-only recovery result and unchanged run verdict."""
     import uuid
 
@@ -374,17 +403,113 @@ def recover(directory: Path) -> int:
         result = {'version': 1, 'operation': 'cleanup-only', 'status': 'BLOCKED_STAND' if errors else 'PASS',
                   'errors': errors, 'source_commit': state['source_commit'], 'original_verdict_unchanged': True}
         write_record(directory / ('recovery-' + uuid.uuid4().hex + '.json'), result)
-        print(json.dumps(result), flush=True)
-        return 2 if errors else 0
+        return _console(result, directory, 'recover', 2 if errors else 0, summary_output, redact_env)
 
 
-def handoff(directory: Path, operation: str) -> None:
+def handoff(directory: Path, operation: str, *, summary_output: Path | None = None, redact_env: Sequence[str] = ()) -> None:
     validate_attempt(directory)
     frozen = directory / 'frozen'
     os.chdir(frozen)
     environment = dict(os.environ, PYTHONPATH=str(frozen), PYTHONDONTWRITEBYTECODE='1', GIT_OPTIONAL_LOCKS='0')
-    os.execve(sys.executable, [sys.executable, '-B', '-m', 'infra.scripts.run_legacy_qualification',
-                             operation, '--directory', str(directory), '--frozen'], environment)
+    command = [sys.executable, '-B', '-m', 'infra.scripts.run_legacy_qualification', operation, '--directory', str(directory), '--frozen']
+    if summary_output is not None:
+        command += ['--summary-output', str(summary_output)]
+        for name in redact_env:
+            command += ['--redact-env', name]
+    os.execve(sys.executable, command, environment)
+
+
+
+def _read_diagnostic_manifest(path: Path) -> dict[str, Any] | None:
+    """Read a bounded regular file through descriptor-bound, no-follow ancestors."""
+    limit = 1024 * 1024
+    path = path.absolute()
+    try:
+        directory_fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for name in path.parts[1:-1]:
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = child
+            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                    return None
+                data = stream.read(limit + 1)
+                if len(data) > limit:
+                    return None
+                value = json.loads(data)
+                return value if isinstance(value, dict) else None
+        finally:
+            os.close(directory_fd)
+    except (OSError, ValueError, RecursionError):
+        return None
+
+
+def _diagnostic_metadata(directory: Path, result: dict[str, Any]) -> dict[str, Any]:
+    """Expose bounded counters and stable artifact pointers beside the native verdict."""
+    def bounded_count(parent: Path, suffix: str, *, prefix: str = "", limit: int = 1024) -> int | str:
+        if not parent.is_dir() or parent.is_symlink():
+            return "NOT_AVAILABLE"
+        count = 0
+        matches = 0
+        try:
+            with os.scandir(parent) as entries:
+                for entry in entries:
+                    count += 1
+                    if count > limit:
+                        return "NOT_AVAILABLE_SCAN_LIMIT"
+                    if entry.is_file(follow_symlinks=False) and entry.name.startswith(prefix) and entry.name.endswith(suffix):
+                        matches += 1
+            return matches
+        except OSError:
+            return "NOT_AVAILABLE"
+
+    raw_errors = result.get("cleanup_errors") if "cleanup_errors" in result else result.get("errors")
+    errors = raw_errors if isinstance(raw_errors, list) else None
+    counts: dict[str, int | str] = {
+        "cleanup_errors": len(errors) if errors is not None else "NOT_AVAILABLE",
+        "processes": bounded_count(directory / "processes", ".json"),
+        "recovery_receipts": bounded_count(directory, ".json", prefix="recovery-"),
+    }
+    manifest = directory / "frozen/.dev/test-artifacts/stand/results/manifest.json"
+    value = _read_diagnostic_manifest(manifest)
+    counts["collected133"] = len(value["collected"]) if value is not None and isinstance(value.get("collected"), list) else "NOT_AVAILABLE"
+    counts["reports399"] = len(value["reports"]) if value is not None and isinstance(value.get("reports"), list) else "NOT_AVAILABLE"
+    artifacts: dict[str, str] = {}
+    fixed = {
+        "attempt": directory / "attempt.json",
+        "qualification": directory / "qualification.json",
+        "processes": directory / "processes",
+        "manifest": manifest,
+    }
+    for name, path in fixed.items():
+        if path.exists() and not path.is_symlink():
+            artifacts[name] = str(path)
+    if isinstance(counts["recovery_receipts"], int) and counts["recovery_receipts"]:
+        artifacts["recovery_directory"] = str(directory)
+    return {"diagnostic_counts": counts, "diagnostic_artifacts": artifacts}
+
+
+def _console(result: dict[str, Any], directory: Path, operation: str, code: int, output: Path | None, names: Sequence[str]) -> int:
+    if output is None:
+        print(json.dumps(result), flush=True)
+        return code
+    try:
+        from infra.scripts.diagnostic_output import summary_view, secret_values
+        view_data = {**result, **_diagnostic_metadata(directory, result)}
+        preparation = output.with_name(output.name + '.prepare.log')
+        if operation == 'run' and preparation.is_file():
+            view_data['diagnostic_preparation_log'] = str(preparation)
+        view = summary_view(view_data, output, attempt=directory.name, stage=operation,
+                            exit_code=code, secrets=secret_values(names))
+        print(view.display, end='', flush=True)
+        return code
+    except (OSError, ValueError, UnicodeError):
+        print(json.dumps({'status': 'BLOCKED_EVIDENCE', 'primary_exit': code, 'exit': code or 2,
+                          'error': 'DIAGNOSTIC_OUTPUT_UNAVAILABLE'}), flush=True)
+        return code or 2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -399,25 +524,48 @@ def main(argv: list[str] | None = None) -> int:
     recovery.add_argument('--frozen', action='store_true', help=argparse.SUPPRESS)
     status_parser = commands.add_parser('status')
     status_parser.add_argument('--directory', type=Path, required=True)
+    for command in (run_parser, recovery, status_parser):
+        command.add_argument('--summary-output', type=Path)
+        command.add_argument('--redact-env', action='append', default=[])
     args = parser.parse_args(argv)
     directory = args.directory.absolute()
+    summary_output = args.summary_output.absolute() if args.summary_output is not None else None
     try:
+        if args.redact_env and summary_output is None:
+            raise ValueError('REDACTION_REQUIRES_SUMMARY_OUTPUT')
+        if summary_output is not None:
+            from infra.scripts.diagnostic_output import artifact_destination, secret_values
+            artifact_destination(summary_output, source_root=ROOT)
+            secret_values(args.redact_env)
         if args.operation == 'status':
             from infra.scripts.attempt_identity import status
             view = status(directory)
-            print(json.dumps(view), flush=True)
-            return 0 if view["status"] == "PASS" else 2
+            return _console(view, directory, 'status', 0 if view['status'] == 'PASS' else 2,
+                            summary_output, args.redact_env)
         if args.operation == 'run':
             if not args.frozen:
-                freeze_source(ROOT, args.source_commit or '', directory)
-                handoff(directory, 'run')
-            return execute(directory)
+                preparation = summary_output.with_name(summary_output.name + '.prepare.log') if summary_output is not None else None
+                if preparation is not None:
+                    artifact_destination(preparation, source_root=ROOT)
+                freeze_source(ROOT, args.source_commit or '', directory, preparation_log=preparation, redact_env=args.redact_env)
+                if summary_output is not None:
+                    try:
+                        git(directory / 'frozen', 'cat-file', '-e', 'HEAD:infra/scripts/diagnostic_output.py')
+                    except subprocess.SubprocessError:
+                        raise ValueError('SUMMARY_MODE_UNSUPPORTED_COMMIT') from None
+                handoff(directory, 'run', summary_output=summary_output, redact_env=args.redact_env)
+            return execute(directory, summary_output=summary_output, redact_env=args.redact_env)
         if not args.frozen:
-            handoff(directory, 'recover')
-        return recover(directory)
+            if summary_output is not None:
+                try:
+                    git(directory / 'frozen', 'cat-file', '-e', 'HEAD:infra/scripts/diagnostic_output.py')
+                except subprocess.SubprocessError:
+                    raise ValueError('SUMMARY_MODE_UNSUPPORTED_COMMIT') from None
+            handoff(directory, 'recover', summary_output=summary_output, redact_env=args.redact_env)
+        return recover(directory, summary_output=summary_output, redact_env=args.redact_env)
     except Exception as error:
-        print(json.dumps({'status': 'BLOCKED_STAND', 'error': type(error).__name__, 'reason': str(error)}), flush=True)
-        return 2
+        result = {'status': 'BLOCKED_STAND', 'error': type(error).__name__, 'reason': str(error)}
+        return _console(result, directory, args.operation, 2, summary_output, args.redact_env)
 
 
 if __name__ == '__main__':

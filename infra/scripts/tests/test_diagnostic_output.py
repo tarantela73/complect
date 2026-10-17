@@ -157,6 +157,22 @@ class DiagnosticOutputTests(unittest.TestCase):
             self.assertNotIn(secret, artifact.read_text())
             self.assertIn("конец", view.display)
 
+    def test_native_summary_exposes_optional_diagnostic_header_fields(self):
+        from infra.scripts.diagnostic_output import summary_view
+
+        with tempfile.TemporaryDirectory() as raw:
+            artifact = Path(raw) / "summary.json"
+            view = summary_view(
+                {"status": "PASS", "diagnostic_counts": {"processes": "NOT_AVAILABLE"},
+                 "diagnostic_artifacts": {"attempt": "/tmp/attempt.json"}},
+                artifact, attempt="a1", stage="status", exit_code=0,
+            )
+            metadata = json.loads(view.display.splitlines()[0])
+            self.assertEqual(metadata["diagnostic_counts"]["processes"], "NOT_AVAILABLE")
+            self.assertEqual(metadata["diagnostic_artifacts"]["attempt"], "/tmp/attempt.json")
+            full = json.loads(artifact.read_text())
+            self.assertEqual(full["diagnostic_counts"]["processes"], "NOT_AVAILABLE")
+
     def test_error_tail_is_bounded_and_full_utf8_artifact_is_retained(self):
         from infra.scripts.diagnostic_output import error_view
 

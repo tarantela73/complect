@@ -12,15 +12,21 @@ import subprocess
 import sys
 import time
 import uuid
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from infra.scripts.run_infra_tests import _docker_endpoint_is_local
 
 
+_RUN_LOG: BinaryIO | None = None
+
+
 def _run(command: list[str], *, check: bool = True, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    if _RUN_LOG is not None and not kwargs.get('capture_output') and 'stdout' not in kwargs and 'stderr' not in kwargs:
+        kwargs.update(stdout=_RUN_LOG, stderr=subprocess.STDOUT)
     return subprocess.run(command, text=True, check=check, **kwargs)
 
 
@@ -61,10 +67,15 @@ def _wait_for_inventory(path: Path, process: subprocess.Popen[str], timeout: flo
         time.sleep(0.5)
 
 
-def _recovery(attempt: Path, output: Path, name: str) -> tuple[int, dict[str, Any]]:
+def _recovery(attempt: Path, output: Path, name: str, *, summary: bool = False, redact_env: Sequence[str] = ()) -> tuple[int, dict[str, Any]]:
     before = set(attempt.glob("recovery-*.json"))
+    command = [sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "recover", "--directory", str(attempt)]
+    if summary:
+        command += ['--summary-output', str(output / (name + '.view.json'))]
+        for key in redact_env:
+            command += ['--redact-env', key]
     completed = _run(
-        [sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "recover", "--directory", str(attempt)],
+        command,
         check=False,
         capture_output=True,
         cwd=attempt / "frozen",
@@ -102,19 +113,13 @@ def _assert_owned_absent(receipt: dict[str, Any]) -> None:
             raise AssertionError(f"owned resource remains: {kind}:{identifier}")
 
 
-def run(output: Path, image: str) -> dict[str, Any]:
+def _run_scenario(output: Path, image: str, *, summary: bool = False, redact_env: Sequence[str] = ()) -> dict[str, Any]:
     """Run the bounded real-Docker scenario and return JSON evidence."""
     if shutil.which("docker") is None or shutil.which("git") is None:
         raise RuntimeError("BLOCKED_STAND: host-driven recovery needs docker and git")
     _docker_endpoint_is_local()
     root = Path(__file__).resolve().parents[3]
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    docker_config = output / "docker-config"
-    buildx_config = output / "buildx-config"
-    docker_config.mkdir(mode=0o700)
-    buildx_config.mkdir(mode=0o700)
-    os.environ.setdefault("DOCKER_CONFIG", str(docker_config))
-    os.environ.setdefault("BUILDX_CONFIG", str(buildx_config))
     source = output / "source"
     attempt = output / "attempt"
     early_failure = os.environ.get("COMPLECT_EARLY_INVENTORY_FAILURE") == "1"
@@ -180,13 +185,18 @@ def run(output: Path, image: str) -> dict[str, Any]:
     )
     # The fixture commit must include the working recovery/identity engine;
     # cloning HEAD alone would silently test the pre-fix implementation.
-    for engine in ("attempt_identity.py", "run_legacy_qualification.py"):
+    for engine in ("attempt_identity.py", "run_legacy_qualification.py", "docker_host_environment.py", "diagnostic_output.py"):
         (source / "infra/scripts" / engine).write_bytes((root / "infra/scripts" / engine).read_bytes())
-    _run(["git", "-C", str(source), "add", "infra/scripts/run_legacy_regressions.py", "infra/scripts/prepare_legacy_stand.py", "infra/scripts/attempt_identity.py", "infra/scripts/run_legacy_qualification.py"])
+    _run(["git", "-C", str(source), "add", "infra/scripts/run_legacy_regressions.py", "infra/scripts/prepare_legacy_stand.py", "infra/scripts/attempt_identity.py", "infra/scripts/run_legacy_qualification.py", "infra/scripts/docker_host_environment.py", "infra/scripts/diagnostic_output.py"])
     _run(["git", "-C", str(source), "-c", "user.name=Recovery Test", "-c", "user.email=recovery@test.invalid", "commit", "-qm", "controlled recovery failure"])
     source_commit = _git(source, "rev-parse", "HEAD")
+    command = [sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "run", "--source-commit", source_commit, "--directory", str(attempt)]
+    if summary:
+        command += ['--summary-output', str(output / 'qualification-view.json')]
+        for key in redact_env:
+            command += ['--redact-env', key]
     process = subprocess.Popen(
-        [sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "run", "--source-commit", source_commit, "--directory", str(attempt)],
+        command,
         text=True,
         stdout=(output / "qualification.stdout").open("w"),
         stderr=subprocess.STDOUT,
@@ -232,7 +242,7 @@ def run(output: Path, image: str) -> dict[str, Any]:
                 original_fingerprint = tampered_record["fingerprint"]
                 tampered_record["fingerprint"] = {**original_fingerprint, "tampered": True}
                 ownership.write_text(json.dumps(receipt_value, indent=2) + "\n")
-                tamper_exit, tamper_result = _recovery(attempt, output, "early-recovery-tampered")
+                tamper_exit, tamper_result = _recovery(attempt, output, "early-recovery-tampered", summary=summary, redact_env=redact_env)
                 if tamper_exit != 2 or tamper_result["status"] != "BLOCKED_STAND":
                     raise AssertionError(f"tampered ownership was not blocked: {tamper_result}")
                 receipt_value["resources"] = json.loads(ownership.read_text())["resources"]
@@ -241,14 +251,14 @@ def run(output: Path, image: str) -> dict[str, Any]:
                         item["fingerprint"] = original_fingerprint
                 ownership.write_text(json.dumps(receipt_value, indent=2) + "\n")
             process_journal.unlink()
-            blocked_exit, blocked = _recovery(attempt, output, "early-recovery-blocked")
+            blocked_exit, blocked = _recovery(attempt, output, "early-recovery-blocked", summary=summary, redact_env=redact_env)
             if blocked_exit != 2 or blocked["status"] != "BLOCKED_STAND":
                 raise AssertionError(f"early-fault recovery ignored missing journal: {blocked}")
             process_journal.write_bytes(process_journal_before)
-            recovered_exit, recovered = _recovery(attempt, output, "early-recovery")
+            recovered_exit, recovered = _recovery(attempt, output, "early-recovery", summary=summary, redact_env=redact_env)
             if recovered_exit != 0 or recovered["status"] != "PASS":
                 raise AssertionError(f"early-fault recovery did not pass: {recovered}")
-            repeat_exit, repeated = _recovery(attempt, output, "early-recovery-repeat")
+            repeat_exit, repeated = _recovery(attempt, output, "early-recovery-repeat", summary=summary, redact_env=redact_env)
             if repeat_exit != 0 or repeated["status"] != "PASS":
                 raise AssertionError(f"early-fault repeat recovery did not pass: {repeated}")
             if (attempt / "qualification.json").read_bytes() != original:
@@ -275,7 +285,7 @@ def run(output: Path, image: str) -> dict[str, Any]:
             partial = attempt / "frozen/.dev/test-artifacts/stand/results/result.json"
             if not partial.is_file():
                 raise AssertionError("partial runtime result was not produced")
-            recovery_exit, recovery = _recovery(attempt, output, "test-kill-recovery")
+            recovery_exit, recovery = _recovery(attempt, output, "test-kill-recovery", summary=summary, redact_env=redact_env)
             if recovery_exit != 0 or recovery.get("status") != "PASS":
                 raise AssertionError(f"test-kill recovery failed: {recovery}")
             status = subprocess.run([sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "status", "--directory", str(attempt)], capture_output=True, text=True, check=False)
@@ -286,22 +296,22 @@ def run(output: Path, image: str) -> dict[str, Any]:
                 raise AssertionError("recovery changed original qualification verdict")
             tamper = partial.read_bytes()
             partial.write_bytes(tamper + b"tampered")
-            tampered_recovery = _recovery(attempt, output, "test-kill-tampered-recovery")
+            tampered_recovery = _recovery(attempt, output, "test-kill-tampered-recovery", summary=summary, redact_env=redact_env)
             if tampered_recovery[0] != 2 or tampered_recovery[1].get("status") != "BLOCKED_STAND":
                 raise AssertionError(f"tampered runtime recovery was accepted: {tampered_recovery}")
             tampered = subprocess.run([sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "status", "--directory", str(attempt)], capture_output=True, text=True, check=False)
             if tampered.returncode == 0:
                 raise AssertionError("tampered sealed runtime result was accepted")
             partial.write_bytes(tamper)
-            restored_exit, restored = _recovery(attempt, output, "test-kill-restored-recovery")
+            restored_exit, restored = _recovery(attempt, output, "test-kill-restored-recovery", summary=summary, redact_env=redact_env)
             if restored_exit != 0 or restored.get("status") != "PASS":
                 raise AssertionError(f"restored runtime recovery failed: {restored}")
             partial.unlink()
-            missing_exit, missing = _recovery(attempt, output, "test-kill-missing-recovery")
+            missing_exit, missing = _recovery(attempt, output, "test-kill-missing-recovery", summary=summary, redact_env=redact_env)
             if missing_exit != 2 or missing.get("status") != "BLOCKED_STAND":
                 raise AssertionError(f"missing runtime recovery was accepted: {missing}")
             partial.write_bytes(tamper)
-            repeat_exit, repeated = _recovery(attempt, output, "test-kill-recovery-repeat")
+            repeat_exit, repeated = _recovery(attempt, output, "test-kill-recovery-repeat", summary=summary, redact_env=redact_env)
             if repeat_exit != 0 or repeated.get("status") != "PASS":
                 raise AssertionError(f"test-kill repeat recovery failed: {repeated}")
             if (attempt / "qualification.json").read_bytes() != original:
@@ -329,12 +339,12 @@ def run(output: Path, image: str) -> dict[str, Any]:
         process_journal = attempt / "processes/test.json"
         process_journal_before = process_journal.read_bytes()
         process_journal.unlink()
-        missing_exit, missing = _recovery(attempt, output, "recovery-missing")
+        missing_exit, missing = _recovery(attempt, output, "recovery-missing", summary=summary, redact_env=redact_env)
         if missing_exit != 2 or missing["status"] != "BLOCKED_STAND":
             raise AssertionError("incomplete process journal was not blocked")
         process_journal.write_bytes(process_journal_before)
         process_journal.write_text("{malformed", encoding="utf-8")
-        blocked_exit, blocked = _recovery(attempt, output, "recovery-blocked")
+        blocked_exit, blocked = _recovery(attempt, output, "recovery-blocked", summary=summary, redact_env=redact_env)
         if blocked_exit != 2 or blocked["status"] != "BLOCKED_STAND":
             raise AssertionError(f"malformed journal was not blocked: {blocked}")
         process_journal.write_bytes(process_journal_before)
@@ -347,10 +357,10 @@ def run(output: Path, image: str) -> dict[str, Any]:
         for key in ("Name", "Driver", "Options", "Labels"):
             if foreign_volume_after.get(key) != foreign_volume_before.get(key):
                 raise AssertionError(f"foreign volume identity changed: {key}")
-        recovered_exit, recovered = _recovery(attempt, output, "recovery-pass")
+        recovered_exit, recovered = _recovery(attempt, output, "recovery-pass", summary=summary, redact_env=redact_env)
         if recovered_exit != 0 or recovered["status"] != "PASS":
             raise AssertionError(f"recovery did not pass after unblock: {recovered}")
-        repeat_exit, repeated = _recovery(attempt, output, "recovery-repeat")
+        repeat_exit, repeated = _recovery(attempt, output, "recovery-repeat", summary=summary, redact_env=redact_env)
         if repeat_exit != 0 or repeated["status"] != "PASS":
             raise AssertionError(f"repeat recovery did not pass: {repeated}")
         if (attempt / "qualification.json").read_bytes() != original:
@@ -390,7 +400,7 @@ def run(output: Path, image: str) -> dict[str, Any]:
             # Refresh through the existing ownership guards before deleting anything.
             from infra.scripts.prepare_legacy_stand import recover_inventory, cleanup
             try:
-                cleanup_exit, _ = _recovery(attempt, output, "recovery-finally")
+                cleanup_exit, _ = _recovery(attempt, output, "recovery-finally", summary=summary, redact_env=redact_env)
             except Exception:
                 cleanup_exit = 2
             if cleanup_exit:
@@ -403,22 +413,77 @@ def run(output: Path, image: str) -> dict[str, Any]:
             _assert_owned_absent(receipt)
 
 
+
+def run(output: Path, image: str, *, summary: bool = False, redact_env: Sequence[str] = ()) -> dict[str, Any]:
+    """Use the same host preflight as qualification, without exporting Docker auth."""
+    from infra.scripts.docker_host_environment import prepare_host_environment
+
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    host = prepare_host_environment(output / "host-private")
+    try:
+        try:
+            with host.activated():
+                result = _run_scenario(output, image, summary=summary, redact_env=redact_env)
+        except Exception as error:
+            result = {"status": "BLOCKED_STAND", "error": type(error).__name__, "reason": str(error)}
+    finally:
+        cleanup_errors = host.cleanup()
+        if cleanup_errors:
+            _write_json(output / "host-cleanup.json", {"status": "BLOCKED_STAND", "errors": cleanup_errors})
+    if cleanup_errors:
+        return {"status": "BLOCKED_STAND", "cleanup_errors": cleanup_errors, "primary_result": result}
+    return result
+
+
 def main() -> int:
+    global _RUN_LOG
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image", default=os.environ.get("RECOVERY_TEST_IMAGE", "complect-infra-deps:20261016"))
+    parser.add_argument("--summary-output", type=Path)
+    parser.add_argument("--redact-env", action='append', default=[])
     args = parser.parse_args()
+    previous_log = _RUN_LOG
+    log = None
     try:
-        result = run(args.output.resolve(), args.image)
-    except Exception as exc:
-        diagnostic = {"status": "BLOCKED_STAND", "error": type(exc).__name__, "reason": str(exc)}
+        if args.redact_env and args.summary_output is None:
+            raise ValueError('REDACTION_REQUIRES_SUMMARY_OUTPUT')
+        if args.summary_output is not None:
+            from infra.scripts.diagnostic_output import artifact_destination, secret_values
+            artifact_destination(args.summary_output, source_root=Path(__file__).resolve().parents[3])
+            secret_values(args.redact_env)
+            log = tempfile.TemporaryFile(mode='w+b')
+            _RUN_LOG = log
+        try:
+            result = run(args.output.resolve(), args.image, summary=args.summary_output is not None, redact_env=args.redact_env)
+        except Exception as exc:
+            result = {"status": "BLOCKED_STAND", "error": type(exc).__name__, "reason": str(exc)}
+            from infra.scripts.docker_host_environment import HostPreparationError
+            if isinstance(exc, HostPreparationError):
+                result["cleanup_errors"] = exc.cleanup_errors
+                result["host_environment"] = exc.record
         args.output.mkdir(parents=True, exist_ok=True)
-        _write_json(args.output.resolve() / "result.json", diagnostic)
-        print(json.dumps(diagnostic), flush=True)
+        _write_json(args.output.resolve() / 'result.json', result)
+        code = 0 if result.get('status') == 'PASS' else 2
+        if args.summary_output is None:
+            print(json.dumps(result), flush=True)
+        else:
+            from infra.scripts.diagnostic_output import summary_view, secret_values
+            view_data = dict(result)
+            if log is not None:
+                log.seek(0)
+                view_data['diagnostic_process_output'] = log.read().decode('utf-8')
+            view = summary_view(view_data, args.summary_output, attempt=args.output.name,
+                                stage='recovery-fixture', exit_code=code, secrets=secret_values(args.redact_env))
+            print(view.display, end='', flush=True)
+        return code
+    except (OSError, ValueError, UnicodeError):
+        print(json.dumps({'status': 'BLOCKED_EVIDENCE', 'error': 'DIAGNOSTIC_INPUT_OR_OUTPUT_INVALID'}), flush=True)
         return 2
-    _write_json(args.output.resolve() / "result.json", result)
-    print(json.dumps(result), flush=True)
-    return 0
+    finally:
+        _RUN_LOG = previous_log
+        if log is not None:
+            log.close()
 
 
 if __name__ == "__main__":

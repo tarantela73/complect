@@ -1,5 +1,6 @@
 """Public qualification seams; no development services or Docker socket."""
 import json
+import os
 import subprocess
 
 import pytest
@@ -123,3 +124,154 @@ def test_recovery_blocks_when_declared_stage_journal_is_missing(tmp_path, monkey
     assert qualification.recover(attempt) == 2
     result = json.loads(next(attempt.glob('recovery-*.json')).read_text())
     assert any('stage journal missing' in error for error in result['errors'])
+
+
+@pytest.mark.parametrize("human", [False, True])
+def test_prepare_rollback_failure_survives_successful_cleanup_retry(tmp_path, monkeypatch, capsys, human):
+    import shutil
+    from unittest.mock import patch
+    from infra.scripts import run_legacy_qualification as qualification
+
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    freeze_source(root, sha, attempt)
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    real_popen = subprocess.Popen
+
+    class DockerProcess:
+        def __init__(self, args, text):
+            self.args = args
+            self.text = text
+            self.returncode = 99 if 'build' in args else 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def communicate(self, *_args, **_kwargs):
+            args = self.args[1:]
+            value = ('default' if args[:2] == ['context', 'show'] else
+                     json.dumps('unix:///var/run/docker.sock') if args[:2] == ['context', 'inspect'] else
+                     'proof-daemon' if args[:1] == ['info'] else '')
+            return (value + '\n', '') if self.text else ((value + '\n').encode(), b'')
+
+        def poll(self):
+            return self.returncode
+
+    def spawn(args, **kwargs):
+        if args[0] == 'docker':
+            return DockerProcess(args, kwargs.get('text') or kwargs.get('encoding'))
+        return real_popen(args, **kwargs)
+
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+    for name in ('DOCKER_CONFIG', 'BUILDX_CONFIG', 'DOCKER_HOST', 'DOCKER_CONTEXT'):
+        monkeypatch.delenv(name, raising=False)
+    real_remove = shutil.rmtree
+    calls = []
+
+    def remove(path, *args, **kwargs):
+        calls.append(str(path))
+        if len(calls) == 1:
+            raise OSError('first rollback failed')
+        return real_remove(path, *args, **kwargs)
+
+    with patch('subprocess.Popen', side_effect=spawn), patch('tempfile.TemporaryFile', side_effect=OSError('probe failed')), patch('shutil.rmtree', side_effect=remove):
+        assert qualification.execute(attempt, **({"summary_output": tmp_path / "human-view.json"} if human else {})) == 2
+    result = json.loads((attempt / 'qualification.json').read_text())
+    assert result['primary_exit'] == 2
+    assert result['cleanup'] == 'BLOCKED_STAND'
+    assert 'host environment cleanup unconfirmed' in result['cleanup_errors']
+    assert not (attempt / 'host-private').exists()
+    assert 'BUILDX_CONFIG' not in os.environ
+    displayed = capsys.readouterr().out
+    if human:
+        assert len(displayed.encode()) <= 4096
+        assert len(displayed.splitlines()) <= 20
+        assert json.loads(displayed.splitlines()[0])['exit'] == 2
+        full = json.loads((tmp_path / 'human-view.json').read_text())
+        for key, value in result.items():
+            assert full[key] == value
+    else:
+        assert json.loads(displayed) == result
+
+
+def test_status_summary_retains_full_native_view_and_exit(tmp_path, monkeypatch, capsys):
+    from infra.scripts import run_legacy_qualification as qualification
+
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    freeze_source(root, sha, attempt)
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    original_code = qualification.main(['status', '--directory', str(attempt)])
+    native = json.loads(capsys.readouterr().out)
+    output = tmp_path / 'status-view.json'
+    code = qualification.main(['status', '--directory', str(attempt), '--summary-output', str(output)])
+    displayed = capsys.readouterr().out
+    assert code == original_code
+    assert len(displayed.encode()) <= 4096
+    assert len(displayed.splitlines()) <= 20
+    assert json.loads(displayed.splitlines()[0])['exit'] == code
+    full = json.loads(output.read_text())
+    for key, value in native.items():
+        assert full[key] == value
+    metadata = json.loads(displayed.splitlines()[0])
+    assert metadata['diagnostic_counts']['collected133'] == 'NOT_AVAILABLE'
+    assert 'attempt' in metadata['diagnostic_artifacts']
+
+
+def test_status_summary_bounds_recovery_census_and_preserves_exit(tmp_path, monkeypatch, capsys):
+    from infra.scripts import run_legacy_qualification as qualification
+
+    root, sha = source(tmp_path)
+    attempt = tmp_path / 'attempt'
+    freeze_source(root, sha, attempt)
+    for index in range(1025):
+        (attempt / f'recovery-{index:04d}.json').write_text('{}')
+    monkeypatch.setattr(qualification, 'ROOT', attempt / 'frozen')
+    code = qualification.main(['status', '--directory', str(attempt), '--summary-output', str(tmp_path / 'bounded.json')])
+    displayed = capsys.readouterr().out
+    assert code == 0
+    metadata = json.loads(displayed.splitlines()[0])
+    assert metadata['diagnostic_counts']['recovery_receipts'] == 'NOT_AVAILABLE_SCAN_LIMIT'
+    assert 'recovery_directory' not in metadata['diagnostic_artifacts']
+
+
+def test_native_status_counts_only_recovery_receipts(tmp_path, capsys):
+    """Other attempt JSON artifacts are not recovery attempts."""
+    from infra.scripts import run_legacy_qualification as qualification
+    attempt = tmp_path / "attempt"
+    attempt.mkdir()
+    (attempt / "attempt.json").write_text("{}")
+    (attempt / "unrelated.json").write_text("{}")
+    (attempt / "recovery-a.json").write_text("{}")
+    output = tmp_path / "summary.json"
+    code = qualification.main(["status", "--directory", str(attempt), "--summary-output", str(output)])
+    assert code == 2
+    metadata = json.loads(capsys.readouterr().out.splitlines()[0])
+    assert metadata["exit"] == 2
+    assert metadata["diagnostic_counts"]["recovery_receipts"] == 1
+
+
+@pytest.mark.parametrize("unsafe", ["symlink", "oversized"])
+def test_native_status_rejects_unsafe_diagnostic_manifest(tmp_path, capsys, unsafe):
+    from infra.scripts import run_legacy_qualification as qualification
+    attempt = tmp_path / "attempt"
+    attempt.mkdir()
+    (attempt / "attempt.json").write_text("{}")
+    manifest = attempt / "frozen/.dev/test-artifacts/stand/results/manifest.json"
+    manifest.parent.mkdir(parents=True)
+    data = json.dumps({"collected": ["unexpected"], "reports": ["unexpected"]})
+    if unsafe == "symlink":
+        external = tmp_path / "external.json"
+        external.write_text(data)
+        manifest.symlink_to(external)
+    else:
+        manifest.write_text(" " * (1024 * 1024) + data)
+    output = tmp_path / "summary.json"
+    assert qualification.main(["status", "--directory", str(attempt), "--summary-output", str(output)]) == 2
+    metadata = json.loads(capsys.readouterr().out.splitlines()[0])
+    assert metadata["exit"] == 2
+    assert metadata["diagnostic_counts"]["collected133"] == "NOT_AVAILABLE"
+    assert metadata["diagnostic_counts"]["reports399"] == "NOT_AVAILABLE"
