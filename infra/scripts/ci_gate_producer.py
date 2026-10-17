@@ -286,7 +286,8 @@ def produce(
         code = code if code >= 0 else 128 - code
         return {
             "status": "BLOCKED_EVIDENCE",
-            "exit": code,
+            "exit": code if original is not None else None,
+            "adapter_exit": code or 2,
             "identity": identity,
             "errors": ["RUNNER_EVIDENCE_FAILED"],
         }, code or 2
@@ -320,15 +321,21 @@ def produce(
         )
     ):
         status = "BLOCKED_EVIDENCE"
-    elif gate.get("integrity") != "PASS":
+    elif gate.get("integrity") != "PASS" or type(gate.get("exit")) is not int:
         status = "BLOCKED_EVIDENCE"
     elif gate.get("exit") == 0:
         status = "PASS"
     else:
         status = "FAIL"
     raw_exit = gate.get("exit")
-    original_exit = cast(int, raw_exit) if type(raw_exit) is int else 2
-    exit_code = original_exit if original_exit >= 0 else 128 - original_exit
+    original_exit = cast(int, raw_exit) if type(raw_exit) is int else None
+    exit_code = (
+        2
+        if original_exit is None
+        else original_exit
+        if original_exit >= 0
+        else 128 - original_exit
+    )
     try:
         return _publish_bundle(
             output,
@@ -345,7 +352,8 @@ def produce(
         return {
             "format": "complect-ci-gate-producer-v1",
             "status": "BLOCKED_EVIDENCE",
-            "exit": exit_code,
+            "exit": exit_code if original_exit is not None else None,
+            "adapter_exit": exit_code or 2,
             "identity": identity,
             "errors": ["EVIDENCE_WRITE_FAILED"],
         }, exit_code or 2
@@ -359,13 +367,13 @@ def _publish_bundle(
     gate: dict[str, Any],
     status: str,
     artifacts: dict[str, str],
-    original_exit: int,
+    original_exit: int | None,
     exit_code: int,
 ) -> tuple[dict[str, Any], int]:
     receipt = {
         "format": "complect-ci-gate-receipt-v1",
         "status": status,
-        "exit": exit_code,
+        "exit": exit_code if original_exit is not None else None,
         "original_exit": original_exit,
         "gate": gate,
     }
@@ -419,7 +427,7 @@ def _publish_bundle(
     result = {
         "format": "complect-ci-gate-producer-v1",
         "status": status,
-        "exit": exit_code,
+        "exit": receipt["exit"],
         "identity": identity,
         "proof": _descriptor(output, output / "source-proof.json"),
         "artifacts": descriptors,
