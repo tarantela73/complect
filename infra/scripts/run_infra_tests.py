@@ -405,6 +405,7 @@ def run_recovery(*, image: str, output: Path) -> int:
     """Run ordinary and early-fault cleanup-only scenarios on the host."""
     destination = output / ("run-" + uuid.uuid4().hex)
     early_destination = output / ("early-" + uuid.uuid4().hex)
+    kill_destination = output / ("test-kill-" + uuid.uuid4().hex)
     output.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_recovery_cli.py"),
                "--image", image, "--output", str(destination)]
@@ -412,18 +413,25 @@ def run_recovery(*, image: str, output: Path) -> int:
     early_command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_early_failure_cli.py"),
                      "--image", image, "--output", str(early_destination)]
     early_completed = subprocess.run(early_command, cwd=ROOT, capture_output=True, text=True, check=False)
-    (output / "command.log").write_text(completed.stdout + completed.stderr + early_completed.stdout + early_completed.stderr)
+    kill_command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_recovery_cli.py"),
+                    "--image", image, "--output", str(kill_destination)]
+    kill_environment = {**os.environ, "COMPLECT_KILL_IN_TEST": "1"}
+    kill_completed = subprocess.run(kill_command, cwd=ROOT, capture_output=True, text=True, check=False, env=kill_environment)
+    (output / "command.log").write_text(completed.stdout + completed.stderr + early_completed.stdout + early_completed.stderr + kill_completed.stdout + kill_completed.stderr)
     receipt_path = destination / "result.json"
     early_receipt_path = early_destination / "result.json"
+    kill_receipt_path = kill_destination / "result.json"
     receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
     early_receipt = json.loads(early_receipt_path.read_text()) if early_receipt_path.is_file() else {}
-    code = completed.returncode or early_completed.returncode
-    if receipt.get("status") != "PASS" or early_receipt.get("status") != "PASS":
+    kill_receipt = json.loads(kill_receipt_path.read_text()) if kill_receipt_path.is_file() else {}
+    code = completed.returncode or early_completed.returncode or kill_completed.returncode
+    if receipt.get("status") != "PASS" or early_receipt.get("status") != "PASS" or kill_receipt.get("status") != "PASS":
         code = code or 2
     (output / "result.json").write_text(json.dumps({"status": "PASS" if not code else "FAIL",
         "exit": code, "command": command, "report": str(receipt_path),
         "early_command": early_command, "early_report": str(early_receipt_path),
-        "ordinary": receipt, "early": early_receipt}, indent=2) + "\n")
+        "kill_command": kill_command, "kill_report": str(kill_receipt_path),
+        "ordinary": receipt, "early": early_receipt, "test_kill": kill_receipt}, indent=2) + "\n")
     return code
 
 

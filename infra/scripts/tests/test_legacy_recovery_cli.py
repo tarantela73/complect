@@ -119,11 +119,12 @@ def run(output: Path, image: str) -> dict[str, Any]:
     attempt = output / "attempt"
     early_failure = os.environ.get("COMPLECT_EARLY_INVENTORY_FAILURE") == "1"
     early_mode = os.environ.get("COMPLECT_EARLY_MODE", "blocked")
+    kill_in_test = os.environ.get("COMPLECT_KILL_IN_TEST") == "1"
     _run(["git", "clone", "--quiet", "--no-hardlinks", str(root), str(source)])
     release = output / "release"
     runner = source / "infra/scripts/run_legacy_regressions.py"
     runner.write_text(
-        "import argparse\nimport time\nfrom pathlib import Path\n"
+        "import argparse\nimport os\nimport signal\nimport time\nfrom pathlib import Path\n"
         "parser = argparse.ArgumentParser()\nparser.add_argument('--runtime-directory', type=Path, required=True)\n"
         "args, _ = parser.parse_known_args()\n"
         "args.runtime_directory.mkdir(mode=0o700, parents=True, exist_ok=True)\n"
@@ -131,7 +132,14 @@ def run(output: Path, image: str) -> dict[str, Any]:
         "(args.runtime_directory / 'owner-secrets').mkdir(mode=0o700)\n"
         "(args.runtime_directory / 'owner-secrets' / 'credential').write_text('synthetic-secret')\n"
         "(args.runtime_directory / 'control' / 'test-started').write_text('ready')\n"
-        f"release = Path({str(release)!r})\nwhile not release.exists(): time.sleep(0.1)\nraise SystemExit(23)\n",
+        + ("results = Path.cwd() / '.dev/test-artifacts/stand/results'\n"
+           "results.mkdir(mode=0o700, parents=True, exist_ok=True)\n"
+           "(results / 'result.json').write_text('{\"status\":\"NOT_FINISHED\"}\\n')\n"
+           "parent = os.getppid()\n"
+           "stat = Path(f'/proc/{parent}/stat').read_text()\n"
+           "controller = int(stat[stat.rfind(')') + 2:].split()[1])\n"
+           "os.kill(controller, signal.SIGKILL)\n" if kill_in_test else "")
+        + f"release = Path({str(release)!r})\nwhile not release.exists(): time.sleep(0.1)\nraise SystemExit(23)\n",
         encoding="utf-8",
     )
     preparer = source / "infra/scripts/prepare_legacy_stand.py"
@@ -170,7 +178,11 @@ def run(output: Path, image: str) -> dict[str, Any]:
         ),
         encoding="utf-8",
     )
-    _run(["git", "-C", str(source), "add", "infra/scripts/run_legacy_regressions.py", "infra/scripts/prepare_legacy_stand.py"])
+    # The fixture commit must include the working recovery/identity engine;
+    # cloning HEAD alone would silently test the pre-fix implementation.
+    for engine in ("attempt_identity.py", "run_legacy_qualification.py"):
+        (source / "infra/scripts" / engine).write_bytes((root / "infra/scripts" / engine).read_bytes())
+    _run(["git", "-C", str(source), "add", "infra/scripts/run_legacy_regressions.py", "infra/scripts/prepare_legacy_stand.py", "infra/scripts/attempt_identity.py", "infra/scripts/run_legacy_qualification.py"])
     _run(["git", "-C", str(source), "-c", "user.name=Recovery Test", "-c", "user.email=recovery@test.invalid", "commit", "-qm", "controlled recovery failure"])
     source_commit = _git(source, "rev-parse", "HEAD")
     process = subprocess.Popen(
@@ -254,6 +266,50 @@ def run(output: Path, image: str) -> dict[str, Any]:
         if not networks:
             raise RuntimeError("qualification produced no owned network")
         _wait_for(attempt / "private/control/test-started", process)
+        if kill_in_test:
+            process_exit = process.wait(timeout=900)
+            qualification_result = json.loads((attempt / "qualification.json").read_text())
+            if process_exit != -9:
+                raise AssertionError(f"test SIGKILL was not preserved: {process_exit}, {qualification_result}")
+            original = (attempt / "qualification.json").read_bytes()
+            partial = attempt / "frozen/.dev/test-artifacts/stand/results/result.json"
+            if not partial.is_file():
+                raise AssertionError("partial runtime result was not produced")
+            recovery_exit, recovery = _recovery(attempt, output, "test-kill-recovery")
+            if recovery_exit != 0 or recovery.get("status") != "PASS":
+                raise AssertionError(f"test-kill recovery failed: {recovery}")
+            status = subprocess.run([sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "status", "--directory", str(attempt)], capture_output=True, text=True, check=False)
+            status_value = json.loads(status.stdout)
+            if status.returncode != 0 or status_value.get("binding") != "PASS":
+                raise AssertionError(f"status did not seal runtime result: {status_value}")
+            if (attempt / "qualification.json").read_bytes() != original:
+                raise AssertionError("recovery changed original qualification verdict")
+            tamper = partial.read_bytes()
+            partial.write_bytes(tamper + b"tampered")
+            tampered_recovery = _recovery(attempt, output, "test-kill-tampered-recovery")
+            if tampered_recovery[0] != 2 or tampered_recovery[1].get("status") != "BLOCKED_STAND":
+                raise AssertionError(f"tampered runtime recovery was accepted: {tampered_recovery}")
+            tampered = subprocess.run([sys.executable, "-B", "-m", "infra.scripts.run_legacy_qualification", "status", "--directory", str(attempt)], capture_output=True, text=True, check=False)
+            if tampered.returncode == 0:
+                raise AssertionError("tampered sealed runtime result was accepted")
+            partial.write_bytes(tamper)
+            restored_exit, restored = _recovery(attempt, output, "test-kill-restored-recovery")
+            if restored_exit != 0 or restored.get("status") != "PASS":
+                raise AssertionError(f"restored runtime recovery failed: {restored}")
+            partial.unlink()
+            missing_exit, missing = _recovery(attempt, output, "test-kill-missing-recovery")
+            if missing_exit != 2 or missing.get("status") != "BLOCKED_STAND":
+                raise AssertionError(f"missing runtime recovery was accepted: {missing}")
+            partial.write_bytes(tamper)
+            repeat_exit, repeated = _recovery(attempt, output, "test-kill-recovery-repeat")
+            if repeat_exit != 0 or repeated.get("status") != "PASS":
+                raise AssertionError(f"test-kill repeat recovery failed: {repeated}")
+            if (attempt / "qualification.json").read_bytes() != original:
+                raise AssertionError("tamper/missing recovery changed original qualification verdict")
+            return {"status": "PASS", "test_kill": True, "initial": qualification_result,
+                    "recovery": recovery, "tampered_recovery": tampered_recovery[1],
+                    "restored_recovery": restored, "missing_recovery": missing,
+                    "repeat": repeated}
         _run(["docker", "volume", "create", "--label", "complect.recovery_probe=foreign", foreign_volume])
         foreign_container = subprocess.check_output(
             ["docker", "run", "-d", "--pull=never", "--name", foreign_name, "--label", "complect.recovery_probe=foreign", "--network", networks[0], "--mount", f"type=volume,source={foreign_volume},target=/foreign", image, "python", "-c", "import time; time.sleep(600)"],

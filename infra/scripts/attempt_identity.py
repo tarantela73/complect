@@ -160,13 +160,23 @@ def _record_artifact(path: Path) -> None:
         return
 
     def bind(target: Path, digest: str | None) -> None:
-        identity["artifacts"][str(target.relative_to(directory))] = {
+        relative = str(target.relative_to(directory))
+        binding = {
             "attempt_id": identity["attempt_id"],
             "source_commit": identity["source_commit"],
             "source_tree": identity["source_tree"],
             "stage": stage,
             "sha256": digest,
         }
+        existing = identity["artifacts"].get(relative)
+        if existing is not None:
+            sealed_runtime = relative.startswith("frozen/.dev/test-artifacts/stand/results/")
+            if sealed_runtime and existing != binding:
+                raise ValueError("sealed artifact binding mismatch: " + relative)
+            if not sealed_runtime:
+                identity["artifacts"][relative] = binding
+            return
+        identity["artifacts"][relative] = binding
 
     bind(path, _digest(path))
     if path.parent.name == "processes" and path.name == stage + ".json":
@@ -188,6 +198,14 @@ def bind_runtime_artifacts(directory: Path) -> None:
     results = directory / "frozen/.dev/test-artifacts/stand/results"
     if results.is_symlink():
         raise ValueError("results directory symlink refused")
+    identity_path = directory / "identity.json"
+    if identity_path.is_file():
+        identity = json.loads(identity_path.read_text())
+        for relative in identity.get("artifacts", {}):
+            if relative.startswith("frozen/.dev/test-artifacts/stand/results/"):
+                target = directory / relative
+                if not target.is_file() or target.is_symlink():
+                    raise ValueError("sealed runtime artifact missing: " + relative)
     if results.is_dir():
         for path in results.iterdir():
             if _artifact_location(path) is not None:

@@ -191,3 +191,39 @@ class AttemptIdentityTests(unittest.TestCase):
             (attempt / "processes/prepare.log").write_text("another attempt")
             code, value = self.status(attempt)
             self.assertEqual(code, 2, value)
+
+    def test_recovery_binds_unbound_runtime_result_and_refuses_reseal(self):
+        from infra.scripts.attempt_identity import bind_runtime_artifacts
+
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            root, sha = self.source(base)
+            attempt = base / "attempt"
+            freeze_source(root, sha, attempt)
+            results = attempt / "frozen/.dev/test-artifacts/stand/results"
+            results.mkdir(parents=True)
+            result = results / "result.json"
+            result.write_text('{"status":"FAIL"}\n')
+            bind_runtime_artifacts(attempt)
+            identity_before = (attempt / "identity.json").read_bytes()
+            result.write_text('{"status":"PASS"}\n')
+            with self.assertRaisesRegex(ValueError, "sealed artifact binding mismatch"):
+                bind_runtime_artifacts(attempt)
+            self.assertEqual((attempt / "identity.json").read_bytes(), identity_before)
+
+    def test_missing_sealed_runtime_result_blocks_rebind(self):
+        from infra.scripts.attempt_identity import bind_runtime_artifacts
+
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            root, sha = self.source(base)
+            attempt = base / "attempt"
+            freeze_source(root, sha, attempt)
+            results = attempt / "frozen/.dev/test-artifacts/stand/results"
+            results.mkdir(parents=True)
+            result = results / "result.json"
+            result.write_text('{"status":"FAIL"}\n')
+            bind_runtime_artifacts(attempt)
+            result.unlink()
+            with self.assertRaisesRegex(ValueError, "sealed runtime artifact missing"):
+                bind_runtime_artifacts(attempt)
