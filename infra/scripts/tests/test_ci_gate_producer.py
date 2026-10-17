@@ -403,6 +403,16 @@ class ProducerTests(unittest.TestCase):
             self.assertEqual(code, child_exit or 2)
             self.assertEqual(json.loads(text.getvalue())["status"], "BLOCKED_EVIDENCE")
 
+    def test_command_start_failure_does_not_invent_a_process_exit(self):
+        result, code = self.produce_gate([str(self.root / "missing-executable")])
+        receipt = json.loads((Path(self.tmp.name) / "out/ci-receipt.json").read_text())
+        self.assertEqual(code, 2)
+        self.assertEqual(result["status"], "BLOCKED_EVIDENCE")
+        self.assertIsNone(result["exit"])
+        self.assertIsNone(receipt["exit"])
+        self.assertIsNone(receipt["original_exit"])
+        self.assertIsNone(receipt["gate"]["exit"])
+
 
 if __name__ == "__main__":
     unittest.main()
