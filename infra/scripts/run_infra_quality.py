@@ -21,6 +21,9 @@ DEFAULT_SCOPE = (
     "infra/scripts/legacy_phase_contract.py",
     "infra/scripts/docker_ownership.py",
     "infra/scripts/evidence_bundle.py",
+    "infra/scripts/verification_runner.py",
+    "infra/scripts/ci_audit_evidence.py",
+    "infra/scripts/ci_gate_producer.py",
     "infra/scripts/prepare_legacy_stand.py",
     "infra/scripts/verify_legacy_preflight_refusals.py",
     "infra/scripts/qualification_resources.py",
@@ -29,6 +32,10 @@ DEFAULT_SCOPE = (
 )
 RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_evidence_bundle.py",
+    "infra/scripts/tests/test_verification_runner.py",
+    "infra/scripts/tests/test_ci_audit_evidence.py",
+    "infra/scripts/tests/test_ci_gate_producer.py",
+    "infra/scripts/tests/test_payments_ci_workflow.py",
     "infra/scripts/tests/test_infra_quality.py",
     "infra/scripts/tests/test_infra_test_runner.py",
     "infra/scripts/tests/test_infra_ci_workflow.py",

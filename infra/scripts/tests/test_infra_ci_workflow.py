@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,13 +19,17 @@ class InfraCiWorkflowTests(unittest.TestCase):
     def test_every_main_pull_request_uses_the_local_gate(self):
         workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(workflow["on"]["pull_request"], {"branches": ["main"]})
-        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertEqual(workflow["permissions"], {"contents": "read", "actions": "read"})
         job = workflow["jobs"]["infra"]
         self.assertEqual(job["runs-on"], "ubuntu-24.04")
         commands = [step.get("run", "") for step in job["steps"]]
         gate = [command for command in commands if "make agent-infra-test" in command]
         self.assertEqual(len(gate), 1)
         self.assertIn("set -euo pipefail", gate[0])
+        self.assertIn("-m infra.scripts.ci_gate_producer", gate[0])
+        self.assertIn("--artifact gate=gate/result.json", gate[0])
+        adapter_step = next(step for step in job["steps"] if "-m infra.scripts.ci_gate_producer" in step.get("run", ""))
+        self.assertEqual(adapter_step["env"]["GH_TOKEN"], "${{ github.token }}")
         self.assertNotIn("continue-on-error", job)
         for step in job["steps"]:
             self.assertNotIn("continue-on-error", step)
@@ -48,7 +53,7 @@ class InfraCiWorkflowTests(unittest.TestCase):
         commands = [step.get("run", "") for step in steps]
         for tool, selector, logfile in (
             ("docker", "docker build", "build.log"),
-            ("make", "make agent-infra-test", "tests.log"),
+            ("make", "make agent-infra-test", "producer/run/command.log"),
         ):
             with self.subTest(tool=tool), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
@@ -60,6 +65,17 @@ class InfraCiWorkflowTests(unittest.TestCase):
                     fake_git = directory / "git"
                     fake_git.write_text("#!/bin/sh\nexit 0\n")
                     fake_git.chmod(0o755)
+                wrapper = directory / "python3"
+                wrapper.write_text(
+                    "#!" + sys.executable + "\n"
+                    "import pathlib,subprocess,sys\n"
+                    "args=sys.argv[1:]; assert args[:3]==['-B','-m','infra.scripts.ci_gate_producer']\n"
+                    "output=pathlib.Path(args[args.index('--output')+1]); output.mkdir(parents=True)\n"
+                    "log=output/'run'/'command.log'; log.parent.mkdir()\n"
+                    "with log.open('wb') as stream: result=subprocess.run(args[args.index('--')+1:],stdout=stream,stderr=subprocess.STDOUT)\n"
+                    "sys.exit(result.returncode)\n"
+                )
+                wrapper.chmod(0o700)
                 script = next(command for command in commands if selector in command)
                 completed = subprocess.run(
                     ["bash", "-c", script],
