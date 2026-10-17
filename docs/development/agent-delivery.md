@@ -51,3 +51,5 @@ python3 -B -m infra.scripts.publication_preflight \
 Инфраструктурная ветка зависит от PR31. Локальные skills/profile передаются отдельными патчами с before/after hashes; они не входят автоматически в infrastructure commit. После двух полных gates и независимого Standards/Spec review предъявить точный commit и patch.
 
 Push/draft PR требует отдельной команды пользователя. Затем выполнить hosted Infrastructure/Payments CI и на фактическом CI checkout original133/399 и native faults. До этого hosted CI и actual-checkout acceptance остаются NOT_RUN. Merge требует отдельной команды. Локальные receipts не являются подписанной внешней аттестацией и не доказывают production RLS/ERP/Kong acceptance.
+
+Для существующего PR текущая база сверяется между выбранным remote и живым GitHub ref его целевой ветки. Исторический `baseRefOid` PR может отставать от этой ветки и сам по себе не доказывает её текущее состояние. Недоступный или повреждённый API ref и расхождение с remote блокируют preflight; старые receipts не переносятся на новую базу.
