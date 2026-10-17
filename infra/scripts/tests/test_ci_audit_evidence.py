@@ -51,7 +51,86 @@ def packet(root: Path) -> tuple[dict, dict]:
     return requirements, report
 
 
+def specialized_packet(root: Path) -> tuple[dict, dict]:
+    requirements, report = packet(root)
+    requirements["profile"] = "ci_gate_producer"
+    requirements["jobs"][0]["artifacts"] = ["receipt", "runner_receipt", "command_log", "gate"]
+    report["profile"] = "ci_gate_producer"
+    job = report["jobs"][0]
+    receipt = json.loads((root / "receipt.json").read_text())
+    receipt["profile"] = "ci_gate_producer"
+    receipt_desc = artifact(root, "receipt.json", receipt)
+    job["artifacts"]["receipt"] = receipt_desc
+    for name, content in (("runner_receipt", "runner\n"), ("command_log", "gate\n"), ("gate", "PASS\n")):
+        job["artifacts"][name] = artifact(root, name + ".txt", content)
+    proof = json.loads((root / "proof.json").read_text())
+    proof["profile"] = "ci_gate_producer"
+    proof["artifacts"] = job["artifacts"]
+    job["source_proof"] = artifact(root, "proof.json", proof)
+    job["source_proof"] = artifact(root, "proof-final.json", proof)
+    return requirements, report
+
+
 class CiAuditTests(unittest.TestCase):
+    def test_required_profile_rejects_generic_packet(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements, report = packet(root)
+            result = verify_ci_audit(requirements, report, root, required_profile="ci_gate_producer")
+            self.assertEqual(result["status"], "FAIL")
+            self.assertEqual(result["errors"], ["REQUIRED_PROFILE_MISSING"])
+
+    def test_required_profile_is_retained_when_resuming_continuation(self):
+        from infra.scripts.ci_audit_evidence import make_ci_audit_continuation
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements, report = packet(root)
+            pending = copy.deepcopy(report)
+            pending["jobs"][0].update(status="in_progress", conclusion=None)
+            point = make_ci_audit_continuation(requirements, pending, root)
+            result = verify_ci_audit(requirements, report, root, continuation=point,
+                                     required_profile="ci_gate_producer")
+            self.assertEqual(result["status"], "FAIL")
+            self.assertEqual(result["errors"], ["REQUIRED_PROFILE_MISSING"])
+
+    def test_specialized_profile_requires_marker_and_complete_artifact_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements, report = packet(root)
+            requirements["profile"] = "ci_gate_producer"
+            requirements["jobs"][0]["artifacts"] = ["receipt", "runner_receipt", "command_log", "gate"]
+            self.assertEqual(verify_ci_audit(requirements, report, root)["status"], "BLOCKED_EVIDENCE")
+            self.assertEqual(verify_ci_audit({**requirements, "profile": "unknown"}, report, root)["status"], "FAIL")
+            report["profile"] = "ci_gate_producer"
+            self.assertEqual(verify_ci_audit(requirements, report, root)["status"], "FAIL")
+
+    def test_complete_specialized_packet_passes_and_returns_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            requirements, report = specialized_packet(Path(directory))
+            result = verify_ci_audit(requirements, report, Path(directory))
+            self.assertEqual(result["status"], "PASS", result)
+            self.assertEqual(result["profile"], "ci_gate_producer")
+
+    def test_specialized_checkpoint_resume_preserves_profile(self):
+        from infra.scripts.ci_audit_evidence import make_ci_audit_continuation
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements, report = specialized_packet(root)
+            pending = copy.deepcopy(report)
+            pending["jobs"][0].update(status="in_progress", conclusion=None)
+            point = make_ci_audit_continuation(requirements, pending, root)
+            self.assertEqual(point["requirements"]["profile"], "ci_gate_producer")
+            self.assertEqual(point["report"]["profile"], "ci_gate_producer")
+            result = verify_ci_audit(requirements, report, root, continuation=point)
+            self.assertEqual(result["status"], "PASS", result)
+            self.assertEqual(result["profile"], "ci_gate_producer")
+
+    def test_generic_profile_remains_readable_without_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements, report = packet(root)
+            self.assertEqual(verify_ci_audit(requirements, report, root)["status"], "PASS")
+
     def test_missing_file_arriving_after_checkpoint_is_a_valid_resume(self):
         from infra.scripts.ci_audit_evidence import make_ci_audit_continuation
 

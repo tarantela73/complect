@@ -28,6 +28,8 @@ python3 -B -m infra.scripts.verification_runner run \
 
 `--output` обозначает новый каталог попытки вне source root либо внутри его `.dev/test-artifacts/`, который исключён существующим working-tree snapshot. Другие внутренние каталоги отклоняются до исполнения. Родительские каталоги могут быть созданы; существующий каталог попытки не используется повторно. Каждый успешный старт записи получает отдельный `attempt_id`. Внутри сохраняются `command.log` и `receipt.json`. Запись один раз создаёт эти файлы; повторы и read-only проверка не меняют историю.
 
+Для acceptance-запуска API `run_check` принимает `declared_checkout` и, при необходимости, `required_inputs`. При заданном `declared_checkout` он требует, чтобы `root` и `cwd` разрешались в тот же checkout; отсутствующий или symlink-вход отклоняется до создания output и старта процесса. `required_inputs` — только уже существующие requirements/receipts; будущий output producer туда не включается. Внешний output разрешён, если он не существует заранее. Без `declared_checkout` сохраняется совместимость общего runner.
+
 ## Факты и статусы
 
 Receipt формата `complect-verification-run-v1` содержит attempt ID, реальные argv/cwd, source root, полный объявленный набор source_before/source_after с SHA-256 и mode, исходный exit процесса, expected_exit и путь/хеш полного очищенного журнала. Stdout и stderr объединены в порядке их поступления в общий pipe. Журнал и его хеш обрабатываются потоково; краткий stdout runner не заменяет полный файл.

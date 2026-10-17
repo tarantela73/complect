@@ -102,6 +102,23 @@ class ProducerTests(unittest.TestCase):
         result, code = self.produce_gate([sys.executable, "-c", "print('ok')"])
         self.assertEqual((result["status"], code), ("PASS", 0))
 
+    def test_specialized_profile_is_explicitly_marked(self):
+        with (
+            patch.dict(os.environ, self.env, clear=False),
+            patch.object(producer.urllib.request, "urlopen", self.api()),
+        ):
+            result, code = producer.produce(
+                [sys.executable, "-c", "print('ok')"],
+                root=self.root,
+                output=Path(self.tmp.name) / "profile-out",
+                artifacts={},
+                profile="ci_gate_producer",
+            )
+        self.assertEqual((result["status"], code), ("PASS", 0))
+        self.assertEqual(result["profile"], "ci_gate_producer")
+        receipt = json.loads((Path(self.tmp.name) / "profile-out/ci-receipt.json").read_text())
+        self.assertEqual(receipt["profile"], "ci_gate_producer")
+
     def test_nonzero_missing_artifact_preserves_exit(self):
         result, code = self.produce_gate(
             [sys.executable, "-c", "raise SystemExit(7)"], {"native": "missing.log"}

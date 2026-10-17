@@ -46,6 +46,8 @@ python3 -B -m infra.scripts.publication_preflight \
 
 Для существующего PR вместо `--target` использовать `--pr NUMBER_OR_URL`. Preflight читает актуальную базу выбранного remote; неизвестная/устаревшая база, неверный repository/target, несовпадение receipt comparison_base и проверенных исходников блокируют приёмку. Локальный быстрый HEAD-режим gates сохраняется.
 
+Перед remote lookup и GitHub API preflight проверяет выбранный checkout, requirements и все переданные receipts как существующие обычные файлы. Для acceptance-вызова `preflight` можно передать `requirements_path` и `declared_checkout`; несовпадение checkout или отсутствующий вход сразу даёт `BLOCKED_STAND`. Receipt читается только как evidence и никогда не исполняется. Будущий producer output не передаётся в этот список до его создания. Два checkout получают независимые вызовы и source bindings; внешний каталог результата допускается runner-контрактом.
+
 ## Доставка
 
 Инфраструктурная ветка зависит от PR31. Локальные skills/profile передаются отдельными патчами с before/after hashes; они не входят автоматически в infrastructure commit. После двух полных gates и независимого Standards/Spec review предъявить точный commit и patch.
