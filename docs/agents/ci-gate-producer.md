@@ -1,0 +1,11 @@
+# Доказательства Infrastructure и Payments CI
+
+При изменении этих producers используй отдельный адаптер `ci_gate_producer` поверх общего verification runner. Он запускает прежнюю gate-команду один раз и выпускает новый пакет; внутренние receipts gate сохраняют свой формат.
+
+До запуска адаптер требует чистые tracked исходники, фиксирует полный набор tracked regular files, HEAD/tree и получает числовой job ID из всех страниц jobs текущей run attempt через Actions API. Штатному токену нужны только `contents: read` и `actions: read`; токен передаётся через окружение, его значение удаляется из журнала. Для pull request `head_sha` означает head ветки PR, а `checkout_sha` — фактический merge-checkout. Base берётся из события PR или push. Отсутствующие значения блокируют запуск; workflow_dispatch и новые теги без достоверного base требуют отдельного решения, исторические SHA не угадываются.
+
+После gate проверяются исходники, режимы, состав tracked набора и HEAD/tree. Два отдельных snapshot-файла содержат только пути, режимы и SHA-256 файлов. Proof связывает CI identity, snapshots, отдельный CI receipt, оригинальный runner receipt, полный очищенный command log и явно объявленные gate artifacts. Все artifact paths должны быть обычными файлами внутри пакета; symlink, совпадающие и зарезервированные имена отклоняются.
+
+Исходный ненулевой exit gate имеет приоритет над последующей ошибкой evidence. Если gate успешен, но evidence неполно, адаптер завершается с exit 2. Необязательный callback runner передаёт наблюдённый exit в память адаптера до записи runner receipt; потерянный receipt не получает PASS. Для сигналов сохраняется исходный returncode, CLI использует 128 + номер сигнала. Загрузка доступных artifacts в обоих workflows выполняется при любом результате.
+
+При аудите независимо закрепляй обязательные `receipt`, `runner_receipt`, `command_log` и `gate`, repository/run/attempt/job/head/base/checkout/tree. Получай настоящий checkout log из GitHub job, а не генерируй его по ожидаемому SHA. Полный пакет проверяет неизменённый CI evidence validator. Успех producer или workflow сам по себе не заменяет итоговый аудит. Новый коммит требует своей приёмки; старые неполные пакеты остаются BLOCKED_EVIDENCE.
