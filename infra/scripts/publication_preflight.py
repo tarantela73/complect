@@ -8,6 +8,7 @@ import subprocess
 import re
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote
 
 from infra.scripts.delivery_evidence import accept_receipts, _json
 
@@ -102,6 +103,21 @@ def pr_metadata(repository: Path, pr: str, *, remote: str = "origin", gh_runner=
     value = json.loads(completed.stdout)
     if not isinstance(value, dict) or not all(isinstance(value.get(key), str) and value[key] for key in ("baseRefName", "baseRefOid", "headRefOid", "url")):
         raise ValueError("existing PR metadata incomplete")
+    # A PR's historical baseRefOid can lag the current target branch.
+    # Bind the selected remote to the live API ref, preserving the PR metadata.
+    target_ref = gh_runner(
+        ["gh", "api", f"repos/{repo}/git/ref/heads/{quote(value['baseRefName'], safe='')}"],
+        cwd=repository, capture_output=True, text=True, check=False, timeout=30,
+    )
+    if target_ref.returncode:
+        raise ValueError("current PR target branch unavailable")
+    ref = json.loads(target_ref.stdout)
+    object_ref = ref.get("object") if isinstance(ref, dict) else None
+    if (not isinstance(object_ref, dict) or object_ref.get("type") != "commit"
+            or not isinstance(object_ref.get("sha"), str)
+            or re.fullmatch(r"[0-9a-f]{40}", object_ref["sha"]) is None):
+        raise ValueError("current PR target branch identity incomplete")
+    value["baseBranchHeadOid"] = object_ref["sha"]
     return value
 
 
@@ -148,7 +164,7 @@ def preflight(
             metadata = gh_resolver(repository, pr) if gh_resolver else pr_metadata(repository, pr, remote=remote)
             target = metadata["baseRefName"]
             actual_base = remote_head(repository, remote, target)
-            if actual_base != metadata["baseRefOid"]:
+            if actual_base != metadata.get("baseBranchHeadOid", metadata["baseRefOid"]):
                 errors.append("PR_BASE_MISMATCH")
             pr_head = metadata["headRefOid"]
             try:

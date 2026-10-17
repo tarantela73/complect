@@ -43,6 +43,46 @@ class PublicationPreflightTests(unittest.TestCase):
     def test_pr_base_drift(self):
         self._run(test_existing_pr_base_drift_blocks_against_live_remote)
 
+    def test_cli_uses_current_target_ref_instead_of_historical_pr_base(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            head, remote, requirements, receipt = complete_setup(root)
+            requirements_path = root / "requirements.json"
+            requirements_path.write_text(json.dumps(requirements))
+            response = root / "ref-response.json"
+            response.write_text(json.dumps({"object": {"sha": head, "type": "commit"}}))
+            binary = root / "bin"
+            binary.mkdir()
+            gh = binary / "gh"
+            metadata = {"baseRefName": "main", "baseRefOid": "0" * 40,
+                        "headRefOid": head, "url": str(remote) + "/pull/17"}
+            metadata_path = root / "pr-metadata.json"
+            metadata_path.write_text(json.dumps(metadata))
+            gh.write_text(
+                "#!" + sys.executable + "\nimport json,sys\nfrom pathlib import Path\n"
+                + "if sys.argv[1] == 'pr': print(Path(" + repr(str(metadata_path)) + ").read_text())\n"
+                + "elif sys.argv[1] == 'api':\n data=Path(" + repr(str(response)) + ").read_text()\n if json.loads(data).get('api_error'): raise SystemExit(1)\n print(data)\n"
+                + "else: raise SystemExit(3)\n"
+            )
+            gh.chmod(0o755)
+            command = [sys.executable, "-B", "-m", "infra.scripts.publication_preflight",
+                       "--repository", str(root), "--remote", "origin", "--head", head,
+                       "--pr", "17", "--requirements", str(requirements_path),
+                       "--receipt", str(receipt)]
+            environment = {**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]}
+            accepted = subprocess.run(command, capture_output=True, text=True, env=environment)
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+            self.assertEqual(json.loads(accepted.stdout)["base"], head)
+            metadata["baseRefOid"] = head
+            metadata_path.write_text(json.dumps(metadata))
+            for invalid in ({"object": {"sha": "0" * 40, "type": "commit"}}, {},
+                            {"object": {"sha": head, "type": "tag"}}, {"api_error": True}):
+                response.write_text(json.dumps(invalid))
+                blocked = subprocess.run(command, capture_output=True, text=True, env=environment)
+                self.assertNotEqual(blocked.returncode, 0)
+                self.assertEqual(json.loads(blocked.stdout)["status"], "BLOCKED_STAND")
+
     def test_ls_remote_timeout(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
