@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from infra.scripts.docker_ownership import OwnershipMismatch, OwnershipProof  # noqa: E402  # root is inserted for direct CLI mode
+from infra.scripts import gate_source_proof  # noqa: E402
 
 
 def _docker_endpoint_is_local() -> None:
@@ -213,6 +214,9 @@ def run(
 ) -> int:
     if mode == "all":
         statuses: dict[str, int] = {}
+        source_before: dict[str, Any] | None = None
+        if base is not None:
+            source_before = gate_source_proof.capture(ROOT, output, "sources-before.json")
         try:
             statuses["quality"] = run_quality(image=quality_image, output=output / "quality")
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -243,14 +247,54 @@ def run(
             statuses["recovery"] = run_recovery(image=image, output=output / "recovery")
             statuses["delivery"] = run_delivery(base=base, image=image, output=output / "delivery")
         output.mkdir(parents=True, exist_ok=True)
+        primary_exit = next((code for code in statuses.values() if code), 0)
+        if source_before is not None:
+            candidates = {
+                "quality/result.json": output / "quality/result.json",
+                "unittest/result.json": output / "unittest/result.json",
+                "unittest/manifest.json": output / "unittest/manifest.json",
+                "pytest/result.json": output / "pytest/result.json",
+                "pytest/manifest.json": output / "pytest/manifest.json",
+                "coverage/result.json": output / "coverage/result.json",
+                "coverage/coverage.json": output / "coverage/coverage.json",
+                "coverage/input/input.json": output / "coverage/input/input.json",
+                "coverage/after/input.json": output / "coverage/after/input.json",
+                "payments-context/result.json": output / "payments-context/result.json",
+                "recovery/result.json": output / "recovery/result.json",
+                "delivery/selection.json": output / "delivery/selection.json",
+                "delivery/payments/result.json": output / "delivery/payments/result.json",
+            }
+            required = {name for name, path in candidates.items()
+                        if name not in {"delivery/payments/result.json", "payments-context/result.json"}}
+            if (output / "delivery/selection.json").is_file():
+                selection = json.loads((output / "delivery/selection.json").read_text())
+                if "test-payments-gate" in selection.get("required_gates", []):
+                    required.add("delivery/payments/result.json")
+            context_files = sorted((output / "payments-context").glob("run-*/context.json"))
+            if len(context_files) == 1:
+                name = str(context_files[0].relative_to(output))
+                candidates[name] = context_files[0]
+                required.add(name)
+            elif primary_exit == 0:
+                primary_exit = 2
+            artifacts = {name: path for name, path in candidates.items() if path.is_file()}
+            missing = sorted(name for name in required if name not in artifacts)
+            if missing and primary_exit == 0:
+                primary_exit = 2
+            _, proof_exit = gate_source_proof.finish(
+                root=ROOT, output=output, before=source_before["snapshot"], gate_exit=primary_exit,
+                artifacts=artifacts,
+            )
+            if proof_exit and not primary_exit:
+                primary_exit = proof_exit
         (output / "result.json").write_text(
             json.dumps(
-                {"status": "PASS" if all(code == 0 for code in statuses.values()) else "FAIL", "phases": statuses},
+                {"status": "PASS" if primary_exit == 0 else "FAIL", "phases": statuses},
                 indent=2,
             )
             + "\n"
         )
-        return next((code for code in statuses.values() if code), 0)
+        return primary_exit
     _docker_endpoint_is_local()
     run_id = f"infra-test-{uuid.uuid4().hex}"
     output.mkdir(parents=True, exist_ok=True)
@@ -358,20 +402,36 @@ def run_coverage(*, base: str, image: str, output: Path) -> int:
 
 
 def run_recovery(*, image: str, output: Path) -> int:
-    """Run the real cleanup-only CLI scenario on the host with guarded resources."""
+    """Run ordinary and early-fault cleanup-only scenarios on the host."""
     destination = output / ("run-" + uuid.uuid4().hex)
+    early_destination = output / ("early-" + uuid.uuid4().hex)
+    kill_destination = output / ("test-kill-" + uuid.uuid4().hex)
     output.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_recovery_cli.py"),
                "--image", image, "--output", str(destination)]
     completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
-    (output / "command.log").write_text(completed.stdout + completed.stderr)
+    early_command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_early_failure_cli.py"),
+                     "--image", image, "--output", str(early_destination)]
+    early_completed = subprocess.run(early_command, cwd=ROOT, capture_output=True, text=True, check=False)
+    kill_command = [sys.executable, "-B", str(ROOT / "infra/scripts/tests/test_legacy_recovery_cli.py"),
+                    "--image", image, "--output", str(kill_destination)]
+    kill_environment = {**os.environ, "COMPLECT_KILL_IN_TEST": "1"}
+    kill_completed = subprocess.run(kill_command, cwd=ROOT, capture_output=True, text=True, check=False, env=kill_environment)
+    (output / "command.log").write_text(completed.stdout + completed.stderr + early_completed.stdout + early_completed.stderr + kill_completed.stdout + kill_completed.stderr)
     receipt_path = destination / "result.json"
+    early_receipt_path = early_destination / "result.json"
+    kill_receipt_path = kill_destination / "result.json"
     receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
-    code = completed.returncode
-    if receipt.get("status") != "PASS":
+    early_receipt = json.loads(early_receipt_path.read_text()) if early_receipt_path.is_file() else {}
+    kill_receipt = json.loads(kill_receipt_path.read_text()) if kill_receipt_path.is_file() else {}
+    code = completed.returncode or early_completed.returncode or kill_completed.returncode
+    if receipt.get("status") != "PASS" or early_receipt.get("status") != "PASS" or kill_receipt.get("status") != "PASS":
         code = code or 2
     (output / "result.json").write_text(json.dumps({"status": "PASS" if not code else "FAIL",
-        "exit": code, "command": command, "report": str(receipt_path)}, indent=2) + "\n")
+        "exit": code, "command": command, "report": str(receipt_path),
+        "early_command": early_command, "early_report": str(early_receipt_path),
+        "kill_command": kill_command, "kill_report": str(kill_receipt_path),
+        "ordinary": receipt, "early": early_receipt, "test_kill": kill_receipt}, indent=2) + "\n")
     return code
 
 

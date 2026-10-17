@@ -39,6 +39,8 @@ def write_record(path: Path, value: Any) -> None:
             os.close(directory)
     finally:
         temporary.unlink(missing_ok=True)
+    from infra.scripts.attempt_identity import record_artifact
+    record_artifact(path)
 
 
 def read_record(path: Path) -> dict[str, Any]:
@@ -82,6 +84,8 @@ def freeze_source(root: Path, commit: str, directory: Path) -> dict[str, Any]:
     state = {'version': 1, 'directory': str(directory), 'source_commit': commit,
              'source_tree': git(frozen, 'rev-parse', 'HEAD^{tree}'), 'phase': 'frozen', 'stages': []}
     write_record(directory / 'attempt.json', state)
+    from infra.scripts.attempt_identity import create_identity
+    create_identity(directory, state)
     return state
 
 
@@ -94,7 +98,7 @@ def qualification_result(*, primary_exit: int, tests_passed: bool, cleanup_error
             'cleanup': 'BLOCKED_STAND' if cleanup_errors else 'PASS', 'cleanup_errors': cleanup_errors}
 
 
-def validate_attempt(directory: Path) -> dict[str, Any]:
+def validate_attempt(directory: Path, *, verify_identity: bool = True) -> dict[str, Any]:
     """Validate the attempt's source and retained snapshot before trusted handoff."""
     from infra.scripts import agent_harness
 
@@ -114,6 +118,9 @@ def validate_attempt(directory: Path) -> dict[str, Any]:
             raise ValueError('snapshot changed')
         if agent_harness.verify_working_tree_snapshot(frozen, snapshot):
             raise ValueError('frozen snapshot mismatch')
+    from infra.scripts.attempt_identity import validate_identity
+    if verify_identity:
+        validate_identity(directory, state)
     return state
 
 
@@ -333,6 +340,11 @@ def execute(directory: Path) -> int:
             state['primary_error'] = primary_error
             write_record(directory / 'attempt.json', state)
             cleanup_errors = _clean_attempt(directory, state)
+            try:
+                from infra.scripts.attempt_identity import bind_runtime_artifacts
+                bind_runtime_artifacts(directory)
+            except Exception as error:
+                cleanup_errors.append('artifact binding: ' + type(error).__name__ + ': ' + str(error))
             result = qualification_result(primary_exit=primary_exit, tests_passed=tests_passed, cleanup_errors=cleanup_errors)
             result.update(source_commit=state['source_commit'], source_tree=state['source_tree'], primary_error=primary_error)
             write_record(directory / 'qualification.json', result)
@@ -353,6 +365,12 @@ def recover(directory: Path) -> int:
         raise ValueError('frozen recovery identity mismatch')
     with attempt_lock(directory):
         errors = _clean_attempt(directory, state)
+        if not errors:
+            try:
+                from infra.scripts.attempt_identity import bind_runtime_artifacts
+                bind_runtime_artifacts(directory)
+            except Exception as error:
+                errors.append('artifact binding: ' + type(error).__name__ + ': ' + str(error))
         result = {'version': 1, 'operation': 'cleanup-only', 'status': 'BLOCKED_STAND' if errors else 'PASS',
                   'errors': errors, 'source_commit': state['source_commit'], 'original_verdict_unchanged': True}
         write_record(directory / ('recovery-' + uuid.uuid4().hex + '.json'), result)
@@ -379,9 +397,16 @@ def main(argv: list[str] | None = None) -> int:
     recovery = commands.add_parser('recover')
     recovery.add_argument('--directory', type=Path, required=True)
     recovery.add_argument('--frozen', action='store_true', help=argparse.SUPPRESS)
+    status_parser = commands.add_parser('status')
+    status_parser.add_argument('--directory', type=Path, required=True)
     args = parser.parse_args(argv)
     directory = args.directory.absolute()
     try:
+        if args.operation == 'status':
+            from infra.scripts.attempt_identity import status
+            view = status(directory)
+            print(json.dumps(view), flush=True)
+            return 0 if view["status"] == "PASS" else 2
         if args.operation == 'run':
             if not args.frozen:
                 freeze_source(ROOT, args.source_commit or '', directory)
