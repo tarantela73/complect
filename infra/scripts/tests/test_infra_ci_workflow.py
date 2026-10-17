@@ -56,6 +56,10 @@ class InfraCiWorkflowTests(unittest.TestCase):
                 fake_tool = directory / tool
                 fake_tool.write_text("#!/bin/sh\nprintf 'synthetic failure\\n'\nexit 23\n")
                 fake_tool.chmod(0o755)
+                if tool == "make":
+                    fake_git = directory / "git"
+                    fake_git.write_text("#!/bin/sh\nexit 0\n")
+                    fake_git.chmod(0o755)
                 script = next(command for command in commands if selector in command)
                 completed = subprocess.run(
                     ["bash", "-c", script],
@@ -64,6 +68,7 @@ class InfraCiWorkflowTests(unittest.TestCase):
                         "PATH": str(directory) + os.pathsep + os.defpath,
                         "RUNNER_TEMP": temporary,
                         "INFRA_TEST_BACKEND_IMAGE": "infra-ci:synthetic",
+                        "INFRA_COMPARISON_BASE": "synthetic-base",
                     },
                     capture_output=True,
                     text=True,

@@ -30,6 +30,46 @@ from infra.scripts.legacy_phase_contract import ORIGINAL_NODE_IDS_SHA256
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def create_runtime_paths(runtime_directory: Path | None) -> tuple[Path, Path]:
+    """Create the private control and owner-secret directories for one run.
+
+    The historical default keeps both directories as independent temporary
+    directories.  A caller that owns an attempt directory may provide it so
+    recovery can find the paths after an interrupted process; its children
+    still use fixed names and exclusive creation to prevent path reuse.
+    """
+    if runtime_directory is None:
+        control = Path(tempfile.mkdtemp(prefix="complect-lifecycle-", dir="/tmp"))
+        try:
+            owner_secrets = Path(
+                tempfile.mkdtemp(prefix="complect-lifecycle-owner-", dir="/tmp")
+            )
+        except BaseException:
+            shutil.rmtree(control, ignore_errors=True)
+            raise
+        return control, owner_secrets
+
+    runtime = runtime_directory.resolve()
+    if not runtime.is_dir():
+        raise RuntimeError("runtime directory must already exist")
+    control = runtime / "control"
+    owner_secrets = runtime / "owner-secrets"
+    control_created = False
+    owner_created = False
+    try:
+        control.mkdir(mode=0o700)
+        control_created = True
+        owner_secrets.mkdir(mode=0o700)
+        owner_created = True
+    except BaseException:
+        if control_created:
+            shutil.rmtree(control, ignore_errors=True)
+        if owner_created:
+            shutil.rmtree(owner_secrets, ignore_errors=True)
+        raise
+    return control, owner_secrets
+
+
 def require_original_nodes(nodes: list[str]) -> None:
     digest = hashlib.sha256(
         json.dumps(nodes, separators=(",", ":")).encode()
@@ -72,6 +112,7 @@ def main() -> None:
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--review-patch", type=Path, required=True)
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--runtime-directory", type=Path)
     parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
     os.environ["GIT_OPTIONAL_LOCKS"] = "0"
@@ -151,9 +192,8 @@ def main() -> None:
             ["docker", "exec", redis["id"], "redis-cli", "INFO", "keyspace"]
         ).stdout
     )
-    control = Path(tempfile.mkdtemp(prefix="complect-lifecycle-", dir="/tmp"))
+    control, owner_secrets = create_runtime_paths(args.runtime_directory)
     server_name = commands.project + "-lifecycle-" + os.urandom(4).hex()
-    owner_secrets: Path | None = None
     phase = "prepare-secrets"
     post_run_checked = False
     post_run_errors: list[str] = []
@@ -177,9 +217,6 @@ def main() -> None:
             + "\n"
         )
         aws.chmod(0o600)
-        owner_secrets = Path(
-            tempfile.mkdtemp(prefix="complect-lifecycle-owner-", dir="/tmp")
-        )
         shutil.copyfile(
             checkout / ".dev/secrets/postgres_password", owner_secrets / "db_password"
         )

@@ -177,7 +177,8 @@ class Stand:
             }
         )
 
-    def source_identity(self):
+    @staticmethod
+    def source_identity():
         digest = hashlib.sha256()
         for base in (ROOT / "backend", ROOT / "infra/scripts", ROOT / "infra/postgres"):
             for path in sorted(base.rglob("*")):
@@ -328,7 +329,7 @@ class Stand:
         )
         self.docker("start", redis)
 
-    def backend(self, suffix, role, command, detached=False):
+    def backend(self, suffix, role, command, detached=False, *, infra_tools=False):
         options = [
             "--network",
             self.network,
@@ -367,6 +368,16 @@ class Stand:
             options[options.index(f"{self.state}:/state:z")] = (
                 f"{self.state}:/state:ro,z"
             )
+        if infra_tools:
+            # The shared infra selection creates local Git fixtures. Expose only
+            # these offline binaries, never a daemon socket or extra credentials.
+            if __package__:
+                from .run_infra_tests import _tool_mounts
+            else:
+                from run_infra_tests import _tool_mounts
+            for host_path, target in _tool_mounts():
+                if Path(target).name.startswith("git"):
+                    options.extend(["-v", f"{host_path}:{target}:ro"])
         identifier = self.create(
             suffix, self.args.backend_image, options, ["-B", *command]
         )
@@ -509,6 +520,7 @@ class Stand:
                 "--manifest",
                 "/control/" + phase + "-manifest.json",
             ],
+            infra_tools=True,
         )
         path = self.control / (phase + "-manifest.json")
         manifest = json.loads(path.read_text())
@@ -520,6 +532,46 @@ class Stand:
         )
         if mode == "pytest":
             self.check_manifest(manifest)
+
+    def run_infra_only(self):
+        """Exercise the real runtime adapter offline, without provisioning a stand."""
+        if __package__:
+            from .run_infra_tests import _docker_endpoint_is_local
+        else:
+            from run_infra_tests import _docker_endpoint_is_local
+
+        status, code, error = "BLOCKED_STAND", 2, None
+        try:
+            _docker_endpoint_is_local()
+            image = self.inspect("image", self.args.backend_image)["Id"]
+            self.evidence.record(metadata={"images": {self.args.backend_image: image},
+                                           "source_identity": self.source_identity()})
+            self.private = Path(tempfile.mkdtemp(prefix=self.run_id + "-infra-"))
+            self.control = self.private / "control"
+            self.state = self.private / "state"
+            for directory in (self.control, self.state, self.private / "secrets"):
+                directory.mkdir(mode=0o700)
+            # Empty runtime mount satisfies the existing adapter, without credentials.
+            (self.private / "secrets/runtime").write_text("")
+            (self.private / "runtime.env").write_text(
+                "PYTHONPATH=/workspace:/app\nPYTHONDONTWRITEBYTECODE=1\nHOME=/tmp\n"
+                "PAYMENTS_CLI_TEST_TMPDIR=/control\n"
+            )
+            self.network = "none"
+            self.infra_phase("lifecycle_pytest", "pytest")
+            status, code = "PASS", 0
+        except (StandError, OSError, ValueError, subprocess.SubprocessError) as exc:
+            error = str(exc)
+        finally:
+            cleanup_ok = self.cleanup()
+            if not cleanup_ok:
+                status, code = "BLOCKED_STAND", code or 2
+            context = {"version": 1, "scope": "shared-infra-context", "status": status,
+                       "exit": code, "payments_acceptance": "NOT_RUN",
+                       "source_identity": self.source_identity(), "error": error,
+                       "cleanup": "PASS" if cleanup_ok else "BLOCKED_STAND"}
+            (self.args.output / "context.json").write_text(json.dumps(context, indent=2) + "\n")
+        return code
 
     def pg_query(self, container, sql):
         return self.docker(
@@ -926,6 +978,7 @@ class Stand:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=("stand", "full"), default="stand")
+    parser.add_argument("--infra-only", action="store_true", help="Offline shared pytest through the Payments runtime adapter")
     parser.add_argument(
         "--fault",
         choices=("prepare", "foreign_target", "socket", "cleanup", "replica_commands"),
@@ -945,7 +998,8 @@ def main():
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
-    return Stand(args).run()
+    stand = Stand(args)
+    return stand.run_infra_only() if args.infra_only else stand.run()
 
 
 if __name__ == "__main__":
