@@ -16,6 +16,10 @@ DEFAULT_WORKFLOW = ROOT / ".github/workflows/infra-tests.yml"
 DEFAULT_SCOPE = (
     "infra/scripts/run_infra_quality.py",
     "infra/scripts/run_infra_tests.py",
+    "infra/scripts/attempt_identity.py",
+    "infra/scripts/gate_source_proof.py",
+    "infra/scripts/delivery_evidence.py",
+    "infra/scripts/publication_preflight.py",
     "infra/scripts/run_legacy_regressions.py",
     "infra/scripts/infra_test_selection.py",
     "infra/scripts/legacy_phase_contract.py",
@@ -31,6 +35,12 @@ DEFAULT_SCOPE = (
     "infra/scripts/run_legacy_qualification.py",
 )
 RUFF_SCOPE = DEFAULT_SCOPE + (
+    "infra/scripts/tests/test_attempt_identity.py",
+    "infra/scripts/tests/test_gate_source_proof.py",
+    "infra/scripts/tests/test_delivery_evidence.py",
+    "infra/scripts/tests/test_publication_preflight.py",
+    "infra/scripts/tests/test_legacy_early_failure_cli.py",
+    "infra/scripts/tests/test_legacy_recovery_cli.py",
     "infra/scripts/tests/test_evidence_bundle.py",
     "infra/scripts/tests/test_verification_runner.py",
     "infra/scripts/tests/test_ci_audit_evidence.py",
