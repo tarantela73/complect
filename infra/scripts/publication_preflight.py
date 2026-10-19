@@ -13,6 +13,54 @@ from urllib.parse import quote
 from infra.scripts.delivery_evidence import accept_receipts, _json
 
 
+def validate_publication_inputs(
+    repository: Path,
+    *,
+    requirements_path: Path | None,
+    receipts: list[Path] | None,
+    declared_checkout: Path | None = None,
+) -> None:
+    """Validate local publication inputs before any remote/Git operation.
+
+    Receipt files are evidence only: this function checks their presence and
+    regular-file shape and never interprets or executes their command fields.
+    """
+    def has_symlink_component(path: Path) -> bool:
+        absolute = path.absolute()
+        return any(part.is_symlink() for part in (absolute, *absolute.parents))
+
+    if has_symlink_component(repository) or (
+        declared_checkout is not None and has_symlink_component(declared_checkout)
+    ):
+        raise ValueError("SYMLINK_PATH_FORBIDDEN")
+    repository = repository.resolve()
+    if declared_checkout is not None and repository != declared_checkout.resolve():
+        raise ValueError("DECLARED_CHECKOUT_MISMATCH")
+    if not repository.is_dir():
+        raise ValueError("CHECKOUT_MISSING")
+    if (
+        requirements_path is None
+        or has_symlink_component(requirements_path)
+        or not requirements_path.is_file()
+    ):
+        raise ValueError("REQUIREMENTS_MISSING")
+    try:
+        requirements = json.loads(requirements_path.read_text())
+    except (OSError, ValueError, UnicodeError):
+        raise ValueError("REQUIREMENTS_INVALID") from None
+    if not isinstance(requirements, dict):
+        raise ValueError("REQUIREMENTS_INVALID")
+    for receipt in receipts or []:
+        if has_symlink_component(receipt) or not receipt.is_file():
+            raise ValueError("RECEIPT_MISSING")
+        try:
+            value = json.loads(receipt.read_text())
+        except (OSError, ValueError, UnicodeError):
+            raise ValueError("RECEIPT_INVALID") from None
+        if not isinstance(value, dict):
+            raise ValueError("RECEIPT_INVALID")
+
+
 def git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.PIPE).strip()
 
@@ -144,6 +192,8 @@ def preflight(
     target: str | None = None,
     pr: str | None = None,
     gh_resolver: Callable[[Path, str], dict[str, Any]] | None = None,
+    requirements_path: Path | None = None,
+    declared_checkout: Path | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     repository = repository.resolve()
@@ -152,6 +202,26 @@ def preflight(
     actual_base: str | None = None
     base_tree: str | None = None
     pr_head: str | None = None
+    if requirements_path is not None or declared_checkout is not None:
+        try:
+            validate_publication_inputs(
+                repository,
+                requirements_path=requirements_path,
+                receipts=receipts,
+                declared_checkout=declared_checkout,
+            )
+        except ValueError as exc:
+            return {
+                "version": 1,
+                "status": "BLOCKED_STAND",
+                "errors": [str(exc)],
+                "repository": str(repository.resolve()),
+                "remote": remote,
+                "head": None,
+                "head_tree": None,
+                "base": None,
+                "base_tree": None,
+            }
     try:
         if bool(pr) == bool(target):
             raise ValueError("exactly one of target or pr is required")
@@ -256,8 +326,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--receipt", type=Path, action="append", default=[])
     args = parser.parse_args(argv)
     try:
+        receipts = args.receipt if args.requirements else None
+        validate_publication_inputs(
+            args.repository,
+            requirements_path=args.requirements,
+            receipts=receipts,
+            declared_checkout=args.repository,
+        )
         requirements = _json(args.requirements) if args.requirements else None
-        result = preflight(args.repository, remote=args.remote, head=args.head, target=args.target, pr=args.pr, requirements=requirements, receipts=args.receipt if requirements else None)
+        result = preflight(args.repository, remote=args.remote, head=args.head, target=args.target, pr=args.pr, requirements=requirements, receipts=receipts, requirements_path=args.requirements, declared_checkout=args.repository if args.requirements else None)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         result = {"version": 1, "status": "BLOCKED_STAND", "errors": [f"INPUT_INVALID:{exc}"]}
     print(json.dumps(result, ensure_ascii=False, indent=2))

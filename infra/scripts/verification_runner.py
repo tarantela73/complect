@@ -15,7 +15,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from infra.scripts import agent_harness
 from infra.scripts.evidence_bundle import read_exact_chunk
 
 FORMAT = "complect-verification-run-v1"
@@ -100,6 +99,60 @@ def _secrets(
     return sorted(set(values), key=len, reverse=True)
 
 
+def _validate_execution_context(
+    *,
+    root: Path,
+    cwd: Path,
+    output: Path,
+    sources: list[str],
+    declared_checkout: Path | None,
+    required_inputs: list[Path] | None,
+) -> tuple[Path, Path, Path]:
+    """Validate all known paths before creating output or starting a command.
+
+    ``declared_checkout`` is an explicit acceptance opt-in.  The historical
+    runner remains permissive when it is omitted, while acceptance runs bind
+    both the source root and command cwd to one checkout.
+    """
+    def has_symlink_component(path: Path) -> bool:
+        current = path.absolute()
+        return any(part.is_symlink() for part in (current, *current.parents))
+
+    if (
+        has_symlink_component(root)
+        or has_symlink_component(cwd)
+        or (declared_checkout is not None and has_symlink_component(declared_checkout))
+    ):
+        raise VerificationError("SYMLINK_PATH_FORBIDDEN")
+    root, cwd, output = root.resolve(), cwd.resolve(), output.absolute()
+    if declared_checkout is not None:
+        checkout = declared_checkout.resolve()
+        if root != checkout or cwd != checkout:
+            raise VerificationError("DECLARED_CHECKOUT_MISMATCH")
+    if not root.is_dir() or not cwd.is_dir():
+        raise VerificationError("CHECKOUT_OR_CWD_MISSING")
+    _source_names(sources)
+    for item in required_inputs or []:
+        path = Path(item)
+        if not path.is_absolute():
+            path = root / path
+        if has_symlink_component(path) or not path.is_file():
+            raise VerificationError("REQUIRED_INPUT_MISSING")
+    if declared_checkout is not None and has_symlink_component(output):
+        raise VerificationError("SYMLINK_PATH_FORBIDDEN")
+    candidate = output.resolve()
+    if candidate.exists():
+        raise FileExistsError(candidate)
+    if candidate.is_relative_to(root):
+        relative = candidate.relative_to(root).as_posix()
+        allowed = relative == ".dev/test-artifacts" or relative.startswith(
+            ".dev/test-artifacts/"
+        )
+        if not allowed:
+            raise VerificationError("OUTPUT_INSIDE_SOURCE_AREA")
+    return root, cwd, output
+
+
 def _capture(
     command: list[str], cwd: Path, log: Path, secrets: list[bytes]
 ) -> int | None:
@@ -143,6 +196,8 @@ def run_check(
     expected_exit: int = 0,
     redact_env: list[str] | None = None,
     on_exit: Callable[[int | None], None] | None = None,
+    declared_checkout: Path | None = None,
+    required_inputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Execute the supplied argv once; write a new immutable attempt directory."""
     root, cwd = root.resolve(), cwd.resolve()
@@ -155,13 +210,15 @@ def run_check(
         or not cwd.is_dir()
     ):
         raise VerificationError("COMMAND_OR_CWD_INVALID")
+    root, cwd, output = _validate_execution_context(
+        root=root,
+        cwd=cwd,
+        output=output,
+        sources=sources,
+        declared_checkout=declared_checkout,
+        required_inputs=required_inputs,
+    )
     candidate = output.resolve()
-    if candidate.is_relative_to(root):
-        relative = candidate.relative_to(root).as_posix() + "/"
-        if not relative.startswith(".dev/test-artifacts/") or not relative.startswith(
-            agent_harness.SNAPSHOT_EXCLUDED_PREFIXES
-        ):
-            raise VerificationError("OUTPUT_INSIDE_SOURCE_AREA")
     before = _snapshot(root, sources)
     secrets = _secrets(
         redact_env,
@@ -286,6 +343,8 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--source", action="append", required=True)
         if name == "run":
             command.add_argument("--cwd", type=Path)
+            command.add_argument("--declared-checkout", type=Path)
+            command.add_argument("--required-input", type=Path, action="append", default=[])
             command.add_argument("--output", type=Path, required=True)
             command.add_argument("--expect-exit", type=int, default=0)
             command.add_argument("--redact-env", action="append", default=[])
@@ -305,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
                 output=args.output,
                 expected_exit=args.expect_exit,
                 redact_env=args.redact_env,
+                declared_checkout=args.declared_checkout,
+                required_inputs=args.required_input,
             )
             path = args.output / "receipt.json"
         else:

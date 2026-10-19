@@ -64,6 +64,7 @@ jobs:
             git fetch --no-tags --depth=1 origin "$INFRA_COMPARISON_BASE"
           fi
           python3 -B -m infra.scripts.ci_gate_producer \
+            --profile ci_gate_producer \
             --output "$RUNNER_TEMP/infra-ci/producer" \
             --artifact gate=gate/result.json \
             -- make agent-infra-test \

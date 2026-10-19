@@ -62,6 +62,7 @@ jobs:
             fault_args="--fault prepare"
           fi
           python3 -B -m infra.scripts.ci_gate_producer \
+            --profile ci_gate_producer \
             --output "$RUNNER_TEMP/payments-ci/producer" \
             --artifact gate=gate/result.json \
             -- make test-payments-gate \
