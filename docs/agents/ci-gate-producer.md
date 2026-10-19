@@ -1,6 +1,6 @@
 # Доказательства Infrastructure и Payments CI
 
-При изменении этих producers используй отдельный адаптер `ci_gate_producer` поверх общего verification runner. Он запускает прежнюю gate-команду один раз и выпускает новый пакет; внутренние receipts gate сохраняют свой формат.
+При изменении этих producers используй отдельный адаптер `ci_gate_producer` поверх общего verification runner. Для специализированного пакета запускай CLI с `--profile ci_gate_producer`; маркер попадает в producer result и receipt, а независимый audit report обязан его повторить. Generic v1 без маркера остаётся совместимым для истории.
 
 До запуска адаптер требует чистые tracked исходники, фиксирует полный набор tracked regular files, HEAD/tree и получает числовой job ID из всех страниц jobs текущей run attempt через Actions API. Штатному токену нужны только `contents: read` и `actions: read`; токен передаётся через окружение, его значение удаляется из журнала. Для pull request `head_sha` означает head ветки PR, а `checkout_sha` — фактический merge-checkout. Base берётся из события PR или push. Отсутствующие значения блокируют запуск; workflow_dispatch и новые теги без достоверного base требуют отдельного решения, исторические SHA не угадываются.
 

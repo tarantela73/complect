@@ -110,6 +110,103 @@ class VerificationRunnerTests(unittest.TestCase):
                 )
             self.assertFalse((root / "marker").exists())
 
+    def test_acceptance_context_binds_cwd_and_rejects_missing_inputs_before_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "source").write_text("original")
+            marker = root / "must-not-run"
+            with self.assertRaises(ValueError) as mismatch:
+                run_check(
+                    [sys.executable, "-c", "from pathlib import Path; Path('must-not-run').touch()"],
+                    root=root,
+                    cwd=Path(tempfile.gettempdir()),
+                    sources=["source"],
+                    output=root.parent / "external-attempt",
+                    declared_checkout=root,
+                )
+            self.assertEqual(str(mismatch.exception), "DECLARED_CHECKOUT_MISMATCH")
+            self.assertFalse(marker.exists())
+            with self.assertRaises(ValueError) as missing:
+                run_check(
+                    [sys.executable, "-c", "from pathlib import Path; Path('must-not-run').touch()"],
+                    root=root,
+                    cwd=root,
+                    sources=["source"],
+                    output=root.parent / "external-attempt-2",
+                    declared_checkout=root,
+                    required_inputs=[root / "requirements.json"],
+                )
+            self.assertEqual(str(missing.exception), "REQUIRED_INPUT_MISSING")
+            self.assertFalse(marker.exists())
+
+    def test_acceptance_context_allows_external_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "source").write_text("original")
+            output = root.parent / f"external-attempt-{root.name}"
+            result = run_check(
+                [sys.executable, "-c", "print('ok')"],
+                root=root,
+                cwd=root,
+                sources=["source"],
+                output=output,
+                declared_checkout=root,
+            )
+            self.assertEqual(result["integrity"], "PASS")
+
+    def test_acceptance_context_rejects_symlinked_required_input_ancestor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "source").write_text("original")
+            real = root / "inputs"
+            real.mkdir()
+            (real / "requirements.json").write_text("{}")
+            alias = root / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "REQUIRED_INPUT_MISSING"):
+                run_check(
+                    [sys.executable, "-c", "print('must not run')"],
+                    root=root,
+                    cwd=root,
+                    sources=["source"],
+                    output=root.parent / f"external-attempt-{root.name}",
+                    declared_checkout=root,
+                    required_inputs=[alias / "requirements.json"],
+                )
+
+    def test_acceptance_context_rejects_symlink_checkout_and_output_ancestor_before_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            root = parent / "checkout"
+            root.mkdir()
+            (root / "source").write_text("original")
+            checkout_alias = parent / "checkout-alias"
+            checkout_alias.symlink_to(root, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "SYMLINK_PATH_FORBIDDEN"):
+                run_check(
+                    [sys.executable, "-c", "raise SystemExit(9)"],
+                    root=root,
+                    cwd=root,
+                    sources=["source"],
+                    output=parent / "attempt-checkout-alias",
+                    declared_checkout=checkout_alias,
+                )
+            output_parent = parent / "output-real"
+            output_parent.mkdir()
+            output_alias = parent / "output-alias"
+            output_alias.symlink_to(output_parent, target_is_directory=True)
+            marker = root / "must-not-run"
+            with self.assertRaisesRegex(ValueError, "SYMLINK_PATH_FORBIDDEN"):
+                run_check(
+                    [sys.executable, "-c", "from pathlib import Path; Path('must-not-run').touch()"],
+                    root=root,
+                    cwd=root,
+                    sources=["source"],
+                    output=output_alias / "attempt",
+                    declared_checkout=root,
+                )
+            self.assertFalse(marker.exists())
+
     def test_independent_receipt_pin_rejects_changed_execution_facts(self):
         for field, value in (
             ("command", ["different-command"]),

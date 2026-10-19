@@ -194,8 +194,11 @@ def _descriptor(root: Path, path: Path) -> dict[str, str]:
 
 
 def produce(
-    command: list[str], *, root: Path, output: Path, artifacts: dict[str, str]
+    command: list[str], *, root: Path, output: Path, artifacts: dict[str, str],
+    profile: str | None = None
 ) -> tuple[dict[str, Any], int]:
+    if profile not in (None, "ci_gate_producer"):
+        raise ProducerError("PROFILE_INVALID")
     root, output = root.resolve(), output.resolve()
     if (
         output.exists()
@@ -347,6 +350,7 @@ def produce(
             artifacts,
             original_exit,
             exit_code,
+            profile,
         )
     except (OSError, ValueError):
         return {
@@ -369,6 +373,7 @@ def _publish_bundle(
     artifacts: dict[str, str],
     original_exit: int | None,
     exit_code: int,
+    profile: str | None,
 ) -> tuple[dict[str, Any], int]:
     receipt = {
         "format": "complect-ci-gate-receipt-v1",
@@ -377,6 +382,8 @@ def _publish_bundle(
         "original_exit": original_exit,
         "gate": gate,
     }
+    if profile is not None:
+        receipt["profile"] = profile
     try:
         (output / "ci-receipt.json").write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n"
@@ -418,6 +425,8 @@ def _publish_bundle(
         "source_after": _descriptor(output, output / "source-after.json"),
         "artifacts": descriptors,
     }
+    if profile is not None:
+        proof["profile"] = profile
     try:
         (output / "source-proof.json").write_text(
             json.dumps(proof, indent=2, sort_keys=True) + "\n"
@@ -433,6 +442,8 @@ def _publish_bundle(
         "artifacts": descriptors,
         "errors": artifact_errors,
     }
+    if profile is not None:
+        result["profile"] = profile
     return result, exit_code if exit_code else (0 if status == "PASS" else 2)
 
 
@@ -441,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--artifact", action="append", default=[])
+    parser.add_argument("--profile", choices=("ci_gate_producer",))
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
@@ -465,7 +477,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ProducerError("ARTIFACT_NAME_RESERVED_OR_DUPLICATE")
             extra[name] = rel
         result, code = produce(
-            command, root=args.root, output=args.output, artifacts=extra
+            command, root=args.root, output=args.output, artifacts=extra,
+            profile=args.profile,
         )
         print(json.dumps(result, sort_keys=True))
         return code

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WORKFLOW = ROOT / ".github/workflows/infra-tests.yml"
 # Keep this list explicit: the infra tree contains legacy probes with their own
 # environments, while these modules are the local gate's implementation seam.
-DEFAULT_SCOPE = (
+DEFAULT_SCOPE: tuple[str, ...] = (
     "infra/scripts/run_infra_quality.py",
     "infra/scripts/run_infra_tests.py",
     "infra/scripts/attempt_identity.py",
@@ -28,13 +28,19 @@ DEFAULT_SCOPE = (
     "infra/scripts/verification_runner.py",
     "infra/scripts/ci_audit_evidence.py",
     "infra/scripts/ci_gate_producer.py",
+    "infra/scripts/github_issue_links.py",
+    "infra/scripts/docker_host_environment.py",
+    "infra/scripts/tests/verify_docker_host_environment.py",
+    "infra/scripts/diagnostic_output.py",
+    "infra/scripts/implement_startup.py",
+    "infra/scripts/acceptance_matrix.py",
     "infra/scripts/prepare_legacy_stand.py",
     "infra/scripts/verify_legacy_preflight_refusals.py",
     "infra/scripts/qualification_resources.py",
     "infra/scripts/qualification_processes.py",
     "infra/scripts/run_legacy_qualification.py",
 )
-RUFF_SCOPE = DEFAULT_SCOPE + (
+RUFF_SCOPE: tuple[str, ...] = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_attempt_identity.py",
     "infra/scripts/tests/test_gate_source_proof.py",
     "infra/scripts/tests/test_delivery_evidence.py",
@@ -45,6 +51,12 @@ RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_verification_runner.py",
     "infra/scripts/tests/test_ci_audit_evidence.py",
     "infra/scripts/tests/test_ci_gate_producer.py",
+    "infra/scripts/tests/test_github_issue_links.py",
+    "infra/scripts/tests/test_docker_host_environment.py",
+    "infra/scripts/tests/test_final_gate_snapshot.py",
+    "infra/scripts/tests/test_diagnostic_output.py",
+    "infra/scripts/tests/test_implement_startup.py",
+    "infra/scripts/tests/test_acceptance_matrix.py",
     "infra/scripts/tests/test_payments_ci_workflow.py",
     "infra/scripts/tests/test_infra_quality.py",
     "infra/scripts/tests/test_infra_test_runner.py",
@@ -60,6 +72,20 @@ RUFF_SCOPE = DEFAULT_SCOPE + (
     "infra/scripts/tests/test_qualification_resources.py",
     "infra/scripts/tests/test_qualification_processes.py",
 )
+
+# This contract is maintained independently from the scopes below.  The
+# quality runner must fail if a required implementation or its public tests
+# are accidentally removed from a command, even when the remaining lists are
+# internally self-consistent.
+REQUIRED_SCOPE = {
+    "ruff": (
+        "infra/scripts/github_issue_links.py",
+        "infra/scripts/tests/test_github_issue_links.py",
+        "infra/scripts/ci_audit_evidence.py",
+        "infra/scripts/tests/test_ci_audit_evidence.py",
+    ),
+    "mypy": ("infra/scripts/github_issue_links.py", "infra/scripts/ci_audit_evidence.py"),
+}
 
 
 def _tool(name: str) -> str:
@@ -94,6 +120,24 @@ def run(*, workflow: Path = DEFAULT_WORKFLOW, scope: tuple[str, ...] = DEFAULT_S
         ],
         [_tool("actionlint"), str(workflow.relative_to(ROOT))],
     ]
+    command_by_name = {Path(command[0]).name: command for command in commands}
+    missing = {
+        tool: [path for path in paths if command_by_name[tool].count(path) != 1]
+        for tool, paths in REQUIRED_SCOPE.items()
+    }
+    missing = {tool: paths for tool, paths in missing.items() if paths}
+    if missing:
+        print(
+            json.dumps(
+                {
+                    "status": "FAIL",
+                    "error": "REQUIRED_SCOPE_MISSING",
+                    "missing": missing,
+                },
+                indent=2,
+            )
+        )
+        return 1
     checks: list[dict[str, object]] = []
     for command in commands:
         completed = _run(command, cwd=ROOT)

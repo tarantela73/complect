@@ -18,6 +18,8 @@ ACTIVE = {"queued", "in_progress", "waiting", "pending", "requested"}
 CONCLUSIONS = {"success", "failure", "cancelled", "timed_out", "neutral", "skipped", "action_required", "stale", "startup_failure"}
 MAX_JSON = 1024 * 1024
 PRIORITY = ("FAIL", "BLOCKED_EVIDENCE", "PENDING", "PASS")
+SPECIALIZED_PROFILES = {"ci_gate_producer"}
+SPECIALIZED_ARTIFACTS = {"receipt", "runner_receipt", "command_log", "gate"}
 
 
 def _hex(value: object, length: int) -> bool:
@@ -39,6 +41,9 @@ def _identity_value(key: str, value: Any) -> bool:
 def _selection(requirements: Any) -> list[dict[str, Any]]:
     if not isinstance(requirements, dict) or requirements.get("format") != "complect-ci-audit-requirements-v1":
         raise EvidenceBundleError("REQUIREMENTS_INVALID")
+    profile = requirements.get("profile")
+    if profile is not None and profile not in SPECIALIZED_PROFILES:
+        raise EvidenceBundleError("REQUIREMENTS_PROFILE_INVALID")
     jobs = requirements.get("jobs")
     if not isinstance(jobs, list) or not jobs:
         raise EvidenceBundleError("REQUIRED_JOBS_EMPTY")
@@ -53,6 +58,8 @@ def _selection(requirements: Any) -> list[dict[str, Any]]:
         if (not isinstance(artifacts, list) or not artifacts or not all(_name(n) for n in artifacts)
                 or len(set(artifacts)) != len(artifacts) or "receipt" not in artifacts):
             raise EvidenceBundleError("REQUIRED_ARTIFACTS_INVALID")
+        if profile == "ci_gate_producer" and not SPECIALIZED_ARTIFACTS.issubset(artifacts):
+            raise EvidenceBundleError("SPECIALIZED_ARTIFACTS_INCOMPLETE")
         identity = tuple(job[k] for k in ("repository", "run_id", "run_attempt", "job_id"))
         if job["name"] in names or identity in identities:
             raise EvidenceBundleError("REQUIRED_JOB_DUPLICATE")
@@ -182,7 +189,7 @@ class _JobAudit:
             elif name in entries and bound[name] != entries[name]:
                 self.failed.append(f"proof.artifacts.{name}:BINDING_MISMATCH")
 
-    def job(self, job: dict[str, Any], expected: dict[str, Any]) -> dict[str, Any]:
+    def job(self, job: dict[str, Any], expected: dict[str, Any], required_profile: str | None = None) -> dict[str, Any]:
         self.identity(job, expected, "job")
         self.log(job.get("log"), expected)
         entries = job.get("artifacts")
@@ -205,6 +212,11 @@ class _JobAudit:
                 elif (receipt[field] != job[original] or (field == "exit" and
                       (type(receipt[field]) is not int or type(job[original]) is not int))):
                     self.failed.append(f"receipt.{field}:MISMATCH")
+        if required_profile is not None:
+            if receipt is None or receipt.get("profile") != required_profile:
+                self.failed.append("receipt.profile:MISMATCH")
+            if proof is None or proof.get("profile") != required_profile:
+                self.failed.append("proof.profile:MISMATCH")
         state, conclusion = job.get("status"), job.get("conclusion")
         if not isinstance(state, str) or state not in ACTIVE | {"completed"}:
             self.failed.append("job:STATE_INVALID")
@@ -233,24 +245,36 @@ class _JobAudit:
                 "checked": self.checked}
 
 
-def verify_ci_audit(requirements: Any, report: Any, root: Path, *, continuation: Any = None) -> dict[str, Any]:
+def verify_ci_audit(requirements: Any, report: Any, root: Path, *, continuation: Any = None,
+                    required_profile: str | None = None) -> dict[str, Any]:
     """Verify one package against an independently declared mandatory selection.
 
     This is a local integrity check, not remote attestation. No input is changed,
     missing historical metadata is never inferred, and no network is accessed.
     """
     if continuation is not None:
-        return _resume_ci_audit(requirements, report, root, continuation)
+        if required_profile is not None and requirements.get("profile") != required_profile:
+            return {"format": "complect-ci-audit-result-v1", "status": "FAIL",
+                    "errors": ["REQUIRED_PROFILE_MISSING"], "jobs": []}
+        return _resume_ci_audit(requirements, report, root, continuation, required_profile)
     result: dict[str, Any] = {"format": "complect-ci-audit-result-v1", "status": "FAIL", "errors": [], "jobs": []}
     try:
         expected = _selection(requirements)
     except EvidenceBundleError as exc:
         result["errors"] = [str(exc)]
         return result
+    if required_profile is not None:
+        if required_profile not in SPECIALIZED_PROFILES:
+            result["errors"] = ["REQUIRED_PROFILE_INVALID"]
+            return result
+        if requirements.get("profile") != required_profile:
+            result["errors"] = ["REQUIRED_PROFILE_MISSING"]
+            return result
     if not isinstance(report, dict):
         result["errors"] = ["REPORT_INVALID"]
         return result
-    if report.get("format") != "complect-ci-audit-report-v1" or "jobs" not in report:
+    if (report.get("format") != "complect-ci-audit-report-v1" or "jobs" not in report
+            or requirements.get("profile") is not None and report.get("profile") != requirements["profile"]):
         result.update(status="BLOCKED_EVIDENCE", errors=["REPORT_FORMAT_OR_JOBS_MISSING"])
         return result
     if not isinstance(report["jobs"], list):
@@ -269,17 +293,23 @@ def verify_ci_audit(requirements: Any, report: Any, root: Path, *, continuation:
             result["jobs"].append({"name": requirement["name"], "status": "BLOCKED_EVIDENCE",
                                    "errors": [], "missing": ["JOB_MISSING"], "original": {}})
         else:
-            result["jobs"].append(_JobAudit(root).job(observed[requirement["name"]], requirement))
+            effective_profile = required_profile or requirements.get("profile")
+            result["jobs"].append(_JobAudit(root).job(observed[requirement["name"]], requirement, effective_profile))
     statuses = {j["status"] for j in result["jobs"]}
     result["status"] = next(s for s in PRIORITY if s in statuses)
+    if requirements.get("profile") is not None:
+        result["profile"] = requirements["profile"]
     return result
 
 
 
 def _continuation_requirements(requirements: Any) -> dict[str, Any]:
-    return {"format": "complect-ci-audit-requirements-v1", "jobs": [
+    result = {"format": "complect-ci-audit-requirements-v1", "jobs": [
         {key: list(job[key]) if key == "artifacts" else job[key]
          for key in ("name", *IDENTITY, "artifacts")} for job in _selection(requirements)]}
+    if requirements.get("profile") is not None:
+        result["profile"] = requirements["profile"]
+    return result
 
 
 def _continuation_report(report: dict[str, Any], requirements: Any) -> dict[str, Any]:
@@ -299,7 +329,10 @@ def _continuation_report(report: dict[str, Any], requirements: Any) -> dict[str,
             job["artifacts"] = {name: {k: v for k, v in entry.items() if k in ("path", "sha256")} if isinstance(entry, dict) else entry
                                 for name, entry in raw["artifacts"].items() if name in expected[raw["name"]]["artifacts"]}
         jobs.append(job)
-    return {"format": "complect-ci-audit-report-v1", "jobs": jobs}
+    result = {"format": "complect-ci-audit-report-v1", "jobs": jobs}
+    if requirements.get("profile") is not None:
+        result["profile"] = requirements["profile"]
+    return result
 
 
 def make_ci_audit_continuation(requirements: Any, report: Any, root: Path, *, continuation: Any = None) -> dict[str, Any]:
@@ -380,8 +413,9 @@ def _check_continuation_observation(requirements: Any, observation: Any, root: P
     return audit
 
 
-def _resume_ci_audit(requirements: Any, report: Any, root: Path, continuation: Any) -> dict[str, Any]:
-    result = verify_ci_audit(requirements, report, root)
+def _resume_ci_audit(requirements: Any, report: Any, root: Path, continuation: Any,
+                     required_profile: str | None = None) -> dict[str, Any]:
+    result = verify_ci_audit(requirements, report, root, required_profile=required_profile)
     try:
         if (not isinstance(continuation, dict) or continuation.get("format") != "complect-ci-audit-continuation-v1"
                 or not isinstance(continuation.get("status"), str)
@@ -418,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--continuation", type=Path)
     parser.add_argument("--continuation-sha256")
     parser.add_argument("--save-continuation", type=Path)
+    parser.add_argument("--require-profile", choices=tuple(sorted(SPECIALIZED_PROFILES)))
     args = parser.parse_args(argv)
     if ((args.continuation is None) != (args.continuation_sha256 is None)
             or args.continuation is not None and not _hex(args.continuation_sha256, 64)):
@@ -450,7 +485,8 @@ def main(argv: list[str] | None = None) -> int:
             if size > MAX_JSON:
                 raise ValueError("continuation too large")
             continuation = _json_object(read_exact_chunk(path, 0, size, args.continuation_sha256))
-        result = verify_ci_audit(inputs[0], inputs[1], args.root, continuation=continuation)
+        result = verify_ci_audit(inputs[0], inputs[1], args.root, continuation=continuation,
+                                 required_profile=args.require_profile)
         if (checkpoint is not None and result["status"] in {"PENDING", "BLOCKED_EVIDENCE"}
                 and not result.get("continuation_missing") and not result["errors"]):
             point = make_ci_audit_continuation(inputs[0], inputs[1], args.root, continuation=continuation)

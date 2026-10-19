@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from infra.scripts.publication_preflight import preflight, stand_source_identity
+from infra.scripts.publication_preflight import preflight, stand_source_identity, validate_publication_inputs
 from infra.scripts.agent_harness import working_tree_snapshot
 
 
@@ -21,6 +21,62 @@ class PublicationPreflightTests(unittest.TestCase):
 
     def test_unknown_base(self):
         self._run(test_preflight_rejects_unknown_base)
+
+    def test_publication_inputs_are_validated_before_remote_lookup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("infra.scripts.publication_preflight.remote_head", side_effect=AssertionError("network lookup")):
+                result = preflight(
+                    root,
+                    remote="origin",
+                    head="missing",
+                    target="main",
+                    requirements={},
+                    receipts=[root / "missing-receipt.json"],
+                    requirements_path=root / "missing-requirements.json",
+                    declared_checkout=root,
+                )
+            self.assertEqual(result["status"], "BLOCKED_STAND")
+            self.assertEqual(result["errors"], ["REQUIREMENTS_MISSING"])
+
+    def test_publication_inputs_accept_two_independent_existing_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / "requirements.json"
+            first, second = root / "one.json", root / "two.json"
+            for path in (requirements, first, second):
+                path.write_text("{}")
+            validate_publication_inputs(
+                root,
+                requirements_path=requirements,
+                receipts=[first, second],
+                declared_checkout=root,
+            )
+
+    def test_corrupt_requirements_and_receipt_are_rejected_before_remote_lookup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / "requirements.json"
+            receipt = root / "receipt.json"
+            requirements.write_text("{")
+            receipt.write_text("{}")
+            with self.assertRaisesRegex(ValueError, "REQUIREMENTS_INVALID"):
+                validate_publication_inputs(root, requirements_path=requirements, receipts=[receipt], declared_checkout=root)
+            requirements.write_text("{}")
+            receipt.write_text("[")
+            with self.assertRaisesRegex(ValueError, "RECEIPT_INVALID"):
+                validate_publication_inputs(root, requirements_path=requirements, receipts=[receipt], declared_checkout=root)
+
+    def test_symlink_ancestors_are_rejected_for_checkout_and_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            real = parent / "real"
+            real.mkdir()
+            (real / "requirements.json").write_text("{}")
+            alias = parent / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "SYMLINK_PATH_FORBIDDEN"):
+                validate_publication_inputs(alias, requirements_path=alias / "requirements.json", receipts=[], declared_checkout=alias)
 
     def test_public_cli_read_only(self):
         self._run(test_public_cli_is_read_only)
